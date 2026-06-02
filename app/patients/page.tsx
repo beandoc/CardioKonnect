@@ -16,7 +16,6 @@ function PatientList() {
 
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
-  const [seeding, setSeeding] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
 
@@ -29,12 +28,7 @@ function PatientList() {
   const loadPatientsData = async () => {
     setLoading(true)
     try {
-      let data = await getPatients()
-      if (data.length === 0) {
-        console.log('Database empty, auto-seeding demo data...')
-        await seedDemoData()
-        data = await getPatients()
-      }
+      const data = await getPatients()
       setPatients(data)
     } catch (err) {
       console.error(err)
@@ -47,20 +41,6 @@ function PatientList() {
   useEffect(() => {
     loadPatientsData()
   }, [])
-
-  const handleSeed = async () => {
-    setSeeding(true)
-    try {
-      await seedDemoData()
-      toast.success('Database seeded successfully!')
-      await loadPatientsData()
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to seed database')
-    } finally {
-      setSeeding(false)
-    }
-  }
 
   const filtered = useMemo(() => {
     return patients.filter(p => {
@@ -115,16 +95,13 @@ function PatientList() {
           <Database className="w-16 h-16 mb-4 text-blue-500/40 animate-pulse" />
           <h3 className="text-lg font-bold text-white">No Patients in Registry Yet</h3>
           <p className="text-sm text-gray-400 mt-2 max-w-md mx-auto">
-            You don't have any patients registered in Cardio-Konnect yet. You can register a new patient manually or seed the database with a pre-configured cohort of 9 Maharashtrian patients.
+            You don't have any patients registered in Cardio-Konnect yet. You can register a new patient manually.
           </p>
 
           <div className="flex gap-4 mt-6">
             <Link href="/patients/new">
               <Button className="flex items-center gap-1.5"><PlusCircle className="w-4 h-4" /> Add Patient</Button>
             </Link>
-            <Button variant="outline" className="flex items-center gap-1.5" onClick={handleSeed} loading={seeding}>
-              <Database className="w-4 h-4" /> {seeding ? 'Seeding...' : 'Seed Demo Cohort'}
-            </Button>
           </div>
         </div>
       ) : (

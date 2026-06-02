@@ -6,6 +6,54 @@ import {
 import { db } from './firebase'
 import type { Patient, PatientInput, Visit, VisitInput, PopulationStats, PatientTrends, TrendPoint, RegistryField } from './types'
 import { BUILT_IN_FIELDS } from './types'
+import { MOCK_PATIENTS_COHORT, MOCK_VISITS_COHORT } from './seeder'
+
+// ─── Local Storage Fallback for Offline Demo Mode ────────────────────────────
+
+const isDemoMode = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith('mock') || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'undefined'
+
+function getLocalPatients(): Patient[] {
+  if (typeof window === 'undefined') return []
+  const data = localStorage.getItem('cardio_patients')
+  if (!data) {
+    const initialPatients = Object.entries(MOCK_PATIENTS_COHORT).map(([id, p]) => ({
+      ...p,
+      id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastVisitDate: p.lastVisitDate ? new Date(p.lastVisitDate).toISOString() : '',
+    })) as Patient[]
+    localStorage.setItem('cardio_patients', JSON.stringify(initialPatients))
+    return initialPatients
+  }
+  return JSON.parse(data)
+}
+
+function saveLocalPatients(pts: Patient[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('cardio_patients', JSON.stringify(pts))
+}
+
+function getLocalVisits(): Visit[] {
+  if (typeof window === 'undefined') return []
+  const data = localStorage.getItem('cardio_visits')
+  if (!data) {
+    const initialVisits = MOCK_VISITS_COHORT.map(v => ({
+      ...v.data,
+      id: v.visitId,
+      patientId: v.patientId,
+      createdAt: new Date().toISOString(),
+    })) as Visit[]
+    localStorage.setItem('cardio_visits', JSON.stringify(initialVisits))
+    return initialVisits
+  }
+  return JSON.parse(data)
+}
+
+function saveLocalVisits(vts: Visit[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('cardio_visits', JSON.stringify(vts))
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -40,6 +88,21 @@ function docToVisit(id: string, patientId: string, data: any): Visit {
 // ─── Patients ────────────────────────────────────────────────────────────────
 
 export async function addPatient(input: PatientInput): Promise<string> {
+  if (isDemoMode) {
+    const pts = getLocalPatients()
+    const id = 'p-' + Math.random().toString(36).substr(2, 9)
+    const newPt: Patient = {
+      ...input,
+      id,
+      visitCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    pts.push(newPt)
+    saveLocalPatients(pts)
+    return id
+  }
+
   const ref = await addDoc(collection(db, 'patients'), {
     ...input,
     visitCount: 0,
@@ -50,10 +113,28 @@ export async function addPatient(input: PatientInput): Promise<string> {
 }
 
 export async function updatePatient(id: string, data: Partial<PatientInput>): Promise<void> {
+  if (isDemoMode) {
+    const pts = getLocalPatients()
+    const idx = pts.findIndex(p => p.id === id)
+    if (idx !== -1) {
+      pts[idx] = { ...pts[idx], ...data, updatedAt: new Date().toISOString() }
+      saveLocalPatients(pts)
+    }
+    return
+  }
+
   await updateDoc(doc(db, 'patients', id), { ...data, updatedAt: serverTimestamp() })
 }
 
 export async function deletePatient(id: string): Promise<void> {
+  if (isDemoMode) {
+    const pts = getLocalPatients().filter(p => p.id !== id)
+    saveLocalPatients(pts)
+    const vts = getLocalVisits().filter(v => v.patientId !== id)
+    saveLocalVisits(vts)
+    return
+  }
+
   const batch = writeBatch(db)
 
   // 1. Delete visits subcollection
@@ -90,21 +171,61 @@ export async function deletePatient(id: string): Promise<void> {
 }
 
 export async function getPatient(id: string): Promise<Patient | null> {
+  if (isDemoMode) {
+    return getLocalPatients().find(p => p.id === id) || null
+  }
+
   const snap = await getDoc(doc(db, 'patients', id))
   if (!snap.exists()) return null
   return docToPatient(snap.id, snap.data())
 }
 
 export async function getPatients(): Promise<Patient[]> {
+  if (isDemoMode) {
+    return getLocalPatients().sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+
   const snap = await getDocs(query(collection(db, 'patients'), orderBy('createdAt', 'desc'), limit(100)))
   return snap.docs.map(d => docToPatient(d.id, d.data()))
 }
+
 
 // ─── Visits ──────────────────────────────────────────────────────────────────
 
 // ─── Visits ──────────────────────────────────────────────────────────────────
 
 export async function addVisit(patientId: string, input: VisitInput): Promise<string> {
+  if (isDemoMode) {
+    const vts = getLocalVisits()
+    const id = 'v-' + Math.random().toString(36).substr(2, 9)
+    const newVt: Visit = {
+      ...input,
+      id,
+      patientId,
+      createdAt: new Date().toISOString(),
+    }
+    vts.push(newVt)
+    saveLocalVisits(vts)
+
+    // Update patient metadata
+    const pts = getLocalPatients()
+    const pIdx = pts.findIndex(p => p.id === patientId)
+    if (pIdx !== -1) {
+      const patientVisits = vts.filter(v => v.patientId === patientId)
+      let latestDate = input.visitDate
+      patientVisits.forEach(v => {
+        if (v.visitDate && new Date(v.visitDate).getTime() > new Date(latestDate).getTime()) {
+          latestDate = v.visitDate
+        }
+      })
+      pts[pIdx].visitCount = patientVisits.length
+      pts[pIdx].lastVisitDate = latestDate
+      pts[pIdx].updatedAt = new Date().toISOString()
+      saveLocalPatients(pts)
+    }
+    return id
+  }
+
   const patientDocRef = doc(db, 'patients', patientId)
   const patientSnap = await getDoc(patientDocRef)
   if (!patientSnap.exists()) {
@@ -153,10 +274,43 @@ export async function addVisit(patientId: string, input: VisitInput): Promise<st
 }
 
 export async function updateVisit(patientId: string, visitId: string, data: Partial<VisitInput>): Promise<void> {
+  if (isDemoMode) {
+    const vts = getLocalVisits()
+    const idx = vts.findIndex(v => v.id === visitId)
+    if (idx !== -1) {
+      vts[idx] = { ...vts[idx], ...data } as Visit
+      saveLocalVisits(vts)
+    }
+    return
+  }
+
   await updateDoc(doc(db, 'patients', patientId, 'visits', visitId), data)
 }
 
 export async function deleteVisit(patientId: string, visitId: string): Promise<void> {
+  if (isDemoMode) {
+    const vts = getLocalVisits().filter(v => v.id !== visitId)
+    saveLocalVisits(vts)
+
+    // Update patient metadata
+    const pts = getLocalPatients()
+    const pIdx = pts.findIndex(p => p.id === patientId)
+    if (pIdx !== -1) {
+      const patientVisits = vts.filter(v => v.patientId === patientId)
+      let latestDate = ''
+      patientVisits.forEach(v => {
+        if (v.visitDate && (!latestDate || new Date(v.visitDate).getTime() > new Date(latestDate).getTime())) {
+          latestDate = v.visitDate
+        }
+      })
+      pts[pIdx].visitCount = patientVisits.length
+      pts[pIdx].lastVisitDate = latestDate
+      pts[pIdx].updatedAt = new Date().toISOString()
+      saveLocalPatients(pts)
+    }
+    return
+  }
+
   await deleteDoc(doc(db, 'patients', patientId, 'visits', visitId))
   const visitsSnap = await getDocs(collection(db, 'patients', patientId, 'visits'))
   
@@ -185,6 +339,10 @@ export async function deleteVisit(patientId: string, visitId: string): Promise<v
 }
 
 export async function getVisits(patientId: string): Promise<Visit[]> {
+  if (isDemoMode) {
+    return getLocalVisits().filter(v => v.patientId === patientId).sort((a, b) => b.visitDate.localeCompare(a.visitDate))
+  }
+
   const snap = await getDocs(
     query(collection(db, 'patients', patientId, 'visits'), orderBy('visitDate', 'desc'))
   )
@@ -192,6 +350,11 @@ export async function getVisits(patientId: string): Promise<Visit[]> {
 }
 
 export async function getLatestVisit(patientId: string): Promise<Visit | null> {
+  if (isDemoMode) {
+    const vts = getLocalVisits().filter(v => v.patientId === patientId).sort((a, b) => b.visitDate.localeCompare(a.visitDate))
+    return vts[0] || null
+  }
+
   const snap = await getDocs(
     query(collection(db, 'patients', patientId, 'visits'), orderBy('visitDate', 'desc'), limit(1))
   )
@@ -220,17 +383,28 @@ export async function getPopulationStats(): Promise<PopulationStats> {
   const egfrVals: number[] = []
   const ageVals: number[] = []
 
-  // Fetch all visits under all patients using a single Collection Group query to eliminate N+1 reads
-  const visitsSnap = await getDocs(collectionGroup(db, 'visits'))
+  let visits: Visit[] = []
+  if (isDemoMode) {
+    visits = getLocalVisits()
+  } else {
+    try {
+      const visitsSnap = await getDocs(collectionGroup(db, 'visits'))
+      visits = visitsSnap.docs.map(doc => {
+        const patientId = doc.ref.parent.parent?.id || ''
+        return docToVisit(doc.id, patientId, doc.data())
+      })
+    } catch (e) {
+      console.warn('Failed to query collectionGroup visits, using empty array:', e)
+    }
+  }
+
   const visitsByPatient: Record<string, Visit[]> = {}
-  visitsSnap.docs.forEach(doc => {
-    const data = doc.data()
-    const patientId = doc.ref.parent.parent?.id
-    if (patientId) {
-      if (!visitsByPatient[patientId]) {
-        visitsByPatient[patientId] = []
+  visits.forEach(v => {
+    if (v.patientId) {
+      if (!visitsByPatient[v.patientId]) {
+        visitsByPatient[v.patientId] = []
       }
-      visitsByPatient[patientId].push(docToVisit(doc.id, patientId, data))
+      visitsByPatient[v.patientId].push(v)
     }
   })
 
@@ -344,6 +518,16 @@ export async function getPatientTrends(patientId: string): Promise<PatientTrends
 // ─── Settings / Configuration ────────────────────────────────────────────────
 
 export async function getRegistryFields(): Promise<RegistryField[]> {
+  if (isDemoMode) {
+    if (typeof window !== 'undefined') {
+      const data = localStorage.getItem('cardio_fields')
+      if (data) {
+        return JSON.parse(data) as RegistryField[]
+      }
+    }
+    return BUILT_IN_FIELDS
+  }
+
   try {
     const snap = await getDoc(doc(db, 'settings', 'registryConfig'))
     if (snap.exists()) {
@@ -359,6 +543,13 @@ export async function getRegistryFields(): Promise<RegistryField[]> {
 }
 
 export async function setRegistryFields(fields: RegistryField[]): Promise<void> {
+  if (isDemoMode) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cardio_fields', JSON.stringify(fields))
+    }
+    return
+  }
+
   await setDoc(doc(db, 'settings', 'registryConfig'), { fields, updatedAt: serverTimestamp() }, { merge: true })
 }
 

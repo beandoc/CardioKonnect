@@ -98,7 +98,6 @@ function PatientCard({ patient, latest }: { patient: Patient; latest: Visit | nu
 export default function DashboardPage() {
   const [rows, setRows] = useState<PatientRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [seeding, setSeeding] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   const greeting = getGreeting(mounted ? new Date().getHours() : 9)
@@ -107,12 +106,7 @@ export default function DashboardPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      let pts = await getPatients()
-      if (pts.length === 0) {
-        console.log('Database empty, auto-seeding demo data...')
-        await seedDemoData()
-        pts = await getPatients()
-      }
+      const pts = await getPatients()
       const withVisits = await Promise.all(pts.map(async p => ({
         patient: p,
         latest: await getLatestVisit(p.id),
@@ -129,20 +123,6 @@ export default function DashboardPage() {
     setMounted(true)
     loadData()
   }, [])
-
-  const handleSeed = async () => {
-    setSeeding(true)
-    try {
-      await seedDemoData()
-      toast.success('Database seeded successfully!')
-      await loadData()
-    } catch (e) {
-      console.error(e)
-      toast.error('Failed to seed database')
-    } finally {
-      setSeeding(false)
-    }
-  }
 
   const total     = rows.length
   const hfrEF     = rows.filter(r => r.latest?.hfType === 'HFrEF').length
@@ -340,7 +320,7 @@ export default function DashboardPage() {
               <Database className="w-12 h-12 mb-3 text-blue-500/40 animate-pulse" />
               <p className="text-sm font-bold text-white">No Patients in Registry Yet</p>
               <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-                Cardio-Konnect registry is currently empty. You can register a patient manually or initialize the registry with a Maharashtrian patient cohort (9 patients with visits and clinical records).
+                Cardio-Konnect registry is currently empty. You can register a patient manually.
               </p>
 
               <div className="flex gap-3 justify-center mt-5 flex-wrap">
@@ -349,9 +329,6 @@ export default function DashboardPage() {
                     <PlusCircle className="w-3.5 h-3.5" /> Add Patient
                   </button>
                 </Link>
-                <button className="btn-outline btn-sm flex items-center gap-1.5" onClick={handleSeed} disabled={seeding}>
-                  <Database className="w-3.5 h-3.5" /> {seeding ? 'Seeding...' : 'Seed Demo Cohort'}
-                </button>
               </div>
             </div>
           ) : (

@@ -33,14 +33,8 @@ export async function clearAllPatients(): Promise<void> {
   await batch.commit()
 }
 
-export async function seedDemoData(): Promise<void> {
-  // First clear existing to prevent duplicates
-  await clearAllPatients()
-
-  const batch = writeBatch(db)
-
-  // 1. Define Patient demographics
-  const patientsData: Record<string, Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>> = {
+// 1. Define Patient demographics
+export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>> = {
     '1': {
       firstName: 'Arjun',
       lastName: 'Talpade',
@@ -178,18 +172,8 @@ export async function seedDemoData(): Promise<void> {
     }
   }
 
-  // Set patient documents
-  Object.entries(patientsData).forEach(([id, data]) => {
-    const ref = doc(db, 'patients', id)
-    batch.set(ref, {
-      ...data,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    })
-  })
-
-  // 2. Define longitudinal visits
-  const visitsData: { patientId: string; visitId: string; data: Omit<Visit, 'id' | 'createdAt'> }[] = [
+// 2. Define longitudinal visits
+export const MOCK_VISITS_COHORT: { patientId: string; visitId: string; data: Omit<Visit, 'id' | 'createdAt'> }[] = [
     // --- Arjun Talpade (HFrEF) ---
     {
       patientId: '1',
@@ -794,8 +778,33 @@ export async function seedDemoData(): Promise<void> {
     }
   ]
 
+export async function seedDemoData(): Promise<void> {
+  const isDemoMode = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith('mock') || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'undefined'
+  if (isDemoMode) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('cardio_patients')
+      localStorage.removeItem('cardio_visits')
+    }
+    return
+  }
+
+  // Real Firestore seeding
+  await clearAllPatients()
+
+  const batch = writeBatch(db)
+
+  // Set patient documents
+  Object.entries(MOCK_PATIENTS_COHORT).forEach(([id, data]) => {
+    const ref = doc(db, 'patients', id)
+    batch.set(ref, {
+      ...data,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    })
+  })
+
   // Add visits in subcollection for each patient
-  visitsData.forEach(({ patientId, visitId, data }) => {
+  MOCK_VISITS_COHORT.forEach(({ patientId, visitId, data }) => {
     const ref = doc(db, 'patients', patientId, 'visits', visitId)
     batch.set(ref, {
       ...data,
