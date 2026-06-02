@@ -6,8 +6,9 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, UserPlus, BarChart3, FileText,
   Heart, Database, Settings, FlaskConical, ShieldCheck,
-  Layers, ChevronRight, Activity, Bell, Search, Calendar, UserCheck, TrendingUp, X
+  Layers, ChevronRight, Activity, Bell, Search, Calendar, UserCheck, TrendingUp, X, LogOut
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 const NAV = [
   {
@@ -75,7 +76,14 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     if (searchQuery.trim()) {
       router.push(`/patients?search=${encodeURIComponent(searchQuery.trim())}`)
       setSearchQuery('')
+      onClose?.()
     }
+  }
+
+  const handleLogout = () => {
+    toast.success('Clinical session ended. Logged out successfully.')
+    router.push('/home')
+    onClose?.()
   }
 
   return (
@@ -142,6 +150,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                   key={item.href}
                   href={item.href}
                   className={cn('nav-item group', active && 'active')}
+                  onClick={() => onClose?.()}
                 >
                   <item.icon className={cn('nav-icon', active ? 'text-blue-400' : '')} />
                   <span className="flex-1">{item.label}</span>
@@ -154,6 +163,18 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </div>
         ))}
       </nav>
+
+      {/* ── Logout ── */}
+      <div className="px-2 py-2 border-t border-blue-500/10">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="nav-item group w-full text-red-400 hover:text-red-300 hover:bg-red-500/10"
+        >
+          <LogOut className="nav-icon text-red-400 group-hover:text-red-300" />
+          <span className="flex-1 text-left">Logout</span>
+        </button>
+      </div>
 
       {/* ── Footer ── */}
       <div className="px-4 py-4" style={{ borderTop: '1px solid rgba(59,130,246,0.1)' }}>
