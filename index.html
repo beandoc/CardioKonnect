@@ -1,0 +1,1639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cardio-Konnect — Cardiology Patient Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-dark: #1e429f;
+    --primary-light: #e8f0fe;
+    --danger: #e02424;
+    --success: #057a55;
+    --warning: #c27803;
+    --bg: #f3f4f6;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --text: #111827;
+    --muted: #6b7280;
+    --sidebar-w: 240px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: var(--sidebar-w); background: #1e293b; color: #cbd5e1;
+    display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+  }
+  .sidebar-logo {
+    padding: 20px 20px 16px; border-bottom: 1px solid #334155;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-icon { width: 36px; height: 36px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .logo-icon svg { width: 20px; height: 20px; fill: white; }
+  .logo-text { font-size: 18px; font-weight: 700; color: white; letter-spacing: -0.3px; }
+  .logo-sub { font-size: 10px; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; }
+  .nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+  .nav-section { padding: 8px 20px 4px; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #475569; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 20px;
+    cursor: pointer; font-size: 13.5px; color: #94a3b8; border-radius: 0;
+    transition: background 0.15s, color 0.15s; position: relative;
+  }
+  .nav-item:hover { background: #273449; color: #e2e8f0; }
+  .nav-item.active { background: #1e3a5f; color: white; border-right: 3px solid var(--primary); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .sidebar-footer { padding: 16px 20px; border-top: 1px solid #334155; font-size: 12px; color: #64748b; }
+
+  /* Main */
+  .main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar {
+    background: white; border-bottom: 1px solid var(--border);
+    padding: 0 28px; height: 60px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .topbar-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .topbar-right { display: flex; align-items: center; gap: 14px; }
+  .btn { padding: 8px 16px; border-radius: 6px; font-size: 13.5px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-outline { background: white; color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { background: var(--bg); }
+  .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fca5a5; }
+  .btn-danger:hover { background: #fee2e2; }
+  .btn-sm { padding: 5px 11px; font-size: 12.5px; }
+  .badge { padding: 2px 8px; border-radius: 99px; font-size: 11.5px; font-weight: 500; }
+  .badge-blue { background: #eff6ff; color: #1d4ed8; }
+  .badge-green { background: #f0fdf4; color: #15803d; }
+  .badge-red { background: #fef2f2; color: #dc2626; }
+  .badge-yellow { background: #fefce8; color: #a16207; }
+  .badge-gray { background: #f9fafb; color: #6b7280; border: 1px solid var(--border); }
+
+  /* Content */
+  .content { padding: 24px 28px; flex: 1; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Cards */
+  .card { background: white; border: 1px solid var(--border); border-radius: 10px; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 14.5px; font-weight: 600; }
+  .card-body { padding: 20px; }
+
+  /* Stats grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 28px; font-weight: 700; margin: 4px 0 2px; color: var(--text); }
+  .stat-sub { font-size: 12px; color: var(--muted); }
+  .stat-icon { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th { padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; background: #f9fafb; border-bottom: 1px solid var(--border); }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #f9fafb; cursor: pointer; }
+
+  /* Search / filter bar */
+  .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .search-wrap { position: relative; flex: 1; min-width: 200px; }
+  .search-wrap input { width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border); border-radius: 6px; font-size: 13.5px; outline: none; }
+  .search-wrap input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  select.filter-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13.5px; background: white; outline: none; color: var(--text); }
+  select.filter-select:focus { border-color: var(--primary); }
+
+  /* Forms */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .form-full { grid-column: 1 / -1; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-label { font-size: 12.5px; font-weight: 500; color: #374151; }
+  .form-label span { color: var(--danger); }
+  .form-control {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13.5px; outline: none; background: white; color: var(--text); width: 100%;
+  }
+  .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
+  .form-control::placeholder { color: #9ca3af; }
+  textarea.form-control { resize: vertical; min-height: 70px; }
+  .form-hint { font-size: 11.5px; color: var(--muted); }
+
+  /* Radio / checkbox groups */
+  .radio-group, .check-group { display: flex; flex-wrap: wrap; gap: 8px; }
+  .radio-btn, .check-btn {
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+    font-size: 13px; transition: all 0.15s; background: white; user-select: none;
+  }
+  .radio-btn input, .check-btn input { display: none; }
+  .radio-btn:has(input:checked), .check-btn:has(input:checked) { background: var(--primary-light); border-color: var(--primary); color: var(--primary); font-weight: 500; }
+  .radio-btn:hover, .check-btn:hover { border-color: #93c5fd; background: #f0f7ff; }
+
+  /* Section separator */
+  .section-sep { font-size: 13px; font-weight: 600; color: var(--primary); padding: 12px 0 4px; border-bottom: 2px solid var(--primary-light); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .section-sep svg { width: 16px; height: 16px; }
+
+  /* Medication row */
+  .med-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .med-title { font-size: 13.5px; font-weight: 600; color: #1e293b; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 24px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: white; border-radius: 12px; width: 100%; max-width: 780px; max-height: 90vh; overflow-y: auto; margin: auto; }
+  .modal-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: white; z-index: 1; }
+  .modal-title { font-size: 16px; font-weight: 600; }
+  .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--muted); line-height: 1; padding: 4px; }
+  .modal-body { padding: 24px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; background: #f9fafb; border-radius: 0 0 12px 12px; }
+
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 20px; gap: 0; }
+  .tab { padding: 10px 18px; font-size: 13.5px; font-weight: 500; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab:hover { color: var(--text); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Analytics */
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  .chart-box { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+  canvas { max-height: 240px; }
+
+  /* Patient detail */
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .detail-section { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  .detail-section-title { font-size: 13px; font-weight: 600; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .detail-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f3f4f6; font-size: 13.5px; }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-key { color: var(--muted); }
+  .detail-val { font-weight: 500; text-align: right; max-width: 60%; word-break: break-word; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: white; padding: 12px 18px; border-radius: 8px; font-size: 13.5px; z-index: 9999; transform: translateY(80px); opacity: 0; transition: all 0.3s; pointer-events: none; display: flex; align-items: center; gap: 8px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { background: #065f46; }
+  .toast.error { background: #7f1d1d; }
+
+  /* Misc */
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--muted); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .page-h1 { font-size: 20px; font-weight: 700; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .inline-flex { display: inline-flex; align-items: center; gap: 6px; }
+  .text-danger { color: var(--danger); }
+  .text-success { color: var(--success); }
+  .mt-4 { margin-top: 16px; }
+  .mt-6 { margin-top: 24px; }
+  .mb-4 { margin-bottom: 16px; }
+  .gap-3 { gap: 12px; }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .flex-wrap { flex-wrap: wrap; }
+  .w-full { width: 100%; }
+  .col-span-2 { grid-column: span 2; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .form-grid, .charts-grid, .detail-grid { grid-template-columns: 1fr; }
+    .form-grid-3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402C1 3.967 3.68 2 6.5 2c1.97 0 4.013 1.007 5.5 2.998C13.487 3.007 15.53 2 17.5 2 20.32 2 23 3.967 23 7.191c0 4.105-5.37 8.863-11 14.402z"/></svg>
+    </div>
+    <div>
+      <div class="logo-text">Cardio-Konnect</div>
+      <div class="logo-sub">Heart Failure Clinic</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="navigate('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-section">Patients</div>
+    <div class="nav-item" onclick="navigate('patients')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Patient List
+    </div>
+    <div class="nav-item" onclick="openAddPatient()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+      Add Patient
+    </div>
+    <div class="nav-section">Analytics</div>
+    <div class="nav-item" onclick="navigate('analytics')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Analytics
+    </div>
+    <div class="nav-item" onclick="navigate('reports')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Reports
+    </div>
+  </nav>
+  <div class="sidebar-footer">Cardio-Konnect v1.0 &bull; 2026</div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <div class="topbar-right">
+      <span style="font-size:13px;color:var(--muted)" id="topbar-date"></span>
+      <div class="avatar" title="Admin">AD</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Dashboard Page -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-h1">Welcome back</div>
+          <div class="page-sub">Heart Failure Clinic overview</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddPatient()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Patient
+        </button>
+      </div>
+
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Recent Patients</span>
+            <button class="btn btn-outline btn-sm" onclick="navigate('patients')">View all</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Patient</th><th>HF Type</th><th>NYHA</th><th>LVEF</th><th>Status</th></tr></thead>
+                <tbody id="recent-patients-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">NYHA Class Distribution</span></div>
+          <div class="card-body"><canvas id="chart-nyha"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Patients Page -->
+    <div class="page" id="page-patients">
+      <div class="page-header">
+        <div>
+          <div class="page-h1">Patient List</div>
+          <div class="page-sub" id="patient-count-label">Loading...</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddPatient()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Patient
+        </button>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding:16px 20px">
+          <div class="filter-bar">
+            <div class="search-wrap">
+              <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+              <input type="text" placeholder="Search by name, ID, diagnosis…" oninput="filterPatients()" id="search-input">
+            </div>
+            <select class="filter-select" onchange="filterPatients()" id="filter-hf">
+              <option value="">All HF Types</option>
+              <option value="HFrEF">HFrEF</option>
+              <option value="HFmrEF">HFmrEF</option>
+              <option value="HFpEF">HFpEF</option>
+            </select>
+            <select class="filter-select" onchange="filterPatients()" id="filter-nyha">
+              <option value="">All NYHA Classes</option>
+              <option value="I">Class I</option>
+              <option value="II">Class II</option>
+              <option value="III">Class III</option>
+              <option value="IV">Class IV</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Patient</th><th>Age/Sex</th><th>HF Type</th><th>Etiology</th><th>NYHA</th><th>LVEF</th><th>BP</th><th>Actions</th></tr></thead>
+            <tbody id="patients-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analytics Page -->
+    <div class="page" id="page-analytics">
+      <div class="page-header">
+        <div>
+          <div class="page-h1">Analytics</div>
+          <div class="page-sub">Population-level insights across registered patients</div>
+        </div>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-box"><div class="chart-title">HF Type Distribution</div><canvas id="chart-hf-type"></canvas></div>
+        <div class="chart-box"><div class="chart-title">NYHA Class Distribution</div><canvas id="chart-nyha-2"></canvas></div>
+        <div class="chart-box"><div class="chart-title">Etiology Breakdown</div><canvas id="chart-etiology"></canvas></div>
+        <div class="chart-box"><div class="chart-title">LVEF Distribution (%)</div><canvas id="chart-lvef"></canvas></div>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-box"><div class="chart-title">Rhythm Pattern</div><canvas id="chart-rhythm"></canvas></div>
+        <div class="chart-box"><div class="chart-title">Medication Prescribing Rate</div><canvas id="chart-meds"></canvas></div>
+      </div>
+      <div class="card mt-6">
+        <div class="card-header"><span class="card-title">Population Summary</span></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px" id="analytics-summary"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports Page -->
+    <div class="page" id="page-reports">
+      <div class="page-header">
+        <div><div class="page-h1">Reports</div><div class="page-sub">Export and review patient data</div></div>
+        <button class="btn btn-primary" onclick="exportCSV()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">All Patients Data</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Name</th><th>Age</th><th>Sex</th><th>HF Type</th><th>Etiology</th><th>NYHA</th><th>LVEF %</th><th>Systolic BP</th><th>Rhythm</th><th>NT-proBNP</th><th>eGFR</th></tr></thead>
+            <tbody id="report-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- Add / Edit Patient Modal -->
+<div class="modal-overlay" id="patient-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Add New Patient</div>
+      <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <div class="tabs" id="form-tabs">
+        <div class="tab active" onclick="switchTab(0)">Demographics</div>
+        <div class="tab" onclick="switchTab(1)">Clinical</div>
+        <div class="tab" onclick="switchTab(2)">Investigations</div>
+        <div class="tab" onclick="switchTab(3)">Medications</div>
+        <div class="tab" onclick="switchTab(4)">Education</div>
+      </div>
+
+      <form id="patient-form">
+        <!-- Tab 0: Demographics -->
+        <div class="tab-pane active" id="tab-0">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">First Name <span>*</span></label>
+              <input class="form-control" name="firstName" placeholder="First name" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name <span>*</span></label>
+              <input class="form-control" name="lastName" placeholder="Last name" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date of Birth <span>*</span></label>
+              <input class="form-control" type="date" name="dob" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sex <span>*</span></label>
+              <select class="form-control" name="sex" required>
+                <option value="">Select</option>
+                <option>Male</option><option>Female</option><option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contact Number</label>
+              <input class="form-control" name="contact" placeholder="+91 9876543210">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Medical Record No.</label>
+              <input class="form-control" name="mrn" placeholder="MRN-XXXX">
+            </div>
+            <div class="form-group form-full">
+              <label class="form-label">Address</label>
+              <textarea class="form-control" name="address" placeholder="Full address" rows="2"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Comorbidities</label>
+              <input class="form-control" name="comorbidities" placeholder="DM, HTN, CKD…">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Allergies</label>
+              <input class="form-control" name="allergies" placeholder="Drug allergies">
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 1: Clinical -->
+        <div class="tab-pane" id="tab-1">
+          <div class="section-sep">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Blood Pressure & Vitals
+          </div>
+          <div class="form-grid mt-4">
+            <div class="form-group">
+              <label class="form-label">Systolic BP (mmHg)</label>
+              <input class="form-control" type="number" name="bpSystolic" placeholder="120">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Diastolic BP (mmHg)</label>
+              <input class="form-control" type="number" name="bpDiastolic" placeholder="80">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Heart Rate (bpm)</label>
+              <input class="form-control" type="number" name="heartRate" placeholder="72">
+            </div>
+            <div class="form-group">
+              <label class="form-label">6-Minute Walk Test (metres)</label>
+              <input class="form-control" type="number" name="sixMWT" placeholder="380">
+            </div>
+          </div>
+
+          <div class="section-sep mt-6">Cardiac Rhythm</div>
+          <div class="radio-group mt-4" id="rhythm-group">
+            <label class="radio-btn"><input type="radio" name="rhythm" value="Sinus"> Sinus Rhythm</label>
+            <label class="radio-btn"><input type="radio" name="rhythm" value="AF"> Atrial Fibrillation</label>
+            <label class="radio-btn"><input type="radio" name="rhythm" value="Not Known"> Not Known</label>
+            <label class="radio-btn"><input type="radio" name="rhythm" value="Other"> Other</label>
+          </div>
+
+          <div class="section-sep mt-6">NYHA Functional Class</div>
+          <div class="radio-group mt-4">
+            <label class="radio-btn"><input type="radio" name="nyha" value="I"> Class I</label>
+            <label class="radio-btn"><input type="radio" name="nyha" value="II"> Class II</label>
+            <label class="radio-btn"><input type="radio" name="nyha" value="III"> Class III</label>
+            <label class="radio-btn"><input type="radio" name="nyha" value="IV"> Class IV</label>
+          </div>
+
+          <div class="section-sep mt-6">Type of Heart Failure</div>
+          <div class="radio-group mt-4">
+            <label class="radio-btn"><input type="radio" name="hfType" value="HFrEF"> HF reduced EF (HFrEF)</label>
+            <label class="radio-btn"><input type="radio" name="hfType" value="HFmrEF"> HF mid-range EF (HFmrEF)</label>
+            <label class="radio-btn"><input type="radio" name="hfType" value="HFpEF"> HF preserved EF (HFpEF)</label>
+          </div>
+
+          <div class="section-sep mt-6">Etiology</div>
+          <div class="check-group mt-4" id="etiology-group">
+            <label class="check-btn"><input type="checkbox" name="etiology" value="Ischemic"> Ischemic</label>
+            <label class="check-btn"><input type="checkbox" name="etiology" value="Hypertension"> Hypertension</label>
+            <label class="check-btn"><input type="checkbox" name="etiology" value="Viral Myocarditis"> Viral Myocarditis</label>
+            <label class="check-btn"><input type="checkbox" name="etiology" value="Peri-partum"> Peri-partum</label>
+            <label class="check-btn"><input type="checkbox" name="etiology" value="RHD"> RHD – Pen. prophylaxis</label>
+            <label class="check-btn"><input type="checkbox" name="etiology" value="Idiopathic"> Idiopathic</label>
+            <label class="check-btn"><input type="checkbox" name="etiology" value="Valvular"> Valvular Heart Disease</label>
+            <label class="check-btn"><input type="checkbox" name="etiology" value="Diabetic Cardiomyopathy"> Diabetic Cardiomyopathy</label>
+          </div>
+          <div class="form-group mt-4">
+            <label class="form-label">Other Etiology (specify)</label>
+            <input class="form-control" name="etiologyOther" placeholder="Specify other etiology">
+          </div>
+
+          <div class="section-sep mt-6">Hospitalization History</div>
+          <div class="form-grid mt-4">
+            <div class="form-group">
+              <label class="form-label">H/O Hospitalization</label>
+              <select class="form-control" name="hospHistory">
+                <option value="">Select</option>
+                <option>Yes</option><option>No</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">No. of Admissions (past year)</label>
+              <input class="form-control" type="number" name="hospCount" placeholder="0">
+            </div>
+            <div class="form-group form-full">
+              <label class="form-label">Hospitalization Details</label>
+              <textarea class="form-control" name="hospDetails" placeholder="Dates, reason, duration…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Investigations / Echo -->
+        <div class="tab-pane" id="tab-2">
+          <div class="section-sep">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Echocardiography
+          </div>
+          <div class="form-grid mt-4">
+            <div class="form-group">
+              <label class="form-label">LVEF (%)</label>
+              <input class="form-control" type="number" name="lvef" placeholder="55" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Echo Date</label>
+              <input class="form-control" type="date" name="echoDate">
+            </div>
+            <div class="form-group">
+              <label class="form-label">LV Diastolic Diameter (mm)</label>
+              <input class="form-control" type="number" name="lvdd" placeholder="50">
+            </div>
+            <div class="form-group">
+              <label class="form-label">LV Systolic Diameter (mm)</label>
+              <input class="form-control" type="number" name="lvsd" placeholder="35">
+            </div>
+            <div class="form-group">
+              <label class="form-label">E/e' ratio</label>
+              <input class="form-control" type="number" name="eEPrime" placeholder="8" step="0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Diastolic Dysfunction Grade</label>
+              <select class="form-control" name="ddGrade">
+                <option value="">Select</option>
+                <option>Grade I</option><option>Grade II</option><option>Grade III</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="section-sep mt-6">Laboratory Investigations</div>
+          <div class="form-grid mt-4">
+            <div class="form-group">
+              <label class="form-label">NT-proBNP (pg/mL)</label>
+              <input class="form-control" type="number" name="ntProBNP" placeholder="125">
+            </div>
+            <div class="form-group">
+              <label class="form-label">eGFR (ml/min/1.73m²)</label>
+              <input class="form-control" type="number" name="egfr" placeholder="60">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Potassium (mmol/L)</label>
+              <input class="form-control" type="number" name="potassium" placeholder="4.2" step="0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sodium (mmol/L)</label>
+              <input class="form-control" type="number" name="sodium" placeholder="138">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Haemoglobin (g/dL)</label>
+              <input class="form-control" type="number" name="hb" placeholder="13.5" step="0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">TFT (TSH mIU/L)</label>
+              <input class="form-control" type="number" name="tft" placeholder="2.5" step="0.01">
+            </div>
+            <div class="form-group">
+              <label class="form-label">HbA1c (%)</label>
+              <input class="form-control" type="number" name="hba1c" placeholder="7.0" step="0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Creatinine (mg/dL)</label>
+              <input class="form-control" type="number" name="creatinine" placeholder="1.0" step="0.01">
+            </div>
+          </div>
+
+          <div class="section-sep mt-6">ECG</div>
+          <div class="form-grid mt-4">
+            <div class="form-group">
+              <label class="form-label">QRS Duration (ms)</label>
+              <input class="form-control" type="number" name="qrsDuration" placeholder="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Bundle Branch Block</label>
+              <select class="form-control" name="bbb">
+                <option value="">None</option>
+                <option>LBBB</option><option>RBBB</option><option>IVCD</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Medications -->
+        <div class="tab-pane" id="tab-3">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Document HF therapy optimisation. For each drug class, indicate if prescribed and provide details.</p>
+
+          <!-- Diuretics -->
+          <div class="med-card mb-4">
+            <div class="med-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Diuretics
+            </div>
+            <div class="radio-group mb-4">
+              <label class="radio-btn"><input type="radio" name="diureticPrescribed" value="Yes"> Prescribed</label>
+              <label class="radio-btn"><input type="radio" name="diureticPrescribed" value="No"> Not Prescribed</label>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Type of Diuretic</label>
+                <select class="form-control" name="diureticType">
+                  <option value="">Select</option>
+                  <option>Furosemide</option><option>Torsemide</option><option>Bumetanide</option>
+                  <option>Spironolactone</option><option>Eplerenone</option><option>Hydrochlorothiazide</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dose</label>
+                <input class="form-control" name="diureticDose" placeholder="e.g. 40mg OD">
+              </div>
+              <div class="form-group form-full">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="diureticReason" placeholder="Reason for non-prescription">
+              </div>
+            </div>
+          </div>
+
+          <!-- ACE/ARB/ARNI -->
+          <div class="med-card mb-4">
+            <div class="med-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              ACE Inhibitor / ARB / ARNI (RAASi)
+            </div>
+            <div class="radio-group mb-4">
+              <label class="radio-btn"><input type="radio" name="raasiPrescribed" value="Yes"> Prescribed</label>
+              <label class="radio-btn"><input type="radio" name="raasiPrescribed" value="No"> Not Prescribed</label>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Type of RAASi</label>
+                <select class="form-control" name="raasiType">
+                  <option value="">Select</option>
+                  <option>Ramipril (ACEi)</option><option>Enalapril (ACEi)</option><option>Lisinopril (ACEi)</option>
+                  <option>Losartan (ARB)</option><option>Valsartan (ARB)</option><option>Telmisartan (ARB)</option>
+                  <option>Sacubitril/Valsartan (ARNI)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dose</label>
+                <input class="form-control" name="raasiDose" placeholder="e.g. 5mg BD">
+              </div>
+              <div class="form-group form-full">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="raasiReason" placeholder="Reason for non-prescription">
+              </div>
+            </div>
+          </div>
+
+          <!-- Beta Blocker -->
+          <div class="med-card mb-4">
+            <div class="med-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Beta Blocker
+            </div>
+            <div class="radio-group mb-4">
+              <label class="radio-btn"><input type="radio" name="bbPrescribed" value="Yes"> Prescribed</label>
+              <label class="radio-btn"><input type="radio" name="bbPrescribed" value="No"> Not Prescribed</label>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Type of Beta Blocker</label>
+                <select class="form-control" name="bbType">
+                  <option value="">Select</option>
+                  <option>Carvedilol</option><option>Metoprolol Succinate</option><option>Bisoprolol</option><option>Nebivolol</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dose</label>
+                <input class="form-control" name="bbDose" placeholder="e.g. 6.25mg BD">
+              </div>
+              <div class="form-group form-full">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="bbReason" placeholder="Reason for non-prescription">
+              </div>
+            </div>
+          </div>
+
+          <!-- Digoxin -->
+          <div class="med-card mb-4">
+            <div class="med-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              Digoxin
+            </div>
+            <div class="radio-group mb-4">
+              <label class="radio-btn"><input type="radio" name="digoxinPrescribed" value="Yes"> Prescribed</label>
+              <label class="radio-btn"><input type="radio" name="digoxinPrescribed" value="No"> Not Prescribed</label>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Dose</label>
+                <input class="form-control" name="digoxinDose" placeholder="e.g. 0.125mg OD">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="digoxinReason" placeholder="Reason for non-prescription">
+              </div>
+            </div>
+          </div>
+
+          <!-- SGLT2i -->
+          <div class="med-card mb-4">
+            <div class="med-title">SGLT2 Inhibitor</div>
+            <div class="radio-group mb-4">
+              <label class="radio-btn"><input type="radio" name="sglt2Prescribed" value="Yes"> Prescribed</label>
+              <label class="radio-btn"><input type="radio" name="sglt2Prescribed" value="No"> Not Prescribed</label>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Drug & Dose</label>
+                <select class="form-control" name="sglt2Type">
+                  <option value="">Select</option>
+                  <option>Dapagliflozin 10mg OD</option><option>Empagliflozin 10mg OD</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="sglt2Reason" placeholder="Reason">
+              </div>
+            </div>
+          </div>
+
+          <!-- Ivabradine -->
+          <div class="med-card mb-4">
+            <div class="med-title">Ivabradine</div>
+            <div class="radio-group mb-4">
+              <label class="radio-btn"><input type="radio" name="ivabradPrescribed" value="Yes"> Prescribed</label>
+              <label class="radio-btn"><input type="radio" name="ivabradPrescribed" value="No"> Not Prescribed</label>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Dose</label>
+                <input class="form-control" name="ivabradDose" placeholder="e.g. 5mg BD">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="ivabradReason" placeholder="Reason for non-prescription">
+              </div>
+            </div>
+          </div>
+
+          <!-- MRA -->
+          <div class="med-card mb-4">
+            <div class="med-title">Mineralocorticoid Receptor Antagonist (MRA)</div>
+            <div class="radio-group mb-4">
+              <label class="radio-btn"><input type="radio" name="mraPrescribed" value="Yes"> Prescribed</label>
+              <label class="radio-btn"><input type="radio" name="mraPrescribed" value="No"> Not Prescribed</label>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Type of MRA</label>
+                <select class="form-control" name="mraType">
+                  <option value="">Select</option>
+                  <option>Spironolactone</option><option>Eplerenone</option><option>Finerenone</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dose</label>
+                <input class="form-control" name="mraDose" placeholder="e.g. 25mg OD">
+              </div>
+              <div class="form-group form-full">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="mraReason" placeholder="Reason for non-prescription">
+              </div>
+            </div>
+          </div>
+
+          <!-- Dyslipidemia -->
+          <div class="med-card mb-4">
+            <div class="med-title">Dyslipidemia Management</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Aspirin</label>
+                <select class="form-control" name="aspirinPrescribed">
+                  <option value="">Select</option>
+                  <option>Prescribed</option><option>Not Prescribed</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Aspirin Dose</label>
+                <input class="form-control" name="aspirinDose" placeholder="e.g. 75mg OD">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Statin</label>
+                <select class="form-control" name="statinType">
+                  <option value="">None / Select</option>
+                  <option>Atorvastatin</option><option>Rosuvastatin</option><option>Pitavastatin</option><option>Simvastatin</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Statin Dose</label>
+                <input class="form-control" name="statinDose" placeholder="e.g. 40mg OD">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Fibrate</label>
+                <select class="form-control" name="fibrateType">
+                  <option value="">None / Select</option>
+                  <option>Fenofibrate</option><option>Gemfibrozil</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">PCSK-9 Inhibitor</label>
+                <select class="form-control" name="pcsk9Type">
+                  <option value="">None / Select</option>
+                  <option>Evolocumab</option><option>Alirocumab</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Diabetes -->
+          <div class="med-card mb-4">
+            <div class="med-title">Diabetes Management (if DM diagnosed)</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">HbA1c (%)</label>
+                <input class="form-control" type="number" name="hba1c_dm" placeholder="7.0" step="0.1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Anti-diabetic Drug</label>
+                <input class="form-control" name="dmDrug" placeholder="e.g. Metformin 500mg BD">
+              </div>
+              <div class="form-group form-full">
+                <label class="form-label">Reason if not optimally treated</label>
+                <input class="form-control" name="dmReason" placeholder="Reason">
+              </div>
+            </div>
+          </div>
+
+          <!-- Haemoglobin / Iron -->
+          <div class="med-card mb-4">
+            <div class="med-title">Anaemia &amp; Iron Deficiency</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Haemoglobin (g/dL)</label>
+                <input class="form-control" type="number" name="hb_med" placeholder="13.5" step="0.1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Serum Ferritin (µg/L)</label>
+                <input class="form-control" type="number" name="ferritin" placeholder="80">
+              </div>
+              <div class="form-group">
+                <label class="form-label">IV Iron</label>
+                <select class="form-control" name="ivIronPrescribed">
+                  <option value="">Select</option>
+                  <option>Prescribed</option><option>Not Prescribed</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">IV Iron Dose</label>
+                <input class="form-control" name="ivIronDose" placeholder="e.g. Ferric carboxymaltose 500mg">
+              </div>
+              <div class="form-group form-full">
+                <label class="form-label">Reason if Not Prescribed</label>
+                <input class="form-control" name="ivIronReason" placeholder="Reason">
+              </div>
+            </div>
+          </div>
+
+          <!-- Anti-arrhythmic -->
+          <div class="med-card mb-4">
+            <div class="med-title">Anti-arrhythmic Therapy</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">NOAC Type</label>
+                <select class="form-control" name="noacType">
+                  <option value="">None / Select</option>
+                  <option>Apixaban</option><option>Rivaroxaban</option><option>Dabigatran</option><option>Edoxaban</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">NOAC Dose</label>
+                <input class="form-control" name="noacDose" placeholder="e.g. 5mg BD">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Vitamin K Inhibitor</label>
+                <select class="form-control" name="vkiType">
+                  <option value="">None / Select</option>
+                  <option>Warfarin</option><option>Acenocoumarol</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">VKI Dose / INR target</label>
+                <input class="form-control" name="vkiDose" placeholder="e.g. Warfarin, INR 2–3">
+              </div>
+              <div class="form-group form-full">
+                <label class="form-label">Reason if Anti-arrhythmic Not Prescribed</label>
+                <input class="form-control" name="antiarrhythmicReason" placeholder="Reason">
+              </div>
+            </div>
+          </div>
+
+          <!-- Device Therapy -->
+          <div class="med-card mb-4">
+            <div class="med-title">Device Therapy</div>
+            <div class="check-group mb-4">
+              <label class="check-btn"><input type="checkbox" name="device" value="ICD"> ICD</label>
+              <label class="check-btn"><input type="checkbox" name="device" value="CRT-D"> CRT-D</label>
+              <label class="check-btn"><input type="checkbox" name="device" value="CRT-P"> CRT-P</label>
+              <label class="check-btn"><input type="checkbox" name="device" value="PPM"> PPM</label>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Device Notes / Implant Date</label>
+              <input class="form-control" name="deviceNotes" placeholder="e.g. ICD implanted 2025-03-10">
+            </div>
+          </div>
+
+          <!-- Vaccination -->
+          <div class="med-card mb-4">
+            <div class="med-title">Vaccination Status</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Influenza Vaccine</label>
+                <select class="form-control" name="vaccInfluenza">
+                  <option value="">Select</option>
+                  <option>Given – Right arm</option><option>Given – Left arm</option><option>Not given</option><option>Declined</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Pneumococcal Vaccine</label>
+                <select class="form-control" name="vaccPneumo">
+                  <option value="">Select</option>
+                  <option>Given – Right arm</option><option>Given – Left arm</option><option>Not given</option><option>Declined</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Influenza Vaccine Date</label>
+                <input class="form-control" type="date" name="vaccInfluenzaDate">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Pneumococcal Vaccine Date</label>
+                <input class="form-control" type="date" name="vaccPneumoDate">
+              </div>
+            </div>
+          </div>
+
+          <!-- Hard Grip Test -->
+          <div class="med-card">
+            <div class="med-title">Functional Assessments</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Hard Grip Test (kg) – Right</label>
+                <input class="form-control" type="number" name="gripRight" placeholder="28" step="0.1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Hard Grip Test (kg) – Left</label>
+                <input class="form-control" type="number" name="gripLeft" placeholder="26" step="0.1">
+              </div>
+              <div class="form-group">
+                <label class="form-label">3-Month Follow-up Date</label>
+                <input class="form-control" type="date" name="followup3m">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Frailty Score</label>
+                <select class="form-control" name="frailty">
+                  <option value="">Select</option>
+                  <option>Not frail</option><option>Pre-frail</option><option>Frail</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Education -->
+        <div class="tab-pane" id="tab-4">
+          <div class="section-sep mb-4">Patient Education Provided</div>
+          <div class="check-group mb-4">
+            <label class="check-btn"><input type="checkbox" name="edu" value="Diet"> Diet counselling</label>
+            <label class="check-btn"><input type="checkbox" name="edu" value="Exercise"> Exercise guidance</label>
+            <label class="check-btn"><input type="checkbox" name="edu" value="Weight monitoring"> Daily weight monitoring</label>
+            <label class="check-btn"><input type="checkbox" name="edu" value="Fluid restriction"> Fluid restriction</label>
+            <label class="check-btn"><input type="checkbox" name="edu" value="Worsening symptoms"> Detection of worsening symptoms</label>
+            <label class="check-btn"><input type="checkbox" name="edu" value="Medication adherence"> Medication adherence</label>
+            <label class="check-btn"><input type="checkbox" name="edu" value="Salt restriction"> Salt restriction</label>
+            <label class="check-btn"><input type="checkbox" name="edu" value="Smoking cessation"> Smoking cessation</label>
+          </div>
+          <div class="form-group mb-4">
+            <label class="form-label">Education Notes</label>
+            <textarea class="form-control" name="eduNotes" placeholder="Additional patient education notes…" rows="3"></textarea>
+          </div>
+
+          <div class="section-sep mb-4 mt-6">Follow-up</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Next Follow-up Date</label>
+              <input class="form-control" type="date" name="followupDate">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Visit Type</label>
+              <select class="form-control" name="visitType">
+                <option value="">Select</option>
+                <option>OPD</option><option>Telemedicine</option><option>Inpatient</option>
+              </select>
+            </div>
+            <div class="form-group form-full">
+              <label class="form-label">Clinical Notes</label>
+              <textarea class="form-control" name="clinicalNotes" placeholder="Clinician notes, plan, assessment…" rows="4"></textarea>
+            </div>
+          </div>
+        </div>
+
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-outline" onclick="prevTab()">← Back</button>
+      <button class="btn btn-primary" onclick="nextTabOrSave()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Patient Detail Modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header">
+      <div class="modal-title" id="detail-modal-title">Patient Details</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-outline btn-sm" onclick="editCurrentPatient()">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCurrentPatient()">Delete</button>
+        <button class="modal-close" onclick="closeDetailModal()">&#x2715;</button>
+      </div>
+    </div>
+    <div class="modal-body" id="detail-modal-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── Data Store ──────────────────────────────────────────────
+let patients = JSON.parse(localStorage.getItem('cp_patients') || '[]');
+let editingId = null;
+let viewingId = null;
+const COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+
+function save() { localStorage.setItem('cp_patients', JSON.stringify(patients)); }
+
+function getAge(dob) {
+  if (!dob) return '—';
+  const diff = Date.now() - new Date(dob).getTime();
+  return Math.floor(diff / (365.25*24*3600*1000));
+}
+
+function pid() { return 'CP-' + String(Date.now()).slice(-6); }
+
+// ─── Navigation ──────────────────────────────────────────────
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.getElementById('topbar-title').textContent =
+    {dashboard:'Dashboard',patients:'Patient List',analytics:'Analytics',reports:'Reports'}[page] || page;
+
+  const navMap = {dashboard:0,patients:1,analytics:3,reports:4};
+  const items = document.querySelectorAll('.nav-item');
+  if (navMap[page] !== undefined) items[navMap[page]].classList.add('active');
+
+  if (page === 'dashboard') renderDashboard();
+  if (page === 'patients') renderPatients();
+  if (page === 'analytics') renderAnalytics();
+  if (page === 'reports') renderReports();
+}
+
+// ─── Dashboard ───────────────────────────────────────────────
+function renderDashboard() {
+  const total = patients.length;
+  const hfrEF = patients.filter(p => p.hfType === 'HFrEF').length;
+  const nyha34 = patients.filter(p => p.nyha === 'III' || p.nyha === 'IV').length;
+  const withHosp = patients.filter(p => p.hospHistory === 'Yes').length;
+
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#eff6ff"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+      <div class="stat-label">Total Patients</div>
+      <div class="stat-value">${total}</div>
+      <div class="stat-sub">Registered</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#fef2f2"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402C1 3.967 3.68 2 6.5 2c1.97 0 4.013 1.007 5.5 2.998C13.487 3.007 15.53 2 17.5 2 20.32 2 23 3.967 23 7.191c0 4.105-5.37 8.863-11 14.402z"/></svg></div>
+      <div class="stat-label">HFrEF</div>
+      <div class="stat-value">${hfrEF}</div>
+      <div class="stat-sub">${total ? Math.round(hfrEF/total*100) : 0}% of patients</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#fefce8"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+      <div class="stat-label">NYHA III/IV</div>
+      <div class="stat-value">${nyha34}</div>
+      <div class="stat-sub">Advanced symptoms</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:#f0fdf4"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="stat-label">Prior Hospitalization</div>
+      <div class="stat-value">${withHosp}</div>
+      <div class="stat-sub">H/O admission</div>
+    </div>`;
+
+  const recent = [...patients].reverse().slice(0, 5);
+  const tbody = document.getElementById('recent-patients-tbody');
+  if (!recent.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No patients yet</td></tr>';
+  } else {
+    tbody.innerHTML = recent.map(p => `
+      <tr onclick="viewPatient('${p.id}')">
+        <td><div class="inline-flex"><div class="avatar" style="width:28px;height:28px;font-size:11px">${initials(p)}</div><span style="margin-left:8px">${p.firstName} ${p.lastName}</span></div></td>
+        <td>${p.hfType ? `<span class="badge ${hfBadge(p.hfType)}">${p.hfType}</span>` : '—'}</td>
+        <td>${p.nyha ? `<span class="badge badge-gray">Class ${p.nyha}</span>` : '—'}</td>
+        <td>${p.lvef ? p.lvef + '%' : '—'}</td>
+        <td><span class="badge ${nyhaStatus(p.nyha)}">${nyhaLabel(p.nyha)}</span></td>
+      </tr>`).join('');
+  }
+
+  renderMiniNyha();
+}
+
+function initials(p) { return ((p.firstName||'?')[0] + (p.lastName||'?')[0]).toUpperCase(); }
+function hfBadge(t) { return t==='HFrEF'?'badge-red':t==='HFpEF'?'badge-green':'badge-blue'; }
+function nyhaStatus(n) { return (n==='III'||n==='IV') ? 'badge-red' : (n==='II'?'badge-yellow':'badge-green'); }
+function nyhaLabel(n) { return n ? 'NYHA '+n : 'Unknown'; }
+
+function renderMiniNyha() {
+  const counts = [0,0,0,0];
+  patients.forEach(p => { const i = ['I','II','III','IV'].indexOf(p.nyha); if(i>=0) counts[i]++; });
+  const ctx = document.getElementById('chart-nyha');
+  if (!ctx) return;
+  destroyChart('chart-nyha');
+  window._charts = window._charts || {};
+  window._charts['chart-nyha'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: ['Class I','Class II','Class III','Class IV'], datasets: [{ data: counts, backgroundColor: ['#10b981','#3b82f6','#f59e0b','#ef4444'], borderWidth: 0 }] },
+    options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }, cutout: '65%' }
+  });
+}
+
+function destroyChart(id) {
+  if (window._charts && window._charts[id]) { window._charts[id].destroy(); delete window._charts[id]; }
+}
+
+// ─── Patient List ─────────────────────────────────────────────
+function renderPatients(list) {
+  list = list || patients;
+  document.getElementById('patient-count-label').textContent = `${list.length} patient${list.length!==1?'s':''} found`;
+  const tbody = document.getElementById('patients-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🫀</div><div>No patients found</div><div style="font-size:12px;margin-top:4px">Add a new patient to get started</div></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(p => `
+    <tr onclick="viewPatient('${p.id}')">
+      <td><div class="inline-flex"><div class="avatar">${initials(p)}</div><div style="margin-left:8px"><div style="font-weight:500">${p.firstName} ${p.lastName}</div><div style="font-size:11.5px;color:var(--muted)">${p.id||''}</div></div></div></td>
+      <td>${getAge(p.dob)} y / ${p.sex||'—'}</td>
+      <td>${p.hfType ? `<span class="badge ${hfBadge(p.hfType)}">${p.hfType}</span>` : '—'}</td>
+      <td style="font-size:12.5px">${(p.etiology||[]).join(', ') || (p.etiologyOther||'—')}</td>
+      <td>${p.nyha ? `<span class="badge ${nyhaStatus(p.nyha)}">Class ${p.nyha}</span>` : '—'}</td>
+      <td>${p.lvef ? p.lvef+'%' : '—'}</td>
+      <td>${p.bpSystolic && p.bpDiastolic ? p.bpSystolic+'/'+p.bpDiastolic : '—'}</td>
+      <td onclick="event.stopPropagation()">
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="editPatient('${p.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmDelete('${p.id}')">Del</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function filterPatients() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const hf = document.getElementById('filter-hf').value;
+  const nyha = document.getElementById('filter-nyha').value;
+  let list = patients.filter(p => {
+    const nameMatch = (p.firstName+' '+p.lastName+' '+(p.id||'')).toLowerCase().includes(q);
+    const hfMatch = !hf || p.hfType === hf;
+    const nyhaMatch = !nyha || p.nyha === nyha;
+    return nameMatch && hfMatch && nyhaMatch;
+  });
+  renderPatients(list);
+}
+
+// ─── Modal ────────────────────────────────────────────────────
+let currentTab = 0;
+
+function openAddPatient() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'Add New Patient';
+  document.getElementById('patient-form').reset();
+  document.querySelectorAll('.radio-btn input, .check-btn input').forEach(el => el.checked = false);
+  switchTab(0);
+  document.getElementById('patient-modal').classList.add('open');
+}
+
+function editPatient(id) {
+  editingId = id;
+  const p = patients.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('modal-title').textContent = 'Edit Patient';
+  const form = document.getElementById('patient-form');
+  form.reset();
+  // Fill scalar fields
+  const scalars = ['firstName','lastName','dob','sex','contact','mrn','address','comorbidities','allergies',
+    'bpSystolic','bpDiastolic','heartRate','sixMWT','rhythm','nyha','hfType','etiologyOther',
+    'hospHistory','hospCount','hospDetails','lvef','echoDate','lvdd','lvsd','eEPrime','ddGrade',
+    'ntProBNP','egfr','potassium','sodium','hb','tft','hba1c','creatinine','qrsDuration','bbb',
+    'diureticPrescribed','diureticType','diureticDose','diureticReason',
+    'raasiPrescribed','raasiType','raasiDose','raasiReason',
+    'bbPrescribed','bbType','bbDose','bbReason',
+    'digoxinPrescribed','digoxinDose','digoxinReason',
+    'sglt2Prescribed','sglt2Type','sglt2Reason',
+    'ivabradPrescribed','ivabradDose','ivabradReason',
+    'mraPrescribed','mraType','mraDose','mraReason',
+    'aspirinPrescribed','aspirinDose','statinType','statinDose','fibrateType','pcsk9Type',
+    'hba1c_dm','dmDrug','dmReason',
+    'hb_med','ferritin','ivIronPrescribed','ivIronDose','ivIronReason',
+    'noacType','noacDose','vkiType','vkiDose','antiarrhythmicReason',
+    'deviceNotes','vaccInfluenza','vaccPneumo','vaccInfluenzaDate','vaccPneumoDate',
+    'gripRight','gripLeft','followup3m','frailty',
+    'eduNotes','followupDate','visitType','clinicalNotes'];
+  scalars.forEach(k => {
+    const el = form.querySelector(`[name="${k}"]`);
+    if (el && p[k] !== undefined) {
+      if (el.type === 'radio') { form.querySelectorAll(`[name="${k}"]`).forEach(r => r.checked = r.value === p[k]); }
+      else el.value = p[k] || '';
+    }
+  });
+  // Checkboxes
+  const edu = p.edu || [];
+  form.querySelectorAll('[name="edu"]').forEach(c => c.checked = edu.includes(c.value));
+  const etio = p.etiology || [];
+  form.querySelectorAll('[name="etiology"]').forEach(c => c.checked = etio.includes(c.value));
+  const devs = p.device || [];
+  form.querySelectorAll('[name="device"]').forEach(c => c.checked = devs.includes(c.value));
+
+  switchTab(0);
+  document.getElementById('patient-modal').classList.add('open');
+  document.getElementById('detail-modal').classList.remove('open');
+}
+
+function closeModal() {
+  document.getElementById('patient-modal').classList.remove('open');
+  editingId = null;
+}
+
+function switchTab(n) {
+  document.querySelectorAll('.tab-pane').forEach((t,i) => t.classList.toggle('active', i===n));
+  document.querySelectorAll('#form-tabs .tab').forEach((t,i) => t.classList.toggle('active', i===n));
+  currentTab = n;
+  const nextBtn = document.querySelector('.modal-footer .btn-primary');
+  nextBtn.textContent = n === 4 ? 'Save Patient' : 'Next →';
+}
+
+function nextTabOrSave() {
+  if (currentTab < 4) { switchTab(currentTab + 1); }
+  else { savePatient(); }
+}
+
+function prevTab() {
+  if (currentTab > 0) switchTab(currentTab - 1);
+}
+
+function savePatient() {
+  const form = document.getElementById('patient-form');
+  const fd = new FormData(form);
+  const p = {};
+  for (const [k,v] of fd.entries()) {
+    if (form.querySelectorAll(`[name="${k}"]`).length > 1 && form.querySelector(`[name="${k}"]`).type === 'checkbox') {
+      if (!p[k]) p[k] = [];
+      p[k].push(v);
+    } else { p[k] = v; }
+  }
+  if (!p.firstName || !p.lastName || !p.dob || !p.sex) {
+    showToast('Please fill in required fields (tab 1)', 'error'); switchTab(0); return;
+  }
+  if (editingId) {
+    const idx = patients.findIndex(x => x.id === editingId);
+    p.id = editingId;
+    patients[idx] = p;
+  } else {
+    p.id = pid();
+    p.createdAt = new Date().toISOString();
+    patients.push(p);
+  }
+  save();
+  closeModal();
+  showToast(editingId ? 'Patient updated successfully' : 'Patient added successfully', 'success');
+  renderDashboard();
+  if (document.getElementById('page-patients').classList.contains('active')) renderPatients();
+}
+
+// ─── Patient Detail ───────────────────────────────────────────
+function viewPatient(id) {
+  viewingId = id;
+  const p = patients.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('detail-modal-title').textContent = p.firstName + ' ' + p.lastName;
+  const age = getAge(p.dob);
+  document.getElementById('detail-modal-body').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-section">
+        <div class="detail-section-title">Demographics</div>
+        ${dr('Name', p.firstName+' '+p.lastName)}
+        ${dr('MRN', p.id)}
+        ${dr('Age / Sex', age+'y / '+(p.sex||'—'))}
+        ${dr('DOB', p.dob||'—')}
+        ${dr('Contact', p.contact||'—')}
+        ${dr('Comorbidities', p.comorbidities||'—')}
+        ${dr('Allergies', p.allergies||'—')}
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Clinical</div>
+        ${dr('HF Type', p.hfType||'—')}
+        ${dr('NYHA Class', p.nyha ? 'Class '+p.nyha : '—')}
+        ${dr('Rhythm', p.rhythm||'—')}
+        ${dr('BP', p.bpSystolic&&p.bpDiastolic ? p.bpSystolic+'/'+p.bpDiastolic+' mmHg' : '—')}
+        ${dr('Heart Rate', p.heartRate ? p.heartRate+' bpm' : '—')}
+        ${dr('6MWT', p.sixMWT ? p.sixMWT+' m' : '—')}
+        ${dr('Etiology', [...(p.etiology||[]), p.etiologyOther||''].filter(Boolean).join(', ')||'—')}
+        ${dr('Hospitalization', p.hospHistory||'—')}
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Investigations</div>
+        ${dr('LVEF', p.lvef ? p.lvef+'%' : '—')}
+        ${dr('NT-proBNP', p.ntProBNP ? p.ntProBNP+' pg/mL' : '—')}
+        ${dr('eGFR', p.egfr ? p.egfr+' ml/min/1.73m²' : '—')}
+        ${dr('Potassium', p.potassium ? p.potassium+' mmol/L' : '—')}
+        ${dr('TFT (TSH)', p.tft ? p.tft+' mIU/L' : '—')}
+        ${dr('Creatinine', p.creatinine ? p.creatinine+' mg/dL' : '—')}
+        ${dr('Haemoglobin', p.hb ? p.hb+' g/dL' : '—')}
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Core Medications</div>
+        ${dr('Diuretic', medLine(p.diureticPrescribed, p.diureticType, p.diureticDose))}
+        ${dr('RAASi', medLine(p.raasiPrescribed, p.raasiType, p.raasiDose))}
+        ${dr('Beta Blocker', medLine(p.bbPrescribed, p.bbType, p.bbDose))}
+        ${dr('Digoxin', medLine(p.digoxinPrescribed, null, p.digoxinDose))}
+        ${dr('SGLT2i', medLine(p.sglt2Prescribed, p.sglt2Type, null))}
+        ${dr('Ivabradine', medLine(p.ivabradPrescribed, null, p.ivabradDose))}
+        ${dr('MRA', medLine(p.mraPrescribed, p.mraType, p.mraDose))}
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Additional Therapy</div>
+        ${dr('Aspirin', [p.aspirinPrescribed, p.aspirinDose].filter(Boolean).join(' · ')||'—')}
+        ${dr('Statin', [p.statinType, p.statinDose].filter(Boolean).join(' · ')||'—')}
+        ${dr('Fibrate', p.fibrateType||'—')}
+        ${dr('PCSK-9 Inhibitor', p.pcsk9Type||'—')}
+        ${dr('NOAC', [p.noacType, p.noacDose].filter(Boolean).join(' · ')||'—')}
+        ${dr('VKI', [p.vkiType, p.vkiDose].filter(Boolean).join(' · ')||'—')}
+        ${dr('DM Drug', p.dmDrug||'—')}
+        ${dr('IV Iron', medLine(p.ivIronPrescribed, null, p.ivIronDose))}
+        ${dr('Ferritin', p.ferritin ? p.ferritin+' µg/L' : '—')}
+        ${dr('Device', (p.device||[]).join(', ')||'None')}
+        ${dr('Device Notes', p.deviceNotes||'—')}
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Vaccination &amp; Functional</div>
+        ${dr('Influenza Vaccine', p.vaccInfluenza||'—')}
+        ${dr('Pneumococcal Vaccine', p.vaccPneumo||'—')}
+        ${dr('Grip Strength R/L', (p.gripRight||'—')+' / '+(p.gripLeft||'—')+' kg')}
+        ${dr('Frailty', p.frailty||'—')}
+        ${dr('3-Month F/U', p.followup3m||'—')}
+      </div>
+      <div class="detail-section" style="grid-column:1/-1">
+        <div class="detail-section-title">Education & Notes</div>
+        ${dr('Education Provided', (p.edu||[]).join(', ')||'—')}
+        ${dr('Next Follow-up', p.followupDate||'—')}
+        ${dr('Visit Type', p.visitType||'—')}
+        ${dr('Clinical Notes', p.clinicalNotes||'—')}
+      </div>
+    </div>`;
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+function dr(k,v) { return `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${v||'—'}</span></div>`; }
+function medLine(pres, type, dose) {
+  if (!pres) return '—';
+  if (pres === 'No') return '<span style="color:var(--danger)">Not prescribed</span>';
+  return [type, dose].filter(Boolean).join(' · ') || 'Prescribed';
+}
+
+function closeDetailModal() { document.getElementById('detail-modal').classList.remove('open'); viewingId = null; }
+
+function editCurrentPatient() { if (viewingId) editPatient(viewingId); }
+
+function deleteCurrentPatient() {
+  if (viewingId) confirmDelete(viewingId, true);
+}
+
+function confirmDelete(id, fromDetail) {
+  if (!confirm('Delete this patient? This cannot be undone.')) return;
+  patients = patients.filter(p => p.id !== id);
+  save();
+  showToast('Patient deleted', 'success');
+  if (fromDetail) closeDetailModal();
+  renderPatients();
+  renderDashboard();
+}
+
+// ─── Analytics ────────────────────────────────────────────────
+function renderAnalytics() {
+  const ids = ['chart-hf-type','chart-nyha-2','chart-etiology','chart-lvef','chart-rhythm','chart-meds'];
+  ids.forEach(destroyChart);
+
+  if (!patients.length) {
+    ['chart-hf-type','chart-nyha-2','chart-etiology','chart-lvef','chart-rhythm','chart-meds'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { const p = el.parentNode; p.innerHTML = '<div class="chart-title">' + p.querySelector('.chart-title').textContent + '</div><div class="empty-state">No data yet</div>'; }
+    });
+    return;
+  }
+
+  // HF type
+  const hfCounts = countBy(patients, 'hfType', ['HFrEF','HFmrEF','HFpEF']);
+  makeBar('chart-hf-type', Object.keys(hfCounts), Object.values(hfCounts), COLORS);
+
+  // NYHA
+  const nyhaCounts = countBy(patients, 'nyha', ['I','II','III','IV']);
+  makeDoughnut('chart-nyha-2', ['Class I','Class II','Class III','Class IV'], Object.values(nyhaCounts), ['#10b981','#3b82f6','#f59e0b','#ef4444']);
+
+  // Etiology
+  const etioCounts = {};
+  patients.forEach(p => (p.etiology||[]).forEach(e => etioCounts[e] = (etioCounts[e]||0)+1));
+  if (Object.keys(etioCounts).length) {
+    makeBar('chart-etiology', Object.keys(etioCounts), Object.values(etioCounts), COLORS);
+  }
+
+  // LVEF distribution
+  const lvefBins = {'<25':0,'25-35':0,'35-45':0,'45-55':0,'>55':0};
+  patients.forEach(p => {
+    const v = parseFloat(p.lvef);
+    if (isNaN(v)) return;
+    if (v < 25) lvefBins['<25']++;
+    else if (v < 35) lvefBins['25-35']++;
+    else if (v < 45) lvefBins['35-45']++;
+    else if (v < 55) lvefBins['45-55']++;
+    else lvefBins['>55']++;
+  });
+  makeBar('chart-lvef', Object.keys(lvefBins), Object.values(lvefBins), ['#ef4444','#f97316','#f59e0b','#10b981','#3b82f6']);
+
+  // Rhythm
+  const rhythmCounts = countBy(patients, 'rhythm', ['Sinus','AF','Not Known','Other']);
+  makeDoughnut('chart-rhythm', Object.keys(rhythmCounts), Object.values(rhythmCounts), COLORS);
+
+  // Meds
+  const meds = ['Diuretic','RAASi','Beta Blocker','Digoxin','SGLT2i'];
+  const keys = ['diureticPrescribed','raasiPrescribed','bbPrescribed','digoxinPrescribed','sglt2Prescribed'];
+  const medCounts = keys.map(k => patients.filter(p => p[k] === 'Yes').length);
+  makeBar('chart-meds', meds, medCounts, COLORS);
+
+  // Summary
+  const avgLvef = mean(patients.map(p => parseFloat(p.lvef)).filter(v => !isNaN(v)));
+  const avgAge = mean(patients.map(p => getAge(p.dob)).filter(v => v !== '—'));
+  const avgNTpBNP = mean(patients.map(p => parseFloat(p.ntProBNP)).filter(v => !isNaN(v)));
+  document.getElementById('analytics-summary').innerHTML = [
+    ['Patients', patients.length],
+    ['Avg Age', avgAge ? avgAge.toFixed(0)+' y' : '—'],
+    ['Avg LVEF', avgLvef ? avgLvef.toFixed(1)+'%' : '—'],
+    ['Avg NT-proBNP', avgNTpBNP ? avgNTpBNP.toFixed(0) : '—'],
+    ['NYHA III/IV', patients.filter(p=>p.nyha==='III'||p.nyha==='IV').length]
+  ].map(([l,v]) => `<div style="text-align:center"><div style="font-size:22px;font-weight:700">${v}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">${l}</div></div>`).join('');
+}
+
+function countBy(arr, key, labels) {
+  const res = {};
+  labels.forEach(l => res[l] = 0);
+  arr.forEach(p => { if (p[key] && res[p[key]] !== undefined) res[p[key]]++; });
+  return res;
+}
+
+function mean(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
+
+function makeBar(id, labels, data, colors) {
+  const ctx = document.getElementById(id); if (!ctx) return;
+  window._charts = window._charts || {};
+  window._charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { ticks: { stepSize: 1 }, beginAtZero: true } } }
+  });
+}
+
+function makeDoughnut(id, labels, data, colors) {
+  const ctx = document.getElementById(id); if (!ctx) return;
+  window._charts = window._charts || {};
+  window._charts[id] = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+    options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }, cutout: '60%' }
+  });
+}
+
+// ─── Reports ──────────────────────────────────────────────────
+function renderReports() {
+  const tbody = document.getElementById('report-tbody');
+  if (!patients.length) {
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--muted)">No patients</td></tr>';
+    return;
+  }
+  tbody.innerHTML = patients.map(p => `
+    <tr>
+      <td>${p.id||''}</td>
+      <td>${p.firstName} ${p.lastName}</td>
+      <td>${getAge(p.dob)}</td>
+      <td>${p.sex||'—'}</td>
+      <td>${p.hfType||'—'}</td>
+      <td style="font-size:12px">${(p.etiology||[]).join(', ')||'—'}</td>
+      <td>${p.nyha||'—'}</td>
+      <td>${p.lvef||'—'}</td>
+      <td>${p.bpSystolic||'—'}</td>
+      <td>${p.rhythm||'—'}</td>
+      <td>${p.ntProBNP||'—'}</td>
+      <td>${p.egfr||'—'}</td>
+    </tr>`).join('');
+}
+
+function exportCSV() {
+  const headers = ['ID','First Name','Last Name','DOB','Age','Sex','HF Type','NYHA','Rhythm','BP Sys','BP Dia','LVEF%','NT-proBNP','eGFR','Potassium','Etiology','Diuretic','RAASi','Beta Blocker','Digoxin'];
+  const rows = patients.map(p => [
+    p.id, p.firstName, p.lastName, p.dob, getAge(p.dob), p.sex, p.hfType, p.nyha, p.rhythm,
+    p.bpSystolic, p.bpDiastolic, p.lvef, p.ntProBNP, p.egfr, p.potassium,
+    (p.etiology||[]).join(';'), p.diureticPrescribed, p.raasiPrescribed, p.bbPrescribed, p.digoxinPrescribed
+  ].map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'Cardio-Konnect_patients_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  showToast('CSV exported', 'success');
+}
+
+// ─── Toast ────────────────────────────────────────────────────
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type||'');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ─── Init ─────────────────────────────────────────────────────
+document.getElementById('topbar-date').textContent = new Date().toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'});
+
+// Seed demo data if empty
+if (!patients.length) {
+  patients = [
+    { id:'CP-001001', firstName:'Ramesh', lastName:'Kumar', dob:'1958-03-14', sex:'Male', contact:'9876543210', mrn:'MRN-001', comorbidities:'DM Type 2, HTN', allergies:'Penicillin',
+      bpSystolic:'138', bpDiastolic:'88', heartRate:'76', sixMWT:'320', rhythm:'Sinus', nyha:'II', hfType:'HFrEF', etiology:['Ischemic','Hypertension'], hospHistory:'Yes', hospCount:'2',
+      lvef:'32', ntProBNP:'1240', egfr:'58', potassium:'4.1', hb:'12.8', tft:'2.3', creatinine:'1.2',
+      diureticPrescribed:'Yes', diureticType:'Furosemide', diureticDose:'40mg OD',
+      raasiPrescribed:'Yes', raasiType:'Sacubitril/Valsartan (ARNI)', raasiDose:'50mg BD',
+      bbPrescribed:'Yes', bbType:'Carvedilol', bbDose:'6.25mg BD',
+      digoxinPrescribed:'No', digoxinReason:'Not indicated',
+      sglt2Prescribed:'Yes', sglt2Type:'Dapagliflozin 10mg OD',
+      edu:['Diet','Exercise','Weight monitoring','Worsening symptoms'], followupDate:'2026-07-10', visitType:'OPD' },
+    { id:'CP-001002', firstName:'Sunita', lastName:'Sharma', dob:'1965-07-22', sex:'Female', comorbidities:'HTN, Hypothyroid', allergies:'None',
+      bpSystolic:'152', bpDiastolic:'96', heartRate:'88', rhythm:'AF', nyha:'III', hfType:'HFpEF', etiology:['Hypertension'],
+      lvef:'58', ntProBNP:'2800', egfr:'45', potassium:'3.9', tft:'4.8',
+      diureticPrescribed:'Yes', diureticType:'Torsemide', diureticDose:'10mg OD',
+      raasiPrescribed:'Yes', raasiType:'Ramipril (ACEi)', raasiDose:'5mg OD',
+      bbPrescribed:'Yes', bbType:'Bisoprolol', bbDose:'5mg OD',
+      digoxinPrescribed:'Yes', digoxinDose:'0.125mg OD',
+      sglt2Prescribed:'No', hospHistory:'Yes', hospCount:'1',
+      edu:['Weight monitoring','Fluid restriction','Worsening symptoms'] },
+    { id:'CP-001003', firstName:'Anil', lastName:'Verma', dob:'1972-11-05', sex:'Male', comorbidities:'Nil significant',
+      bpSystolic:'110', bpDiastolic:'70', heartRate:'92', rhythm:'Sinus', nyha:'III', hfType:'HFrEF', etiology:['Viral Myocarditis'],
+      lvef:'22', ntProBNP:'4500', egfr:'62', potassium:'4.5',
+      diureticPrescribed:'Yes', diureticType:'Furosemide', diureticDose:'80mg BD',
+      raasiPrescribed:'Yes', raasiType:'Sacubitril/Valsartan (ARNI)', raasiDose:'100mg BD',
+      bbPrescribed:'Yes', bbType:'Carvedilol', bbDose:'12.5mg BD',
+      digoxinPrescribed:'Yes', digoxinDose:'0.125mg OD',
+      sglt2Prescribed:'Yes', sglt2Type:'Dapagliflozin 10mg OD',
+      hospHistory:'Yes', hospCount:'3', edu:['Diet','Medication adherence','Worsening symptoms','Salt restriction'] },
+    { id:'CP-001004', firstName:'Priya', lastName:'Nair', dob:'1980-01-30', sex:'Female', comorbidities:'Peri-partum (2 yrs prior)',
+      bpSystolic:'100', bpDiastolic:'65', heartRate:'102', rhythm:'Sinus', nyha:'IV', hfType:'HFrEF', etiology:['Peri-partum'],
+      lvef:'18', ntProBNP:'8200', egfr:'40', potassium:'4.8',
+      diureticPrescribed:'Yes', diureticType:'Furosemide', diureticDose:'80mg TDS',
+      raasiPrescribed:'Yes', raasiType:'Sacubitril/Valsartan (ARNI)', raasiDose:'50mg BD',
+      bbPrescribed:'Yes', bbType:'Metoprolol Succinate', bbDose:'12.5mg OD',
+      digoxinPrescribed:'Yes', digoxinDose:'0.0625mg OD',
+      sglt2Prescribed:'No', sglt2Reason:'eGFR borderline',
+      hospHistory:'Yes', hospCount:'4', edu:['Weight monitoring','Fluid restriction','Worsening symptoms'] },
+    { id:'CP-001005', firstName:'Mohan', lastName:'Das', dob:'1949-06-18', sex:'Male', comorbidities:'DM, CKD Stage 3',
+      bpSystolic:'130', bpDiastolic:'82', heartRate:'68', rhythm:'AF', nyha:'II', hfType:'HFmrEF', etiology:['Ischemic','Diabetic Cardiomyopathy'],
+      lvef:'42', ntProBNP:'950', egfr:'38', potassium:'5.1', hba1c:'8.2', creatinine:'1.8',
+      diureticPrescribed:'Yes', diureticType:'Torsemide', diureticDose:'20mg OD',
+      raasiPrescribed:'Yes', raasiType:'Losartan (ARB)', raasiDose:'50mg OD',
+      bbPrescribed:'Yes', bbType:'Bisoprolol', bbDose:'2.5mg OD',
+      digoxinPrescribed:'No', digoxinReason:'eGFR <40',
+      sglt2Prescribed:'No', sglt2Reason:'eGFR <45',
+      hospHistory:'No', edu:['Diet','Exercise','Salt restriction','Medication adherence'] }
+  ];
+  save();
+}
+
+renderDashboard();
+</script>
+</body>
+</html>
