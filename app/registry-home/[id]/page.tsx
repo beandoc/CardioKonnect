@@ -723,8 +723,17 @@ export default function RegistryDetailPage() {
     loadData()
   }, [id])
 
+  // Safe date parse helper — returns 0 for empty/invalid strings
+  function safeTime(dateStr: string | undefined): number {
+    if (!dateStr) return 0
+    const t = new Date(dateStr).getTime()
+    return isNaN(t) ? 0 : t
+  }
+
   const reg = useMemo(() => {
     if (id !== 'hf') return REGISTRY_DATA[id as string]
+
+    try {
 
     // 1. Filter to Heart Failure patients
     const hfPatients = patients.filter(p => p.registryId === 'hf' || p.hfType === 'HFrEF' || p.hfType === 'HFmrEF' || p.hfType === 'HFpEF' || p.studyConsented)
@@ -750,7 +759,7 @@ export default function RegistryDetailPage() {
     hfPatients.forEach(p => {
       const pVisits = hfVisits.filter(v => v.patientId === p.id)
       if (pVisits.length === 0) return
-      const latest = pVisits.reduce((l, c) => new Date(c.visitDate) > new Date(l.visitDate) ? c : l, pVisits[0])
+      const latest = pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0])
       let activePillars = 0
       if (latest.raasi?.prescribed === 'Yes') activePillars++
       if (latest.betaBlocker?.prescribed === 'Yes') activePillars++
@@ -780,7 +789,7 @@ export default function RegistryDetailPage() {
     hfPatients.forEach(p => {
       const pVisits = hfVisits.filter(v => v.patientId === p.id)
       if (pVisits.length === 0) return
-      const latest = pVisits.reduce((l, c) => new Date(c.visitDate) > new Date(l.visitDate) ? c : l, pVisits[0])
+      const latest = pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0])
       if (latest.hospHistory) {
         hasHospInfoCount++
         if (latest.hospHistory === 'Yes') {
@@ -836,7 +845,7 @@ export default function RegistryDetailPage() {
     hfPatients.forEach(p => {
       const pVisits = hfVisits.filter(v => v.patientId === p.id)
       if (pVisits.length === 0) return
-      const latest = pVisits.reduce((l, c) => new Date(c.visitDate) > new Date(l.visitDate) ? c : l, pVisits[0])
+      const latest = pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0])
       activeVisitCount++
       if (latest.betaBlocker?.prescribed === 'Yes') medCounts['Beta-Blocker']++
       if (latest.raasi?.prescribed === 'Yes') medCounts['RAASi (ACEi/ARB/ARNI)']++
@@ -869,7 +878,7 @@ export default function RegistryDetailPage() {
     hfPatients.forEach(p => {
       const pVisits = hfVisits.filter(v => v.patientId === p.id)
       if (pVisits.length === 0) return
-      const latest = pVisits.reduce((l, c) => new Date(c.visitDate) > new Date(l.visitDate) ? c : l, pVisits[0])
+      const latest = pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0])
       totalClinicalVisits++
       if (latest.symptomDyspnea) symptomsSignsCounts['Dyspnoea/PND']++
       if (latest.symptomFatigue) symptomsSignsCounts['Fatigue']++
@@ -907,7 +916,7 @@ export default function RegistryDetailPage() {
       let totalScoreForCat = 0
       hfPatients.forEach(p => {
         const pVisits = hfVisits.filter(v => v.patientId === p.id)
-        const latest = pVisits.length ? pVisits.reduce((l, c) => new Date(c.visitDate) > new Date(l.visitDate) ? c : l, pVisits[0]) : null
+        const latest = pVisits.length ? pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0]) : null
         
         let filled = 0
         cat.fields.forEach(f => {
@@ -990,6 +999,10 @@ export default function RegistryDetailPage() {
           data: symptomsSignsData,
         }
       ]
+    }
+    } catch (err) {
+      console.error('HF analytics calculation error — falling back to static data:', err)
+      return REGISTRY_DATA['hf']
     }
   }, [id, patients, visits])
 
