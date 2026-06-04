@@ -84,7 +84,7 @@ function RiskCalculatorContent() {
             }
 
             // Check comorbidities for DM
-            const hasDiabetes = pt.comorbidities?.toLowerCase().includes('diabetes') || pt.comorbidities?.toLowerCase().includes('dm') || false
+            const hasDiabetes = (Array.isArray(pt.comorbidities) ? pt.comorbidities.join(' ') : (pt.comorbidities ?? '')).toLowerCase().includes('diabetes') || (Array.isArray(pt.comorbidities) ? pt.comorbidities.join(' ') : (pt.comorbidities ?? '')).toLowerCase().includes('dm') || false
 
             // Auto-populate MAGGIC
             setMaggicAge(age)

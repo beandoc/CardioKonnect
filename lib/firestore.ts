@@ -17,9 +17,7 @@ function getLocalPatients(): Patient[] {
   const data = localStorage.getItem('cardio_patients')
   if (!data) {
     const initialPatients = Object.entries(MOCK_PATIENTS_COHORT).map(([id, p]) => {
-      const comorbidities = typeof p.comorbidities === 'string'
-        ? p.comorbidities.split(',').map((s: string) => s.trim()).filter(Boolean)
-        : (p.comorbidities || [])
+      const comorbidities: string[] = Array.isArray(p.comorbidities) ? p.comorbidities : []
       return {
         ...p,
         id,

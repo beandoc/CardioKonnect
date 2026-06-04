@@ -276,6 +276,26 @@ const schema = z.object({
     msMeanGradient: z.coerce.number().min(0).max(50).optional().or(z.literal('')),
   }).default({}),
 
+  // Valvular grade fields (top-level in Visit type)
+  asGrade: z.string().optional(),
+  msGrade: z.string().optional(),
+  mrGrade: z.string().optional(),
+  arGrade: z.string().optional(),
+
+  // Holter / Wearable
+  holterWearable: z.object({
+    afBurden: z.coerce.number().optional().or(z.literal('')),
+    pvcBurden: z.coerce.number().optional().or(z.literal('')),
+  }).optional(),
+
+  // CT Coronary Angiography
+  ctca: z.object({
+    stenosisSeverity: z.string().optional(),
+    highRiskPlaqueFeatures: z.boolean().optional(),
+    notes: z.string().optional(),
+  }).optional(),
+
+
   eq5d: z.object({
     mobility: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
     selfCare: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
@@ -424,7 +444,6 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
       device: [],
       education: [],
       dmManagement: {},
-      dropNotes: '',
       vascular: {},
       holterWearable: {},
       ctca: {},

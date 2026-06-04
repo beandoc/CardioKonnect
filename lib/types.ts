@@ -462,16 +462,6 @@ export interface Visit {
   }
 
   // ── Extended Patient-Reported Outcomes ───────────────────────────────────────
-  eq5d?: {
-    date?: string
-    mobility?: 1 | 2 | 3 | 4 | 5
-    selfCare?: 1 | 2 | 3 | 4 | 5
-    usualActivities?: 1 | 2 | 3 | 4 | 5
-    painDiscomfort?: 1 | 2 | 3 | 4 | 5
-    anxietyDepression?: 1 | 2 | 3 | 4 | 5
-    vasScore?: number                // EQ-VAS 0-100: patient's overall health today
-    utilityIndex?: number            // Derived utility score (0-1)
-  }
   sf36?: {
     date?: string
     physicalFunctioning?: number     // 0-100 domain score
@@ -549,12 +539,15 @@ export interface Visit {
   // Quality of Life - EQ-5D-5L
   symptomTrajectory?: 'Improving' | 'Stable' | 'Worsening' | ''
   eq5d?: {
-    mobility?: number
-    selfCare?: number
-    usualActivities?: number
-    painDiscomfort?: number
-    anxietyDepression?: number
-    healthStateScore?: number
+    date?: string
+    mobility?: 1 | 2 | 3 | 4 | 5
+    selfCare?: 1 | 2 | 3 | 4 | 5
+    usualActivities?: 1 | 2 | 3 | 4 | 5
+    painDiscomfort?: 1 | 2 | 3 | 4 | 5
+    anxietyDepression?: 1 | 2 | 3 | 4 | 5
+    vasScore?: number                // EQ-VAS 0-100: patient's overall health today
+    utilityIndex?: number            // Derived utility score (0-1)
+    healthStateScore?: number        // Legacy alias for vasScore
   }
 
   // Meta

@@ -33,29 +33,30 @@ async function executeTest() {
     // 2. Add patient
     logs.push(`Attempting to add patient: ${patientInput.firstName} ${patientInput.lastName}`)
     testPatientId = await addPatient(patientInput)
+    if (!testPatientId) {
+      throw new Error('Failed to create patient: returned ID was empty')
+    }
     logs.push(`Patient created successfully with Firestore ID: ${testPatientId}`)
 
     // 3. Add visit for this patient with medication dosage & tracking details
     const visitInput: VisitInput = {
+      patientId: testPatientId,
       visitDate: '2026-06-04',
+      visitType: 'OPD',
       clinicalNotes: 'Background encounter verification test of GDMT dosing/tracking logic and Firestore save.',
       nyha: 'III',
       hfType: 'HFrEF',
       lvef: 32,
-      sbp: 118,
-      dbp: 76,
-      hr: 72,
-      temp: 98.4,
-      respRate: 16,
+      bpSystolic: 118,
+      bpDiastolic: 76,
+      heartRate: 72,
       weight: 68.5,
       height: 170,
-      bmi: 23.7,
-      jugularVenousPressure: 'Normal',
       creatinine: 1.1,
       sodium: 139,
       potassium: 4.2,
-      ntProBnp: 1450,
-      bnp: null,
+      ntProBNP: 1450,
+      bnp: undefined,
       hb: 13.8,
       hba1c: 6.8,
       egfr: 75,
@@ -87,6 +88,16 @@ async function executeTest() {
         stopDate: '',
         changeReason: 'Added for HFrEF pillar management'
       },
+      diuretic: { prescribed: 'No' },
+      digoxin: { prescribed: 'No' },
+      ivabradine: { prescribed: 'No' },
+      aspirin: { prescribed: 'No' },
+      statin: { prescribed: 'No' },
+      fibrate: { prescribed: 'No' },
+      pcsk9: { prescribed: 'No' },
+      ivIron: { prescribed: 'No' },
+      noac: { prescribed: 'No' },
+      vki: { prescribed: 'No' },
     }
 
     logs.push('Attempting to add visit to patient...')
@@ -101,7 +112,7 @@ async function executeTest() {
     }
 
     logs.push(`Verified Patient ID matches: ${retrievedPatient.id === testPatientId}`)
-    logs.push(`Verified Comorbidities stored as array: ${Array.isArray(retrievedPatient.comorbidities)} -> [${retrievedPatient.comorbidities.join(', ')}]`)
+    logs.push(`Verified Comorbidities stored as array: ${Array.isArray(retrievedPatient.comorbidities)} -> [${(retrievedPatient.comorbidities ?? []).join(', ')}]`)
     logs.push(`Verified Patient indexDate: ${retrievedPatient.indexDate}`)
     logs.push(`Verified Cached NYHA: ${retrievedPatient.nyha}`)
     logs.push(`Verified Cached HF Type: ${retrievedPatient.hfType}`)
