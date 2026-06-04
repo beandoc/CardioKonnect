@@ -659,6 +659,40 @@ export default function RegistryDetailPage() {
   const [visits, setVisits] = useState<Visit[]>([])
   const [loading, setLoading] = useState(true)
 
+  // ── Helper: build cumulative enrollment trend from patient list ────────────
+  function getEnrollmentTrend(hfPts: Patient[]) {
+    const sorted = [...hfPts].sort((a, b) => {
+      const dateA = a.indexDate || a.createdAt || ''
+      const dateB = b.indexDate || b.createdAt || ''
+      return dateA.localeCompare(dateB)
+    })
+
+    const countsByMonth: Record<string, number> = {}
+    sorted.forEach(p => {
+      const dateStr = p.indexDate || p.createdAt
+      if (!dateStr) return
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return
+      const monthStr = date.toLocaleString('default', { month: 'short' }) + ' ' + date.getFullYear().toString().slice(-2)
+      countsByMonth[monthStr] = (countsByMonth[monthStr] || 0) + 1
+    })
+
+    let cumulative = 0
+    const trend = Object.entries(countsByMonth).map(([month, count]) => {
+      cumulative += count
+      return { month, count: cumulative }
+    })
+
+    if (trend.length === 0) {
+      return [
+        { month: 'Jan', count: 1 },
+        { month: 'Feb', count: 2 },
+        { month: 'Mar', count: 3 }
+      ]
+    }
+    return trend
+  }
+
   useEffect(() => {
     async function loadData() {
       if (id !== 'hf') {
@@ -959,38 +993,7 @@ export default function RegistryDetailPage() {
     }
   }, [id, patients, visits])
 
-  const getEnrollmentTrend = (hfPatients: Patient[]) => {
-    const sorted = [...hfPatients].sort((a, b) => {
-      const dateA = a.indexDate || a.createdAt || ''
-      const dateB = b.indexDate || b.createdAt || ''
-      return dateA.localeCompare(dateB)
-    })
-
-    const countsByMonth: Record<string, number> = {}
-    sorted.forEach(p => {
-      const dateStr = p.indexDate || p.createdAt
-      if (!dateStr) return
-      const date = new Date(dateStr)
-      if (isNaN(date.getTime())) return
-      const monthStr = date.toLocaleString('default', { month: 'short' }) + ' ' + date.getFullYear().toString().slice(-2)
-      countsByMonth[monthStr] = (countsByMonth[monthStr] || 0) + 1
-    })
-
-    let cumulative = 0
-    const trend = Object.entries(countsByMonth).map(([month, count]) => {
-      cumulative += count
-      return { month, count: cumulative }
-    })
-
-    if (trend.length === 0) {
-      return [
-        { month: 'Jan', count: 1 },
-        { month: 'Feb', count: 2 },
-        { month: 'Mar', count: 3 }
-      ]
-    }
-    return trend
-  }
+  // getEnrollmentTrend is defined above useEffect to avoid hoisting issues
 
   if (loading && id === 'hf') {
     return (

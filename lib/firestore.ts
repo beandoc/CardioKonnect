@@ -74,10 +74,22 @@ function saveLocalOutcomes(evs: OutcomeEvent[]) {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function toDate(ts: unknown): string {
+function toDate(ts: any): string {
   if (!ts) return ''
   if (ts instanceof Timestamp) return ts.toDate().toISOString()
   if (typeof ts === 'string') return ts
+  if (ts && typeof ts === 'object') {
+    if (typeof ts.toDate === 'function') {
+      try {
+        return ts.toDate().toISOString()
+      } catch (e) {}
+    }
+    if (typeof ts.seconds === 'number') {
+      try {
+        return new Date(ts.seconds * 1000).toISOString()
+      } catch (e) {}
+    }
+  }
   return ''
 }
 
@@ -90,6 +102,8 @@ function docToPatient(id: string, data: any): Patient {
     ...data,
     id,
     comorbidities,
+    indexDate: toDate(data.indexDate),
+    hfConfirmationDate: toDate(data.hfConfirmationDate),
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
     lastVisitDate: toDate(data.lastVisitDate),
@@ -102,6 +116,10 @@ function docToVisit(id: string, patientId: string, data: any): Visit {
     ...data,
     id,
     patientId,
+    visitDate: toDate(data.visitDate) || toDate(data.createdAt),
+    echoDate: toDate(data.echoDate),
+    dischargeDate: toDate(data.dischargeDate),
+    followupDate: toDate(data.followupDate),
     createdAt: toDate(data.createdAt),
   } as Visit
 }
