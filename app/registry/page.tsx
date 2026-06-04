@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { FieldType, RegistryField } from '@/lib/types'
+import { BUILT_IN_FIELDS } from '@/lib/types'
 import { getRegistryFields, setRegistryFields } from '@/lib/firestore'
 
 const DATA_TYPES: FieldType[] = ['Text','Number','Date','Dropdown','Boolean','Multi-Select','Textarea','Score']
@@ -24,10 +25,11 @@ export default function RegistryPage() {
   const [typeFilter, setTypeFilter] = useState<string>('All')
   const [catFilter, setCatFilter]   = useState<string>('All')
   const [mandFilter, setMandFilter] = useState<string>('All')
+  const [levelFilter, setLevelFilter] = useState<string>('All')
   const [showAdd, setShowAdd]   = useState(false)
   const [editId, setEditId]     = useState<string | null>(null)
   const [editingField, setEditingField] = useState<RegistryField | null>(null)
-  const [newField, setNewField] = useState({ fieldName: '', displayLabel: '', dataType: 'Text' as FieldType, mandatory: false, pii: false, category: 'Clinical' })
+  const [newField, setNewField] = useState({ fieldName: '', displayLabel: '', dataType: 'Text' as FieldType, mandatory: false, pii: false, category: 'Clinical', level: 'Level 1' as 'Level 1' | 'Level 2' })
 
   useEffect(() => {
     async function load() {
@@ -67,7 +69,8 @@ export default function RegistryPage() {
     const matchT = typeFilter === 'All' || f.dataType === typeFilter
     const matchC = catFilter === 'All' || f.category === catFilter
     const matchM = mandFilter === 'All' || (mandFilter === 'Yes' ? f.mandatory : !f.mandatory)
-    return matchQ && matchT && matchC && matchM
+    const matchL = levelFilter === 'All' || f.level === levelFilter
+    return matchQ && matchT && matchC && matchM && matchL
   })
 
   const handleAdd = () => {
@@ -75,8 +78,14 @@ export default function RegistryPage() {
     const id = Date.now().toString()
     const updated = [...fields, { ...newField, id, srNo: fields.length + 1, active: true }]
     saveFields(updated)
-    setNewField({ fieldName: '', displayLabel: '', dataType: 'Text', mandatory: false, pii: false, category: 'Clinical' })
+    setNewField({ fieldName: '', displayLabel: '', dataType: 'Text', mandatory: false, pii: false, category: 'Clinical', level: 'Level 1' })
     setShowAdd(false)
+  }
+
+  const handleResetDefaults = () => {
+    if (confirm('Are you sure you want to reset all registry fields to default schema settings? This will overwrite your current configuration with the 52 built-in variables.')) {
+      saveFields(BUILT_IN_FIELDS)
+    }
   }
 
   const handleDelete = (id: string) => {
@@ -129,6 +138,9 @@ export default function RegistryPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button onClick={handleResetDefaults} className="btn-outline text-rose-400 hover:bg-rose-500/10 border-rose-500/20">
+            Reset to Defaults
+          </button>
           <button onClick={() => setShowAdd(s => !s)} className="btn-primary">
             <Plus className="w-4 h-4" /> Add Field
           </button>
@@ -164,6 +176,14 @@ export default function RegistryPage() {
               <select className="form-select" value={newField.category}
                 onChange={e => setNewField(p => ({ ...p, category: e.target.value }))}>
                 {CATEGORIES.filter(c => c !== 'All').map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Level</label>
+              <select className="form-select" value={newField.level}
+                onChange={e => setNewField(p => ({ ...p, level: e.target.value as 'Level 1' | 'Level 2' }))}>
+                <option value="Level 1">Level 1 (Common Core)</option>
+                <option value="Level 2">Level 2 (Subregistry)</option>
               </select>
             </div>
           </div>
@@ -223,6 +243,14 @@ export default function RegistryPage() {
                 {CATEGORIES.filter(c => c !== 'All').map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
+            <div>
+              <label className="form-label">Level</label>
+              <select className="form-select" value={editingField.level}
+                onChange={e => setEditingField(p => p ? ({ ...p, level: e.target.value as 'Level 1' | 'Level 2' }) : null)}>
+                <option value="Level 1">Level 1 (Common Core)</option>
+                <option value="Level 2">Level 2 (Subregistry)</option>
+              </select>
+            </div>
           </div>
           <div className="flex items-center gap-6">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -273,6 +301,11 @@ export default function RegistryPage() {
             <option value="Yes">Mandatory</option>
             <option value="No">Optional</option>
           </select>
+          <select className="form-select text-xs py-2" value={levelFilter} onChange={e => setLevelFilter(e.target.value)}>
+            <option value="All">All Levels</option>
+            <option value="Level 1">Level 1 (Common Core)</option>
+            <option value="Level 2">Level 2 (Subregistry)</option>
+          </select>
         </div>
       </div>
 
@@ -285,6 +318,7 @@ export default function RegistryPage() {
                 <th className="w-12">Sr No</th>
                 <th>Field Name</th>
                 <th>Display Label</th>
+                <th>Level</th>
                 <th>Category</th>
                 <th>
                   <span className="flex items-center gap-1">
@@ -317,6 +351,11 @@ export default function RegistryPage() {
                     </span>
                   </td>
                   <td className="font-medium text-white">{f.displayLabel}</td>
+                  <td>
+                    <span className={`badge text-[10px] font-bold ${f.level === 'Level 1' ? 'badge-blue' : 'badge-violet'}`}>
+                      {f.level}
+                    </span>
+                  </td>
                   <td>
                     <span className="badge badge-gray text-[10px]">{f.category}</span>
                   </td>
