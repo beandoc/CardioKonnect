@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type React from 'react'
+import React, { forwardRef } from 'react'
 
 interface FieldWrapProps {
   label: string
@@ -29,41 +29,53 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: boolean
 }
 
-export function Input({ error, className, ...props }: InputProps) {
-  return (
-    <input
-      className={cn('form-input', error && 'error', className)}
-      {...props}
-    />
-  )
-}
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ error, className, ...props }, ref) => {
+    return (
+      <input
+        ref={ref}
+        className={cn('form-input', error && 'error', className)}
+        {...props}
+      />
+    )
+  }
+)
+Input.displayName = 'Input'
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   error?: boolean
 }
 
-export function Select({ error, className, children, ...props }: SelectProps) {
-  return (
-    <select
-      className={cn('form-select', error && 'error', className)}
-      {...props}
-    >
-      {children}
-    </select>
-  )
-}
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  ({ error, className, children, ...props }, ref) => {
+    return (
+      <select
+        ref={ref}
+        className={cn('form-select', error && 'error', className)}
+        {...props}
+      >
+        {children}
+      </select>
+    )
+  }
+)
+Select.displayName = 'Select'
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   error?: boolean
   rows?: number
 }
 
-export function Textarea({ error, className, rows = 3, ...props }: TextareaProps) {
-  return (
-    <textarea
-      rows={rows}
-      className={cn('form-input resize-none', error && 'error', className)}
-      {...props}
-    />
-  )
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ error, className, rows = 3, ...props }, ref) => {
+    return (
+      <textarea
+        ref={ref}
+        rows={rows}
+        className={cn('form-input resize-none', error && 'error', className)}
+        {...props}
+      />
+    )
+  }
+)
+Textarea.displayName = 'Textarea'

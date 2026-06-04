@@ -41,13 +41,24 @@ export default function NewVisitPage() {
 
   const handleSubmit = async (data: VisitInput) => {
     setLoading(true)
+    const toastId = toast.loading('Recording clinical visit...')
+
+    const timeoutId = setTimeout(() => {
+      toast.warning('Database response is taking longer than expected. Please check your internet or security rules.', {
+        id: toastId,
+        duration: 8000,
+      })
+    }, 5000)
+
     try {
       const visitId = await addVisit(patientId, { ...data, patientId })
-      toast.success('Visit recorded successfully')
+      clearTimeout(timeoutId)
+      toast.success('Visit recorded successfully', { id: toastId })
       setSavedVisitId(visitId)
     } catch (e) {
-      console.error(e)
-      toast.error('Failed to save visit')
+      clearTimeout(timeoutId)
+      console.error('Visit save error:', e)
+      toast.error('Failed to save visit. Please check database configuration/security rules.', { id: toastId })
     } finally {
       setLoading(false)
     }

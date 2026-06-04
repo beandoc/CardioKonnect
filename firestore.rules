@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: patients
+    // Document ID: auto-generated (e.g. 9BZpB29foPfR0b5sPvq1)
+    // Fields:
+    //   - firstName: string (required)
+    //   - lastName: string (required)
+    //   - dob: string (required)
+    //   - sex: string (required)
+    //   - mrn: string (optional)
+    //   - consentStatus: string (optional)
+    //
+    // Subcollection: patients/{patientId}/visits
+    // Fields:
+    //   - visitDate: string (required)
+    //   - visitType: string (required)
+    //
+    // Subcollection: patients/{patientId}/outcomes
+    // Fields:
+    //   - eventDate: string (required)
+    //   - eventType: string (required)
+    //
+    // Collection: settings
+    // Document ID: e.g. registryConfig
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Default deny rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Rules for Patients and Nested Subcollections
+    match /patients/{patientId} {
+      // Allow read and write only to authenticated clinical researchers
+      allow read, write: if isAuthenticated();
+
+      match /visits/{visitId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /events/{eventId} {
+        allow read, write: if isAuthenticated();
+      }
+
+      match /outcomes/{outcomeId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Rules for Top-Level Collections
+    match /events/{eventId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /outcomes/{outcomeId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /settings/{settingId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

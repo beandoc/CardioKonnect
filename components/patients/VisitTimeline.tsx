@@ -143,7 +143,7 @@ function VisitCard({ visit, onDelete }: { visit: Visit; onDelete?: (id: string) 
               <p className="text-xs font-semibold text-gray-500 mb-2">Symptom Trajectory & EQ-5D-5L</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 {visit.symptomTrajectory && <div><span className="text-gray-400">Symptom Trajectory:</span> <span className={cn('font-bold', visit.symptomTrajectory === 'Improving' ? 'text-green-600' : visit.symptomTrajectory === 'Worsening' ? 'text-red-600' : 'text-blue-600')}>{visit.symptomTrajectory}</span></div>}
-                {(visit.eq5d?.vasScore ?? visit.eq5d?.healthStateScore) != null && <div><span className="text-gray-400">EQ-VAS Score:</span> <span className="font-semibold text-gray-700">{visit.eq5d?.vasScore ?? visit.eq5d?.healthStateScore}/100</span></div>}
+                {visit.eq5d?.healthStateScore != null && <div><span className="text-gray-400">EQ-VAS Score:</span> <span className="font-semibold text-gray-700">{visit.eq5d.healthStateScore}/100</span></div>}
                 {visit.eq5d?.mobility && <div><span className="text-gray-400">Mobility:</span> <span className="font-semibold text-gray-700">{visit.eq5d.mobility}/5</span></div>}
                 {visit.eq5d?.selfCare && <div><span className="text-gray-400">Self-Care:</span> <span className="font-semibold text-gray-700">{visit.eq5d.selfCare}/5</span></div>}
                 {visit.eq5d?.usualActivities && <div><span className="text-gray-400">Usual Activities:</span> <span className="font-semibold text-gray-700">{visit.eq5d.usualActivities}/5</span></div>}

@@ -787,6 +787,65 @@ export const MOCK_VISITS_COHORT: { patientId: string; visitId: string; data: Omi
     }
   ]
 
+// 3. Enrich mock cohorts with the new Heart Failure Registry variables
+Object.keys(MOCK_PATIENTS_COHORT).forEach(id => {
+  const p = MOCK_PATIENTS_COHORT[id]
+  MOCK_PATIENTS_COHORT[id] = {
+    ...p,
+    registryId: 'hf',
+    indianCitizen: true,
+    studyConsented: p.status === 'Active',
+    hfConfirmationDate: relativeDateStr(120),
+    educationYears: id === '7' ? 15 : id === '3' ? 8 : 12,
+    aadhaarNo: `9876-5432-100${id}`,
+    addressHouse: `House No. ${10 + Number(id)}`,
+    addressStreet: 'Main Road',
+    addressPost: 'GPO',
+    addressDistrict: 'Pune',
+    addressState: 'Maharashtra',
+    addressPin: '411001',
+    secondaryContact: '+91 9800000000',
+    caregiverContact: '+91 9900000000',
+    caregiverSecondaryContact: '+91 9911111111'
+  }
+})
+
+MOCK_VISITS_COHORT.forEach(v => {
+  const isSevere = v.data.nyha === 'III' || v.data.nyha === 'IV'
+  v.data = {
+    ...v.data,
+    symptomDyspnea: true,
+    symptomFatigue: true,
+    symptomEdema: isSevere,
+    symptomPalpitation: Math.random() > 0.5,
+    symptomAngina: Math.random() > 0.6,
+    symptomAscites: v.data.nyha === 'IV',
+    signLungRales: isSevere,
+    signPleuralEffusion: v.data.nyha === 'IV',
+    signElevatedJVP: isSevere,
+    signS3: v.data.nyha === 'IV',
+    signDependentEdema: isSevere,
+    signHepatomegaly: v.data.nyha === 'IV',
+    signCardiomegaly: isSevere,
+    jvpStatus: isSevere ? 'Elevated' : 'Not elevated',
+    ventricularArrhythmia: v.data.nyha === 'IV' && Math.random() > 0.5,
+    peakTropT: Math.random() > 0.5 ? 18 : 10,
+    tropTPositive: Math.random() > 0.7,
+    peakTropI: Math.random() > 0.5 ? 0.05 : 0.01,
+    tropIPositive: Math.random() > 0.7,
+    serumUrea: Math.floor(30 + Math.random() * 40),
+    bun: Math.floor(10 + Math.random() * 20),
+    bnpDischarge: v.data.bnp ? Math.floor(v.data.bnp * 0.7) : undefined,
+    ntProBnpDischarge: v.data.ntProBNP ? Math.floor(v.data.ntProBNP * 0.7) : undefined,
+    ventilationSupport: v.data.nyha === 'IV' ? 'NIV' : 'No',
+    mcsSupport: 'No',
+    weightDischarge: v.data.weight ? v.data.weight - 2 : undefined,
+    dischargeOutcome: 'Discharge',
+    causeOfDeath: '',
+    lastHospDate: v.data.hospHistory === 'Yes' ? relativeDateStr(180) : ''
+  } as any
+})
+
 export async function seedDemoData(): Promise<void> {
   const isDemoMode = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith('mock') || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'undefined'
   if (isDemoMode) {

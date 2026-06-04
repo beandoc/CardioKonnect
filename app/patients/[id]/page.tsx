@@ -16,7 +16,7 @@ import MetricTrendChart from '@/components/charts/MetricTrendChart'
 import PatientForm from '@/components/forms/PatientForm'
 import type { PatientTrends } from '@/lib/types'
 import { toast } from 'sonner'
-import { PlusCircle, Edit2, X, Activity, ShieldAlert, Award, Calendar, Trash2 } from 'lucide-react'
+import { PlusCircle, Edit2, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList } from 'lucide-react'
 
 const EVENT_TYPES: EventType[] = [
   'All-cause death', 'CV death', 'HF hospitalisation', 'Urgent HF visit', 'LVAD implant',
@@ -24,6 +24,15 @@ const EVENT_TYPES: EventType[] = [
   'Myocardial infarction', 'AKI requiring RRT', 'Worsening HF (outpatient)', 'Ventricular arrhythmia',
   'AF new-onset', 'Other CV event'
 ]
+
+const REGISTRY_MAP: Record<string, string> = {
+  hf: 'Heart Failure Registry',
+  acs: 'ACS & Coronary Registry',
+  arrhythmia: 'Arrhythmia & EP Registry',
+  structural: 'Structural Heart Disease Registry',
+  cathlab: 'Cath Lab & Interventional Registry',
+  preventive: 'Preventive Cardiology Registry',
+}
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -140,18 +149,55 @@ export default function PatientDetailPage() {
 
   const handleUpdatePatient = async (data: Partial<Patient>) => {
     setSaving(true)
+    const toastId = toast.loading('Updating patient profile...')
+    const timeoutId = setTimeout(() => {
+      toast.warning('Database response is taking longer than expected. Please check your internet or security rules.', {
+        id: toastId,
+        duration: 8000,
+      })
+    }, 5000)
+
     try {
       await updatePatient(id, data)
-      toast.success('Patient updated')
+      clearTimeout(timeoutId)
+      toast.success('Patient updated successfully', { id: toastId })
       setEditing(false)
       load()
-    } catch { toast.error('Update failed') }
-    finally { setSaving(false) }
+    } catch (e) {
+      clearTimeout(timeoutId)
+      console.error('Patient update error:', e)
+      toast.error('Update failed. Please check database configuration/security rules.', { id: toastId })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleQuickEnroll = async (registryId: string) => {
+    setSaving(true)
+    const toastId = toast.loading(`Enrolling in ${REGISTRY_MAP[registryId] || registryId}...`)
+    try {
+      await updatePatient(id, { registryId })
+      toast.success('Patient enrolled successfully', { id: toastId })
+      load()
+    } catch (e) {
+      console.error('Quick enroll error:', e)
+      toast.error('Enrollment failed. Please check connection or database rules.', { id: toastId })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleAddEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingEvent(true)
+    const toastId = toast.loading('Recording outcome event...')
+    const timeoutId = setTimeout(() => {
+      toast.warning('Database response is taking longer than expected. Please check your connection.', {
+        id: toastId,
+        duration: 8000,
+      })
+    }, 5000)
+
     try {
       const input: OutcomeEventInput = {
         patientId: id,
@@ -163,14 +209,16 @@ export default function PatientDetailPage() {
         adjudicatedBy: eventAdjudicator
       }
       await addOutcomeEvent(id, input)
-      toast.success('Outcome event recorded')
+      clearTimeout(timeoutId)
+      toast.success('Outcome event recorded successfully', { id: toastId })
       setAddingEvent(false)
       setEventDesc('')
       setEventHosp('')
       load()
     } catch (err) {
-      console.error(err)
-      toast.error('Failed to add outcome event')
+      clearTimeout(timeoutId)
+      console.error('Add event error:', err)
+      toast.error('Failed to add outcome event. Please check database configuration/security rules.', { id: toastId })
     } finally {
       setSavingEvent(false)
     }
@@ -178,12 +226,23 @@ export default function PatientDetailPage() {
 
   const handleDeleteEvent = async (eventId: string) => {
     if (!confirm('Delete this outcome event?')) return
+    const toastId = toast.loading('Deleting outcome event...')
+    const timeoutId = setTimeout(() => {
+      toast.warning('Database response is taking longer than expected. Please check your connection.', {
+        id: toastId,
+        duration: 8000,
+      })
+    }, 5000)
+
     try {
       await deleteOutcomeEvent(id, eventId)
-      toast.success('Outcome event deleted')
+      clearTimeout(timeoutId)
+      toast.success('Outcome event deleted successfully', { id: toastId })
       load()
-    } catch {
-      toast.error('Failed to delete event')
+    } catch (e) {
+      clearTimeout(timeoutId)
+      console.error('Delete event error:', e)
+      toast.error('Failed to delete event. Please check database configuration/security rules.', { id: toastId })
     }
   }
 
@@ -192,13 +251,23 @@ export default function PatientDetailPage() {
     const ok = window.confirm("WARNING: Are you sure you want to delete this patient? This action is permanent and will cascade to delete all visits, events, and outcomes.")
     if (!ok) return
 
+    const toastId = toast.loading('Deleting patient record...')
+    const timeoutId = setTimeout(() => {
+      toast.warning('Database response is taking longer than expected. Please check your connection.', {
+        id: toastId,
+        duration: 8000,
+      })
+    }, 5000)
+
     try {
       await deletePatient(id)
-      toast.success('Patient record deleted successfully')
+      clearTimeout(timeoutId)
+      toast.success('Patient record deleted successfully', { id: toastId })
       router.push('/patients')
     } catch (e) {
-      console.error(e)
-      toast.error('Failed to delete patient')
+      clearTimeout(timeoutId)
+      console.error('Delete patient error:', e)
+      toast.error('Failed to delete patient. Please check database configuration/security rules.', { id: toastId })
     }
   }
 
@@ -245,6 +314,12 @@ export default function PatientDetailPage() {
                 consentStatus === 'Declined' ? 'badge-red' : 'badge-amber'
               )}>
                 Consent: {consentStatus}
+              </span>
+              {/* Registry Badge */}
+              <span className={cn('badge text-[10px] uppercase font-extrabold',
+                patient.registryId ? 'badge-blue' : 'badge-gray'
+              )}>
+                {patient.registryId ? `Registry: ${REGISTRY_MAP[patient.registryId] || patient.registryId}` : 'Unassigned'}
               </span>
               {latest?.hfType && (
                 <span className={cn('badge text-[10px] uppercase font-bold', hfTypeBadgeColor(latest.hfType))}>
@@ -384,6 +459,7 @@ export default function PatientDetailPage() {
                 ['Date of Birth', formatDate(patient.dob)],
                 ['Age', age ? `${age} years` : '—'],
                 ['Sex', patient.sex],
+                ['Registry Enrollment', patient.registryId ? (REGISTRY_MAP[patient.registryId] || patient.registryId) : 'None (Unassigned)'],
                 ['Index Date', patient.indexDate ? formatDate(patient.indexDate) : '—'],
                 ['Consent status', patient.consentStatus ?? 'Pending'],
                 ['Contact', patient.contact ?? '—'],
@@ -398,6 +474,119 @@ export default function PatientDetailPage() {
               ))}
             </CardBody>
           </Card>
+
+          {/* Registry Workflow & Next Steps Card */}
+          {(visits.length === 0 || !patient.registryId) && (
+            <Card className="border-blue-500/20 bg-blue-950/10">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-blue-400" />
+                  <CardTitle>Registry Workflow & Next Steps</CardTitle>
+                </div>
+              </CardHeader>
+              <CardBody className="space-y-4">
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Follow these steps to complete the patient's enrollment and record clinical metrics for active registry analytics.
+                </p>
+
+                <div className="space-y-4 text-xs">
+                  {/* Step 1: Registration */}
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-white">1. Demographic Profile Registered</p>
+                      <p className="text-gray-500 mt-0.5">Demographics successfully recorded in registry database.</p>
+                    </div>
+                  </div>
+
+                  {/* Step 2: Informed Consent */}
+                  <div className="flex items-start gap-3">
+                    {consentStatus === 'Granted' ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <Circle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <p className="font-semibold text-white">2. Regulatory Study Consent</p>
+                      {consentStatus === 'Granted' ? (
+                        <p className="text-gray-500 mt-0.5">Informed Consent has been Granted. Clinical data entry is enabled.</p>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="text-amber-400 mt-0.5">Consent status is currently <strong>{consentStatus}</strong>.</p>
+                          <p className="text-gray-500">Visit logging is restricted. Click "Edit Profile" to change consent to Granted.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Step 3: Registry Assignment */}
+                  <div className="flex items-start gap-3">
+                    {patient.registryId ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <Circle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                    )}
+                    <div className="w-full">
+                      <p className="font-semibold text-white">3. Registry Assignment</p>
+                      {patient.registryId ? (
+                        <p className="text-gray-500 mt-0.5">
+                          Assigned to: <strong className="text-blue-400">{REGISTRY_MAP[patient.registryId] || patient.registryId}</strong>
+                        </p>
+                      ) : (
+                        <div className="space-y-2 w-full mt-1">
+                          <p className="text-blue-400">Status: Unassigned / General Patient Profile</p>
+                          <p className="text-gray-500">Select a target registry below to enroll this patient and enable registry-specific clinical tracking:</p>
+                          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                            <Button
+                              size="sm"
+                              onClick={() => handleQuickEnroll('hf')}
+                              className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                            >
+                              Enroll in Heart Failure Registry
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditing(true)}
+                              className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                            >
+                              Assign Other Registry...
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Step 4: Baseline Clinical Visit */}
+                  <div className="flex items-start gap-3">
+                    {visits.length > 0 ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <Circle className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <p className="font-semibold text-white">4. Baseline Clinical Visit</p>
+                      {visits.length > 0 ? (
+                        <p className="text-gray-500 mt-0.5">
+                          Baseline visit recorded on <strong className="text-white">{formatDate(latest?.visitDate)}</strong>.
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="text-gray-500 mt-0.5">No clinical visits recorded yet for this patient.</p>
+                          {consentStatus === 'Granted' && patient.registryId && (
+                            <p className="text-blue-400 font-semibold mt-1">
+                              Click "Record Visit" above to enter signs, symptoms, and echo parameters.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          )}
 
           {latest && (
             <Card>

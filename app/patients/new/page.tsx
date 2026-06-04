@@ -1,31 +1,51 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { addPatient } from '@/lib/firestore'
 import { generateMRN } from '@/lib/utils'
 import type { PatientInput } from '@/lib/types'
 import PatientForm from '@/components/forms/PatientForm'
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card'
 import { toast } from 'sonner'
+import { Activity } from 'lucide-react'
 
-export default function NewPatientPage() {
+function NewPatientFormContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const registryId = searchParams.get('registry') || ''
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (data: PatientInput) => {
     setLoading(true)
+    const toastId = toast.loading('Registering new patient...')
+
+    const timeoutId = setTimeout(() => {
+      toast.warning('Database response is taking longer than expected. Please check your internet or security rules.', {
+        id: toastId,
+        duration: 8000,
+      })
+    }, 5000)
+
     try {
       const id = await addPatient({ ...data, mrn: data.mrn || generateMRN() })
-      toast.success('Patient added successfully')
+      clearTimeout(timeoutId)
+      toast.success('Patient added successfully', { id: toastId })
       router.push(`/patients/${id}`)
     } catch (e) {
-      console.error(e)
-      toast.error('Failed to save patient')
+      clearTimeout(timeoutId)
+      console.error('Patient registration error:', e)
+      toast.error('Failed to save patient. Please check database configuration/security rules.', { id: toastId })
     } finally {
       setLoading(false)
     }
   }
 
+  return (
+    <PatientForm defaultValues={{ registryId }} onSubmit={handleSubmit} loading={loading} submitLabel="Register Patient" />
+  )
+}
+
+export default function NewPatientPage() {
   return (
     <div className="max-w-2xl">
       <div className="mb-6">
@@ -37,7 +57,14 @@ export default function NewPatientPage() {
           <CardTitle>Patient Demographics</CardTitle>
         </CardHeader>
         <CardBody>
-          <PatientForm onSubmit={handleSubmit} loading={loading} submitLabel="Register Patient" />
+          <Suspense fallback={
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
+              <Activity className="w-6 h-6 text-blue-500 animate-spin" />
+              <p className="text-sm text-gray-400">Loading form...</p>
+            </div>
+          }>
+            <NewPatientFormContent />
+          </Suspense>
         </CardBody>
       </Card>
     </div>

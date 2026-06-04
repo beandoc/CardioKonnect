@@ -6,29 +6,35 @@ import { Bell, Search, Moon, Sun, ChevronRight, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TITLES: Record<string, string> = {
-  '/':          'Home',
-  '/patients':  'Patient Registry',
-  '/patients/new': 'New Patient',
-  '/analytics': 'Analytics',
-  '/reports':   'Registry Reports',
-  '/registry':  'Registry Tools',
-  '/cohort':    'Cohort Builder',
-  '/alerts':    'Clinical Alerts',
-  '/risk':      'Risk Calculators',
-  '/admin':     'Administration',
-  '/settings':  'Settings',
-  '/languages': 'Language Master',
+  '/':               'Home',
+  '/patients':       'Patient Registry',
+  '/patients/new':   'New Patient',
+  '/analytics':      'Analytics',
+  '/reports':        'Registry Reports',
+  '/registry':       'Registry Fields',
+  '/registry-home':  'Registry Home',
+  '/procedures':          'Procedural Audit',
+  '/complication-audit':  'Complication Audit',
+  '/cohort':         'Cohort Builder',
+  '/alerts':         'Clinical Alerts',
+  '/risk':           'Risk Calculators',
+  '/admin':          'Administration',
+  '/settings':       'Settings',
+  '/languages':      'Language Master',
 }
 
 const BREADCRUMBS: Record<string, string[]> = {
-  '/':          ['Home'],
-  '/patients':  ['Home', 'Patients'],
-  '/analytics': ['Home', 'Research Tools', 'Analytics'],
-  '/reports':   ['Home', 'Registry Tools', 'Reports'],
-  '/registry':  ['Home', 'Registry Tools', 'Fields Setup'],
-  '/alerts':    ['Home', 'Registry Tools', 'Clinical Alerts'],
-  '/admin':     ['Home', 'Admin'],
-  '/languages': ['Home', 'Admin', 'Language Master'],
+  '/':               ['Home'],
+  '/patients':       ['Home', 'Patients'],
+  '/analytics':      ['Home', 'Research Tools', 'Analytics'],
+  '/reports':        ['Home', 'Registry Tools', 'Reports'],
+  '/registry':       ['Home', 'Registry', 'Fields Setup'],
+  '/registry-home':  ['Home', 'Registry', 'Registry Home'],
+  '/procedures':          ['Home', 'Registry', 'Procedural Audit'],
+  '/complication-audit':  ['Home', 'Registry', 'Complication Audit'],
+  '/alerts':         ['Home', 'Registry Tools', 'Clinical Alerts'],
+  '/admin':          ['Home', 'Admin'],
+  '/languages':      ['Home', 'Admin', 'Language Master'],
 }
 
 interface TopBarProps {
@@ -45,15 +51,17 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
     return () => clearInterval(t)
   }, [])
 
-  const isPatientDetail = path.startsWith('/patients/') && path !== '/patients/new' && !path.includes('/visits/')
-  const isVisitRecord   = path.includes('/visits/')
+  const isPatientDetail   = path.startsWith('/patients/') && path !== '/patients/new' && !path.includes('/visits/')
+  const isVisitRecord     = path.includes('/visits/')
+  const isRegistryDetail  = path.startsWith('/registry-home/') && path !== '/registry-home'
   const title = isVisitRecord ? 'Record Visit'
     : isPatientDetail ? 'Patient Profile'
+    : isRegistryDetail ? 'Registry Analytics'
     : TITLES[path] ?? 'Cardio-Konnect'
-
 
   const crumbs = isPatientDetail ? ['Home', 'Patients', 'Profile']
     : isVisitRecord ? ['Home', 'Patients', 'Profile', 'Visit']
+    : isRegistryDetail ? ['Home', 'Registry', 'Registry Home', 'Analytics']
     : BREADCRUMBS[path] ?? ['Home']
 
   return (

@@ -6,34 +6,42 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, UserPlus, BarChart3, FileText,
   Heart, Database, Settings, FlaskConical, ShieldCheck,
-  Layers, ChevronRight, Activity, Bell, Search, Calendar, UserCheck, TrendingUp, X, LogOut
+  Layers, ChevronRight, Activity, Bell, Search, Calendar, UserCheck, TrendingUp, X, LogOut, LayoutGrid, ClipboardList, ShieldAlert
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 const NAV = [
   {
-    section: 'Patients',
+    section: 'Clinical Workspace',
     items: [
-      { href: '/patients',    label: 'Patients Database',  icon: Users },
-    ],
-  },
-  {
-    section: 'Analytics & Research',
-    items: [
-      { href: '/',            label: 'Dashboard (merged)', icon: LayoutDashboard },
-      { href: '/analytics',   label: 'Population Analytics', icon: BarChart3 },
-      { href: '/risk',        label: 'Risk Calculators',  icon: FlaskConical },
-      { href: '/cohort',      label: 'Cohort Builder',  icon: Layers },
-      { href: '/alerts',      label: 'Clinical Alerts', icon: Bell },
-    ],
-  },
-  {
-    section: 'Registry & Admin',
-    items: [
-      { href: '/registry',    label: 'Registry Fields', icon: Database },
-      { href: '/reports',     label: 'Reports & Exports', icon: FileText },
+      { href: '/registry-home', label: 'Registry Home',       icon: LayoutGrid },
+      { href: '/patients',    label: 'Patients Database',     icon: Users },
+      { href: '/',            label: 'Dashboard',             icon: LayoutDashboard },
       { href: '/appointments', label: 'Appointments & Consents', icon: Calendar },
-      { href: '/settings',    label: 'Settings',          icon: Settings },
+      { href: '/alerts',      label: 'Clinical Alerts',       icon: Bell },
+    ],
+  },
+  {
+    section: 'Clinical Audits',
+    items: [
+      { href: '/procedures',         label: 'Procedural Audit',   icon: ClipboardList },
+      { href: '/complication-audit', label: 'Complication Audit', icon: ShieldAlert },
+    ],
+  },
+  {
+    section: 'Research & Analytics',
+    items: [
+      { href: '/analytics',   label: 'Population Analytics', icon: BarChart3 },
+      { href: '/cohort',      label: 'Cohort Builder',       icon: Layers },
+      { href: '/risk',        label: 'Risk Calculators',     icon: FlaskConical },
+      { href: '/reports',     label: 'Reports & Exports',    icon: FileText },
+    ],
+  },
+  {
+    section: 'Configuration',
+    items: [
+      { href: '/registry',    label: 'Registry Fields',      icon: Database },
+      { href: '/settings',    label: 'Settings',             icon: Settings },
     ],
   },
 ]

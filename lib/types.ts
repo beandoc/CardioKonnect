@@ -18,7 +18,7 @@ export interface Patient {
   firstName: string
   lastName: string
   dob: string          // ISO date: YYYY-MM-DD
-  sex: 'Male' | 'Female' | 'Other'
+  sex: 'Male' | 'Female'
   mrn?: string         // Medical record number
   contact?: string
   email?: string
@@ -37,6 +37,23 @@ export interface Patient {
   updatedAt: string
   visitCount?: number
   lastVisitDate?: string
+
+  // HF Registry demographics
+  registryId?: string
+  indianCitizen?: boolean
+  studyConsented?: boolean
+  hfConfirmationDate?: string
+  educationYears?: number
+  aadhaarNo?: string
+  addressHouse?: string
+  addressStreet?: string
+  addressPost?: string
+  addressDistrict?: string
+  addressState?: string
+  addressPin?: string
+  secondaryContact?: string
+  caregiverContact?: string
+  caregiverSecondaryContact?: string
 }
 
 export type PatientInput = Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>
@@ -545,10 +562,44 @@ export interface Visit {
     usualActivities?: 1 | 2 | 3 | 4 | 5
     painDiscomfort?: 1 | 2 | 3 | 4 | 5
     anxietyDepression?: 1 | 2 | 3 | 4 | 5
-    vasScore?: number                // EQ-VAS 0-100: patient's overall health today
     utilityIndex?: number            // Derived utility score (0-1)
     healthStateScore?: number        // Legacy alias for vasScore
   }
+
+  // HF Registry clinical indicators
+  symptomDyspnea?: boolean
+  symptomFatigue?: boolean
+  symptomEdema?: boolean
+  symptomPalpitation?: boolean
+  symptomAngina?: boolean
+  symptomAscites?: boolean
+  signLungRales?: boolean
+  signPleuralEffusion?: boolean
+  signElevatedJVP?: boolean
+  signS3?: boolean
+  signDependentEdema?: boolean
+  signHepatomegaly?: boolean
+  signCardiomegaly?: boolean
+
+  jvpStatus?: 'Elevated' | 'Not elevated' | ''
+  ventricularArrhythmia?: boolean
+
+  peakTropT?: number
+  tropTPositive?: boolean
+  peakTropI?: number
+  tropIPositive?: boolean
+  serumUrea?: number
+  bun?: number
+  bnpDischarge?: number
+  ntProBnpDischarge?: number
+
+  ventilationSupport?: 'No' | 'NIV' | 'Invasive' | ''
+  mcsSupport?: 'No' | 'IABP' | 'VAD' | ''
+
+  weightDischarge?: number
+  dischargeOutcome?: 'Discharge' | 'Death' | 'Referred' | ''
+  causeOfDeath?: 'SCD' | 'Pump failure' | 'MODS' | 'Others' | ''
+  lastHospDate?: string
 
   // Meta
   createdAt: string
@@ -700,5 +751,46 @@ export const BUILT_IN_FIELDS: RegistryField[] = [
   { id: '50', srNo: 50, fieldName: 'hsTnT',         displayLabel: 'hs-TnT (pg/mL)',         dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Biomarkers',  level: 'Level 2' },
   { id: '51', srNo: 51, fieldName: 'hsCrp',         displayLabel: 'hs-CRP (mg/L)',          dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Biomarkers',  level: 'Level 2' },
   { id: '52', srNo: 52, fieldName: 'il6',           displayLabel: 'IL-6 (pg/mL)',           dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Biomarkers',  level: 'Level 2' },
+  { id: '53', srNo: 53, fieldName: 'indianCitizen', displayLabel: 'Indian Citizen',         dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '54', srNo: 54, fieldName: 'studyConsented', displayLabel: 'Consented for Study',   dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '55', srNo: 55, fieldName: 'hfConfirmationDate', displayLabel: 'HF Confirmation Date', dataType: 'Date',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '56', srNo: 56, fieldName: 'educationYears', displayLabel: 'Years of Education',    dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '57', srNo: 57, fieldName: 'aadhaarNo',      displayLabel: 'Aadhaar Card No',       dataType: 'Text',        mandatory: false, pii: true,  active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '58', srNo: 58, fieldName: 'addressHouse',   displayLabel: 'House/Flat No',         dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '59', srNo: 59, fieldName: 'addressStreet',  displayLabel: 'Street/Locality',       dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '60', srNo: 60, fieldName: 'addressPost',    displayLabel: 'Post Office',           dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '61', srNo: 61, fieldName: 'addressDistrict', displayLabel: 'District',              dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '62', srNo: 62, fieldName: 'addressState',   displayLabel: 'State / UT',            dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '63', srNo: 63, fieldName: 'addressPin',     displayLabel: 'PIN Code',              dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '64', srNo: 64, fieldName: 'secondaryContact', displayLabel: 'Secondary Phone No',   dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '65', srNo: 65, fieldName: 'caregiverContact', displayLabel: 'Caregiver Phone No',   dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '66', srNo: 66, fieldName: 'caregiverSecondaryContact', displayLabel: 'Caregiver Sec Phone No', dataType: 'Text', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '67', srNo: 67, fieldName: 'symptomDyspnea', displayLabel: 'Symptoms: Dyspnoea/PND/Orthopnoea', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '68', srNo: 68, fieldName: 'symptomFatigue', displayLabel: 'Symptoms: Fatigue/↓ effort tolerance', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '69', srNo: 69, fieldName: 'symptomEdema',   displayLabel: 'Symptoms: History of Edema', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '70', srNo: 70, fieldName: 'symptomPalpitation', displayLabel: 'Symptoms: Palpitation', dataType: 'Boolean',  mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '71', srNo: 71, fieldName: 'symptomAngina',  displayLabel: 'Symptoms: Angina',       dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '72', srNo: 72, fieldName: 'symptomAscites', displayLabel: 'Symptoms: Ascites',      dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '73', srNo: 73, fieldName: 'signLungRales',  displayLabel: 'Signs: Lung Rales',      dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '74', srNo: 74, fieldName: 'signPleuralEffusion', displayLabel: 'Signs: Pleural Effusion/Ascites', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '75', srNo: 75, fieldName: 'signElevatedJVP', displayLabel: 'Signs: Increased JVP',  dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '76', srNo: 76, fieldName: 'signS3',          displayLabel: 'Signs: S3 Gallop',       dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '77', srNo: 77, fieldName: 'signDependentEdema', displayLabel: 'Signs: Dependent Edema', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '78', srNo: 78, fieldName: 'signHepatomegaly', displayLabel: 'Signs: Hepatomegaly',  dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '79', srNo: 79, fieldName: 'signCardiomegaly', displayLabel: 'Signs: Cardiomegaly',  dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '80', srNo: 80, fieldName: 'jvpStatus',      displayLabel: 'JVP Status',            dataType: 'Dropdown',    mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '81', srNo: 81, fieldName: 'ventricularArrhythmia', displayLabel: 'Ventricular Arrhythmia (VT/VF)', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '82', srNo: 82, fieldName: 'peakTropT',      displayLabel: 'Peak Trop-T (ng/L)',    dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Labs',        level: 'Level 2' },
+  { id: '83', srNo: 83, fieldName: 'peakTropI',      displayLabel: 'Peak Trop-I (ng/L)',    dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Labs',        level: 'Level 2' },
+  { id: '84', srNo: 84, fieldName: 'serumUrea',      displayLabel: 'Serum Urea (mg/dL)',    dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Labs',        level: 'Level 2' },
+  { id: '85', srNo: 85, fieldName: 'bun',            displayLabel: 'BUN (mg/dL)',           dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Labs',        level: 'Level 2' },
+  { id: '86', srNo: 86, fieldName: 'bnpDischarge',   displayLabel: 'BNP at Discharge (pg/ml)', dataType: 'Number',   mandatory: false, pii: false, active: true, category: 'Labs',        level: 'Level 2' },
+  { id: '87', srNo: 87, fieldName: 'ntProBnpDischarge', displayLabel: 'NT-proBNP at Discharge (pg/ml)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs',     level: 'Level 2' },
+  { id: '88', srNo: 88, fieldName: 'ventilationSupport', displayLabel: 'Ventilation Support',dataType: 'Dropdown',    mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '89', srNo: 89, fieldName: 'mcsSupport',      displayLabel: 'Mechanical Circulatory Support', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '90', srNo: 90, fieldName: 'weightDischarge', displayLabel: 'Weight at Discharge (kg)', dataType: 'Number',  mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '91', srNo: 91, fieldName: 'dischargeOutcome', displayLabel: 'Discharge Outcome',    dataType: 'Dropdown',    mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '92', srNo: 92, fieldName: 'causeOfDeath',    displayLabel: 'Cause of Death',        dataType: 'Dropdown',    mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '93', srNo: 93, fieldName: 'lastHospDate',    displayLabel: 'Last HF Admission Date', dataType: 'Date',      mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
 ]
 

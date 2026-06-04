@@ -42,6 +42,12 @@ const schema = z.object({
   icuDays: z.coerce.number().optional().or(z.literal('')),
   admissionReason: z.string().optional(),
   dischargeDate: z.string().optional(),
+  ventilationSupport: z.enum(['No', 'NIV', 'Invasive', '']).default(''),
+  mcsSupport: z.enum(['No', 'IABP', 'VAD', '']).default(''),
+  weightDischarge: z.coerce.number().optional().or(z.literal('')),
+  dischargeOutcome: z.enum(['Discharge', 'Death', 'Referred', '']).default(''),
+  causeOfDeath: z.enum(['SCD', 'Pump failure', 'MODS', 'Others', '']).default(''),
+  lastHospDate: z.string().optional(),
 
   // Anthropometrics
   weight: z.coerce.number().positive().optional().or(z.literal('')),
@@ -61,6 +67,26 @@ const schema = z.object({
   hfType:  z.enum(['HFrEF', 'HFmrEF', 'HFpEF', '']).default(''),
   etiology: z.array(z.string()).default([]),
   etiologyOther: z.string().optional(),
+
+  // Symptoms Checklist
+  symptomDyspnea: z.boolean().default(false),
+  symptomFatigue: z.boolean().default(false),
+  symptomEdema: z.boolean().default(false),
+  symptomPalpitation: z.boolean().default(false),
+  symptomAngina: z.boolean().default(false),
+  symptomAscites: z.boolean().default(false),
+
+  // Signs Checklist
+  signLungRales: z.boolean().default(false),
+  signPleuralEffusion: z.boolean().default(false),
+  signElevatedJVP: z.boolean().default(false),
+  signS3: z.boolean().default(false),
+  signDependentEdema: z.boolean().default(false),
+  signHepatomegaly: z.boolean().default(false),
+  signCardiomegaly: z.boolean().default(false),
+
+  jvpStatus: z.enum(['Elevated', 'Not elevated', '']).default(''),
+  ventricularArrhythmia: z.boolean().default(false),
 
   // Hospitalisation
   hospHistory: z.enum(['Yes', 'No', '']).default(''),
@@ -99,6 +125,16 @@ const schema = z.object({
   hsCrp:          z.coerce.number().optional().or(z.literal('')),
   il6:            z.coerce.number().optional().or(z.literal('')),
   tnfAlpha:       z.coerce.number().optional().or(z.literal('')),
+  
+  // HF Registry Labs
+  peakTropT: z.coerce.number().optional().or(z.literal('')),
+  tropTPositive: z.boolean().default(false),
+  peakTropI: z.coerce.number().optional().or(z.literal('')),
+  tropIPositive: z.boolean().default(false),
+  serumUrea: z.coerce.number().optional().or(z.literal('')),
+  bun: z.coerce.number().optional().or(z.literal('')),
+  bnpDischarge: z.coerce.number().optional().or(z.literal('')),
+  ntProBnpDischarge: z.coerce.number().optional().or(z.literal('')),
 
   // ECG
   qrsDuration: z.coerce.number().optional().or(z.literal('')),
@@ -449,6 +485,35 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
       ctca: {},
       cardiacMRI: {},
       symptomTrajectory: '',
+      symptomDyspnea: false,
+      symptomFatigue: false,
+      symptomEdema: false,
+      symptomPalpitation: false,
+      symptomAngina: false,
+      symptomAscites: false,
+      signLungRales: false,
+      signPleuralEffusion: false,
+      signElevatedJVP: false,
+      signS3: false,
+      signDependentEdema: false,
+      signHepatomegaly: false,
+      signCardiomegaly: false,
+      jvpStatus: '',
+      ventricularArrhythmia: false,
+      peakTropT: '',
+      tropTPositive: false,
+      peakTropI: '',
+      tropIPositive: false,
+      serumUrea: '',
+      bun: '',
+      bnpDischarge: '',
+      ntProBnpDischarge: '',
+      ventilationSupport: '',
+      mcsSupport: '',
+      weightDischarge: '',
+      dischargeOutcome: '',
+      causeOfDeath: '',
+      lastHospDate: '',
       coronaryAnatomy: {
         lmStenosis: '',
         ladStenosis: '',
@@ -662,9 +727,60 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                   <FieldWrap label="Discharge Date">
                     <Input type="date" {...register('dischargeDate')} />
                   </FieldWrap>
+                  <FieldWrap label="Last HF Admission Date">
+                    <Input type="date" {...register('lastHospDate')} />
+                  </FieldWrap>
                   <FieldWrap label="Reason for Admission" className="md:col-span-3">
                     <Input {...register('admissionReason')} placeholder="e.g., ADHF (Acute Decompensated Heart Failure), Cardiogenic Shock" />
                   </FieldWrap>
+                </div>
+
+                <div className="border-t border-violet-500/10 pt-4 space-y-4">
+                  <p className="text-xs font-bold text-violet-400">In-Hospital Support & Discharge Outcomes</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <FieldWrap label="Ventilation Support">
+                      <Select {...register('ventilationSupport')}>
+                        <option value="">Select Support</option>
+                        <option value="No">No Support</option>
+                        <option value="NIV">Non-Invasive (NIV)</option>
+                        <option value="Invasive">Invasive Ventilation</option>
+                      </Select>
+                    </FieldWrap>
+
+                    <FieldWrap label="Mechanical Circulatory Support (MCS)">
+                      <Select {...register('mcsSupport')}>
+                        <option value="">Select MCS</option>
+                        <option value="No">No Support</option>
+                        <option value="IABP">IABP</option>
+                        <option value="VAD">VAD (Impella/ECMO/LVAD)</option>
+                      </Select>
+                    </FieldWrap>
+
+                    <FieldWrap label="Weight at Discharge (kg)" error={errors.weightDischarge?.message}>
+                      <Input type="number" step="0.1" {...register('weightDischarge')} placeholder="e.g. 70.2" />
+                    </FieldWrap>
+
+                    <FieldWrap label="Discharge Outcome">
+                      <Select {...register('dischargeOutcome')}>
+                        <option value="">Select Outcome</option>
+                        <option value="Discharge">Discharged Alive</option>
+                        <option value="Death">Death (Deceased)</option>
+                        <option value="Referred">Referred to another facility</option>
+                      </Select>
+                    </FieldWrap>
+
+                    {watch('dischargeOutcome') === 'Death' && (
+                      <FieldWrap label="Cause of Death">
+                        <Select {...register('causeOfDeath')}>
+                          <option value="">Select Cause</option>
+                          <option value="SCD">Sudden Cardiac Death (SCD)</option>
+                          <option value="Pump failure">Refractory Pump Failure</option>
+                          <option value="MODS">Multi-Organ Dysfunction Syndrome</option>
+                          <option value="Others">Others / Non-cardiac</option>
+                        </Select>
+                      </FieldWrap>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -726,6 +842,98 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                   onChange={field.onChange}
                 />
               )} />
+            </div>
+
+            <div>
+              <p className="section-heading">Heart Failure Symptoms & Signs (Inclusion Checklist)</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-800/20 border border-blue-500/10 rounded-xl p-5">
+                {/* Symptoms */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Symptoms</p>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('symptomDyspnea')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Dyspnoea / PND / Orthopnoea</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('symptomFatigue')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Fatigue / Decreased effort tolerance</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('symptomEdema')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">History of Edema</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('symptomPalpitation')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Palpitations</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('symptomAngina')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Angina</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('symptomAscites')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Ascites</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Signs */}
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Signs</p>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('signLungRales')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Lung Rales / Crepitations</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('signPleuralEffusion')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Pleural Effusion / Ascites</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('signElevatedJVP')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Elevated JVP</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('signS3')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">S3 Gallop</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('signDependentEdema')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Dependent Edema</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('signHepatomegaly')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Hepatomegaly</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer p-2 bg-gray-800/40 hover:bg-gray-800/60 rounded-lg transition-colors">
+                      <input type="checkbox" {...register('signCardiomegaly')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                      <span className="text-sm text-gray-300">Cardiomegaly</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* JVP Status & Arrhythmia Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-gray-800/40 border border-blue-500/10 rounded-xl p-4">
+                <FieldWrap label="JVP Status Assessment">
+                  <Select {...register('jvpStatus')}>
+                    <option value="">Select JVP Status</option>
+                    <option value="Elevated">Elevated</option>
+                    <option value="Not elevated">Not elevated</option>
+                  </Select>
+                </FieldWrap>
+
+                <div className="flex flex-col justify-center">
+                  <label className="flex items-center gap-3 cursor-pointer p-2 rounded-lg transition-colors">
+                    <input type="checkbox" {...register('ventricularArrhythmia')} className="w-5 h-5 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                    <div>
+                      <span className="text-sm font-semibold text-white">Ventricular Arrhythmia (VT/VF)</span>
+                      <p className="text-[10px] text-gray-500">History of Ventricular Tachycardia or Ventricular Fibrillation</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
             </div>
 
             <div>
@@ -960,7 +1168,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
         {activeTabId === 'labs' && (
           <div className="space-y-5 animate-fade-in">
             <div>
-              <p className="section-heading">Biomarkers</p>
+              <p className="section-heading">Biomarkers (Admission / Baseline)</p>
               <div className="grid grid-cols-2 gap-4">
                 <FieldWrap label="NT-proBNP (pg/mL)" error={errors.ntProBNP?.message}>
                   <Input type="number" {...register('ntProBNP')} placeholder="125" error={!!errors.ntProBNP} />
@@ -969,7 +1177,51 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                   <Input type="number" {...register('bnp')} placeholder="80" error={!!errors.bnp} />
                 </FieldWrap>
               </div>
+
+              {/* Troponin Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-gray-800/20 border border-blue-500/10 rounded-xl p-4">
+                <div className="space-y-3 border-r border-gray-700/30 pr-4">
+                  <p className="text-xs font-bold text-gray-300">Cardiac Troponin T</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldWrap label="Peak Value (ng/L)" error={errors.peakTropT?.message}>
+                      <Input type="number" step="0.01" {...register('peakTropT')} placeholder="e.g. 0.05" />
+                    </FieldWrap>
+                    <div className="flex items-center pt-5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" {...register('tropTPositive')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                        <span className="text-xs font-semibold text-gray-300">Trop-T Positive</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pl-2">
+                  <p className="text-xs font-bold text-gray-300">Cardiac Troponin I</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldWrap label="Peak Value (ng/L)" error={errors.peakTropI?.message}>
+                      <Input type="number" step="0.01" {...register('peakTropI')} placeholder="e.g. 0.12" />
+                    </FieldWrap>
+                    <div className="flex items-center pt-5">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" {...register('tropIPositive')} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                        <span className="text-xs font-semibold text-gray-300">Trop-I Positive</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Discharge Biomarkers */}
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <FieldWrap label="BNP at Discharge (pg/mL)" error={errors.bnpDischarge?.message}>
+                  <Input type="number" {...register('bnpDischarge')} placeholder="e.g. 150" />
+                </FieldWrap>
+                <FieldWrap label="NT-proBNP at Discharge (pg/mL)" error={errors.ntProBnpDischarge?.message}>
+                  <Input type="number" {...register('ntProBnpDischarge')} placeholder="e.g. 600" />
+                </FieldWrap>
+              </div>
             </div>
+
             <div>
               <p className="section-heading">Renal & Electrolytes</p>
               <div className="grid grid-cols-3 gap-4">
@@ -987,6 +1239,12 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 </FieldWrap>
                 <FieldWrap label="Uric Acid (mg/dL)">
                   <Input type="number" step="0.1" {...register('uricAcid')} placeholder="5.5" />
+                </FieldWrap>
+                <FieldWrap label="Serum Urea (mg/dL)" error={errors.serumUrea?.message}>
+                  <Input type="number" step="0.1" {...register('serumUrea')} placeholder="e.g. 30" />
+                </FieldWrap>
+                <FieldWrap label="BUN (mg/dL)" error={errors.bun?.message}>
+                  <Input type="number" step="0.1" {...register('bun')} placeholder="e.g. 15" />
                 </FieldWrap>
               </div>
             </div>
