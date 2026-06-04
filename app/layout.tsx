@@ -16,6 +16,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AppLayout>{children}</AppLayout>
         <Toaster
           position="bottom-right"
+          closeButton
+          duration={5000}
           toastOptions={{
             style: {
               background: 'rgba(15, 26, 61, 0.95)',

@@ -8,11 +8,12 @@ interface FieldWrapProps {
   hint?: string
   children: React.ReactNode
   className?: string
+  disabled?: boolean
 }
 
-export function FieldWrap({ label, required, error, hint, children, className }: FieldWrapProps) {
+export function FieldWrap({ label, required, error, hint, children, className, disabled }: FieldWrapProps) {
   return (
-    <div className={cn('space-y-1', className)}>
+    <div className={cn('space-y-1', className, disabled && 'opacity-50 pointer-events-none')}>
       <label className="form-label">
         {label}
         {required && <span className="ml-0.5" style={{ color: '#f43f5e' }}>*</span>}

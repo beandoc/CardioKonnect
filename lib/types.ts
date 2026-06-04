@@ -6,6 +6,9 @@ export interface MedEntry {
   type?: string
   dose?: string
   reason?: string  // reason if not prescribed
+  startDate?: string
+  stopDate?: string
+  changeReason?: string
 }
 
 // ─── Patient (demographics — relatively static) ──────────────────────────────
@@ -20,9 +23,15 @@ export interface Patient {
   contact?: string
   email?: string
   status?: 'Active' | 'Inactive' | 'Pending'
+  consentStatus?: 'Granted' | 'Revoked' | 'Pending' | 'Declined'
   address?: string
-  comorbidities?: string
+  comorbidities?: string[]
   allergies?: string
+  indexDate?: string    // ISO date of diagnosis / enrollment
+  // Cached latest visit indicators
+  hfType?: string
+  nyha?: string
+  lvef?: number
   // Meta
   createdAt: string    // ISO timestamp
   updatedAt: string
@@ -38,6 +47,11 @@ export interface Visit {
   patientId: string
   visitDate: string    // ISO date
   visitType: 'OPD' | 'Telemedicine' | 'Inpatient' | ''
+  echoDoneToday?: boolean
+  labsDrawnToday?: boolean
+  icuDays?: number
+  admissionReason?: string
+  dischargeDate?: string
 
   // Anthropometrics
   weight?: number      // kg
@@ -195,6 +209,17 @@ export interface Visit {
   arGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
   asGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
   msGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
+  valvularHemodynamics?: {
+    asAVA?: number
+    asMeanGradient?: number
+    asVmax?: number
+    mrRegurgitantVolume?: number
+    mrEROA?: number
+    arRegurgitantVolume?: number
+    arEROA?: number
+    msMVA?: number
+    msMeanGradient?: number
+  }
   wallMotionScore?: number
   cardiacMRI?: {
     lgePresent?: boolean
@@ -258,6 +283,16 @@ export interface Visit {
   }
   invasiveAngiographyDone?: boolean
   angiographyFindings?: string   // e.g., "3VD", "LM disease", "Normal coronaries"
+  coronaryAnatomy?: {
+    lmStenosis?: number
+    ladStenosis?: number
+    lcxStenosis?: number
+    rcaStenosis?: number
+    syntaxScore?: number
+    priorPciDate?: string
+    priorCabgDate?: string
+    revascularizationType?: 'None' | 'PCI' | 'CABG' | 'Both' | ''
+  }
 
   // ── Heart Rate Variability (HRV) ─────────────────────────────────────────────
   hrv?: {
@@ -511,8 +546,24 @@ export interface Visit {
   h2fpefProbability?: number
   shfmOneYearSurvival?: number
 
+  // Quality of Life - EQ-5D-5L
+  symptomTrajectory?: 'Improving' | 'Stable' | 'Worsening' | ''
+  eq5d?: {
+    mobility?: number
+    selfCare?: number
+    usualActivities?: number
+    painDiscomfort?: number
+    anxietyDepression?: number
+    healthStateScore?: number
+  }
+
   // Meta
   createdAt: string
+  updatedAt?: string
+  editHistory?: Array<{
+    updatedAt: string
+    updatedFields: string[]
+  }>
 }
 
 // ─── Outcome Events ──────────────────────────────────────────────────────────

@@ -13,13 +13,15 @@ const firebaseConfig = {
 // Prevent re-initialisation on hot reloads
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 
-export const db = typeof window !== 'undefined'
-  ? initializeFirestore(app, {
-      localCache: persistentLocalCache({
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: false,
+  localCache: typeof window !== 'undefined'
+    ? persistentLocalCache({
         tabManager: persistentMultipleTabManager(),
-      }),
-    })
-  : getFirestore(app)
+      })
+    : undefined
+})
 
 // Force local offline mode when running with mock or missing credentials so seeding and other writes resolve instantly in IndexedDB
 const apiKey = firebaseConfig.apiKey

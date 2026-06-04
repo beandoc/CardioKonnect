@@ -14,8 +14,7 @@ const NAV = [
   {
     section: 'Patients',
     items: [
-      { href: '/patients',    label: 'All Patients',  icon: Users },
-      { href: '/patients/new',label: 'Add Patient',   icon: UserPlus },
+      { href: '/patients',    label: 'Patients Database',  icon: Users },
     ],
   },
   {
@@ -65,7 +64,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   }
 
   return (
-    <aside className={cn(
+    <aside role="complementary" aria-label="Main sidebar" className={cn(
       "sidebar fixed top-0 left-0 bottom-0 flex flex-col z-50 w-[260px] bg-[#0f2444] transition-transform duration-300 ease-in-out lg:translate-x-0",
       isOpen ? "translate-x-0" : "-translate-x-full"
     )}>
@@ -99,13 +98,14 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
       {/* ── Search ── */}
       <div className="px-3 pb-3">
-        <form onSubmit={handleSearchSubmit} className="relative">
+        <form onSubmit={handleSearchSubmit} className="relative" role="search">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'rgba(148,163,184,0.4)' }} />
           <input
             type="text"
             placeholder="Search patients…"
-            className="search-input text-xs py-2 w-full"
+            className="search-input text-xs py-2 w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
             style={{ paddingLeft: '2rem' }}
+            aria-label="Search patients"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -115,29 +115,33 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       <hr className="divider mx-3 mb-2" />
 
       {/* ── Navigation ── */}
-      <nav className="flex-1 overflow-y-auto py-1 px-1">
+      <nav className="flex-1 overflow-y-auto py-1 px-1" role="navigation" aria-label="Main navigation">
         {NAV.map(group => (
           <div key={group.section} className="mb-1">
-            <p className="nav-section-label mt-3">{group.section}</p>
-            {group.items.map(item => {
-              const active = item.href === '/'
-                ? path === '/'
-                : path.startsWith(item.href)
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn('nav-item group', active && 'active')}
-                  onClick={() => onClose?.()}
-                >
-                  <item.icon className={cn('nav-icon', active ? 'text-blue-400' : '')} />
-                  <span className="flex-1">{item.label}</span>
-                  {active && (
-                    <ChevronRight className="w-3 h-3 text-blue-400 opacity-70" />
-                  )}
-                </Link>
-              )
-            })}
+            <p className="nav-section-label mt-3" id={`nav-sec-${group.section.replace(/\s+/g, '-').toLowerCase()}`}>{group.section}</p>
+            <div role="group" aria-labelledby={`nav-sec-${group.section.replace(/\s+/g, '-').toLowerCase()}`}>
+              {group.items.map(item => {
+                const active = item.href === '/'
+                  ? path === '/'
+                  : path.startsWith(item.href)
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn('nav-item group focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2', active && 'active')}
+                    onClick={() => onClose?.()}
+                    aria-label={item.label}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <item.icon className={cn('nav-icon', active ? 'text-blue-400' : '')} />
+                    <span className="flex-1">{item.label}</span>
+                    {active && (
+                      <ChevronRight className="w-3 h-3 text-blue-400 opacity-70" />
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
           </div>
         ))}
       </nav>
@@ -147,7 +151,8 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         <button
           type="button"
           onClick={handleLogout}
-          className="nav-item group w-full text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          className="nav-item group w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 focus-visible:outline-offset-2"
+          aria-label="Log out of clinical session"
         >
           <LogOut className="nav-icon text-red-400 group-hover:text-red-300" />
           <span className="flex-1 text-left">Logout</span>

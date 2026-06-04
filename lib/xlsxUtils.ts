@@ -166,6 +166,9 @@ function buildPatientsSheet(patients: Patient[]): XLSX.WorkSheet {
     rows.push(
       PATIENT_HEADERS.map(h => {
         if (h.key === 'age') return calcAge(p.dob)
+        if (h.key === 'comorbidities') {
+          return Array.isArray(p.comorbidities) ? p.comorbidities.join(', ') : (p.comorbidities ?? '')
+        }
         return (p as unknown as Record<string, unknown>)[h.key] ?? ''
       })
     )

@@ -43,12 +43,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-784019',
       contact: '+91 9823019283',
       address: 'Kothrud, Pune, Maharashtra',
-      comorbidities: 'HTN, Type 2 Diabetes',
+      comorbidities: ['HTN', 'DM2'],
       allergies: 'Penicillin',
       status: 'Active',
       email: 'arjun.talpade@gmail.com',
       visitCount: 3,
-      lastVisitDate: relativeDateStr(0)
+      lastVisitDate: relativeDateStr(0),
+      indexDate: relativeDateStr(90)
     },
     '2': {
       firstName: 'Sunita',
@@ -58,12 +59,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-201948',
       contact: '+91 9123049182',
       address: 'Shivajinagar, Pune, Maharashtra',
-      comorbidities: 'Dyslipidemia',
+      comorbidities: ['Dyslipidemia'],
       allergies: 'None',
       status: 'Active',
       email: 'sunita.d@yahoo.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(1)
+      lastVisitDate: relativeDateStr(1),
+      indexDate: relativeDateStr(60)
     },
     '3': {
       firstName: 'Ramesh',
@@ -73,12 +75,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-849102',
       contact: '+91 9422019283',
       address: 'Deccan Gymkhana, Pune, Maharashtra',
-      comorbidities: 'CAD, Prior CABG',
+      comorbidities: ['CAD'],
       allergies: 'Aspirin (Mild GI)',
       status: 'Active',
       email: 'ramesh.k@outlook.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(2)
+      lastVisitDate: relativeDateStr(2),
+      indexDate: relativeDateStr(120)
     },
     '4': {
       firstName: 'Priya',
@@ -88,12 +91,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-102948',
       contact: '+91 9011029481',
       address: 'Aundh, Pune, Maharashtra',
-      comorbidities: 'None',
+      comorbidities: [],
       allergies: 'Sulfa drugs',
       status: 'Inactive',
       email: 'priya.sharma@gmail.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(8)
+      lastVisitDate: relativeDateStr(8),
+      indexDate: relativeDateStr(180)
     },
     '5': {
       firstName: 'Vijay',
@@ -103,12 +107,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-998822',
       contact: '+91 9890123456',
       address: 'Cuffe Parade, Mumbai, Maharashtra',
-      comorbidities: 'Gout, HTN',
+      comorbidities: ['HTN'],
       allergies: 'None',
       status: 'Active',
       email: 'vijay.m@gmail.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(3)
+      lastVisitDate: relativeDateStr(3),
+      indexDate: relativeDateStr(45)
     },
     '6': {
       firstName: 'Ananya',
@@ -118,12 +123,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-334455',
       contact: '+91 9881122334',
       address: 'Viman Nagar, Pune, Maharashtra',
-      comorbidities: 'Asthma',
+      comorbidities: [],
       allergies: 'None',
       status: 'Active',
       email: 'ananya.rao@gmail.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(5)
+      lastVisitDate: relativeDateStr(5),
+      indexDate: relativeDateStr(30)
     },
     '7': {
       firstName: 'Amitabh',
@@ -133,12 +139,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-000777',
       contact: '+91 9820098200',
       address: 'Juhu, Mumbai, Maharashtra',
-      comorbidities: 'COPD, Prior Angioplasty',
+      comorbidities: ['COPD'],
       allergies: 'None',
       status: 'Active',
       email: 'amitabh.b@gmail.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(5)
+      lastVisitDate: relativeDateStr(5),
+      indexDate: relativeDateStr(150)
     },
     '8': {
       firstName: 'Sanjay',
@@ -148,12 +155,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-554432',
       contact: '+91 9869234857',
       address: 'Dadar, Mumbai, Maharashtra',
-      comorbidities: 'CAD, STEMI post-PCI',
+      comorbidities: ['CAD'],
       allergies: 'None',
       status: 'Active',
       email: 'sanjay.more@gmail.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(1)
+      lastVisitDate: relativeDateStr(1),
+      indexDate: relativeDateStr(15)
     },
     '9': {
       firstName: 'Lata',
@@ -163,12 +171,13 @@ export const MOCK_PATIENTS_COHORT: Record<string, Omit<Patient, 'id' | 'createdA
       mrn: 'HID-887766',
       contact: '+91 9371029485',
       address: 'Dhantoli, Nagpur, Maharashtra',
-      comorbidities: 'HFrEF, Chronic Kidney Disease',
+      comorbidities: ['CKD'],
       allergies: 'Contrast (Mild)',
       status: 'Active',
       email: 'lata.p@gmail.com',
       visitCount: 2,
-      lastVisitDate: relativeDateStr(0)
+      lastVisitDate: relativeDateStr(0),
+      indexDate: relativeDateStr(10)
     }
   }
 

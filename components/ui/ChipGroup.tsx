@@ -7,16 +7,18 @@ interface RadioChipGroupProps {
   value: string
   onChange: (v: string) => void
   className?: string
+  disabled?: boolean
 }
 
-export function RadioChipGroup({ options, value, onChange, className }: RadioChipGroupProps) {
+export function RadioChipGroup({ options, value, onChange, className, disabled }: RadioChipGroupProps) {
   return (
-    <div className={cn('flex flex-wrap gap-2', className)}>
+    <div className={cn('flex flex-wrap gap-2', className, disabled && 'opacity-60 pointer-events-none')}>
       {options.map(o => (
         <button
           key={o.value}
           type="button"
-          onClick={() => onChange(o.value)}
+          disabled={disabled}
+          onClick={() => !disabled && onChange(o.value)}
           className={cn('chip-radio', value === o.value && 'selected')}
         >
           <span
@@ -38,20 +40,23 @@ interface CheckChipGroupProps {
   value: string[]
   onChange: (v: string[]) => void
   className?: string
+  disabled?: boolean
 }
 
-export function CheckChipGroup({ options, value, onChange, className }: CheckChipGroupProps) {
+export function CheckChipGroup({ options, value, onChange, className, disabled }: CheckChipGroupProps) {
   const toggle = (v: string) => {
+    if (disabled) return
     onChange(value.includes(v) ? value.filter(x => x !== v) : [...value, v])
   }
   return (
-    <div className={cn('flex flex-wrap gap-2', className)}>
+    <div className={cn('flex flex-wrap gap-2', className, disabled && 'opacity-60 pointer-events-none')}>
       {options.map(o => {
         const selected = value.includes(o.value)
         return (
           <button
             key={o.value}
             type="button"
+            disabled={disabled}
             onClick={() => toggle(o.value)}
             className={cn('chip-check', selected && 'selected')}
           >

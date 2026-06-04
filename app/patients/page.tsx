@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Users, Search, PlusCircle, UserX, Activity, Database } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { cn, formatDate, initials } from '@/lib/utils'
+import { cn, formatDate, initials, nyhaBadgeColor, hfTypeBadgeColor, lvefColor } from '@/lib/utils'
 import { getPatients, updatePatient } from '@/lib/firestore'
 import { seedDemoData } from '@/lib/seeder'
 import type { Patient } from '@/lib/types'
@@ -137,16 +137,18 @@ function PatientList() {
                   <tr>
                     <th className="w-12">#</th>
                     <th>Patient</th>
-                    <th>Role</th>
+                    <th>HF Type</th>
+                    <th>NYHA</th>
+                    <th>LVEF</th>
                     <th>Status</th>
-                    <th>Added On</th>
+                    <th>Last Visit</th>
                     <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center">
+                      <td colSpan={8} className="py-12 text-center">
                         <UserX className="w-10 h-10 text-gray-500 mx-auto mb-2" />
                         <p className="text-gray-400 text-sm font-semibold">No patients found</p>
                       </td>
@@ -171,14 +173,32 @@ function PatientList() {
                             </div>
                           </td>
                           <td>
-                            <span className="badge badge-blue text-[10px]">Patient</span>
+                            <span className={cn(
+                              "badge text-[10px]",
+                              p.hfType ? hfTypeBadgeColor(p.hfType) : 'badge-gray'
+                            )}>
+                              {p.hfType || '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={cn(
+                              "badge text-[10px]",
+                              p.nyha ? nyhaBadgeColor(p.nyha) : 'badge-gray'
+                            )}>
+                              {p.nyha ? `Class ${p.nyha}` : '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="font-semibold text-xs" style={{ color: p.lvef ? lvefColor(p.lvef) : '#94a3b8' }}>
+                              {p.lvef != null ? `${p.lvef}%` : '—'}
+                            </span>
                           </td>
                           <td>
                             <span className={status === 'Active' ? 'status-active' : status === 'Pending' ? 'badge badge-amber' : 'status-inactive'}>
                               {status}
                             </span>
                           </td>
-                          <td className="text-gray-300 text-xs">{formatDate(p.createdAt)}</td>
+                          <td className="text-gray-300 text-xs">{p.lastVisitDate ? formatDate(p.lastVisitDate) : '—'}</td>
                           <td>
                             <div className="flex justify-end gap-2">
                               <Link href={`/patients/${p.id}`}>

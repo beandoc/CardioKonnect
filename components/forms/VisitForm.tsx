@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -8,26 +8,40 @@ import { RadioChipGroup, CheckChipGroup } from '@/components/ui/ChipGroup'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import type { VisitInput } from '@/lib/types'
-import { ChevronRight, ChevronLeft } from 'lucide-react'
+import { ChevronRight, ChevronLeft, ShieldAlert, Award, Save } from 'lucide-react'
+import { toast } from 'sonner'
 
-// ─── Zod schema (partial — most fields optional) ────────────────────────────
+// ─── Zod schema ─────────────────────────────────────────────────────────────
 const medEntry = z.object({
   prescribed: z.enum(['Yes', 'No', '']).default(''),
   type:       z.string().optional(),
   dose:       z.string().optional(),
   reason:     z.string().optional(),
+  startDate:  z.string().optional(),
+  stopDate:   z.string().optional(),
+  changeReason: z.string().optional(),
 })
 
 const prescribedOnly = z.object({
   prescribed: z.enum(['Yes', 'No', '']).default(''),
   type:       z.string().optional(),
   dose:       z.string().optional(),
+  startDate:  z.string().optional(),
+  stopDate:   z.string().optional(),
+  changeReason: z.string().optional(),
 })
 
 const schema = z.object({
   // Visit meta
   visitDate: z.string().min(1, 'Required'),
   visitType: z.enum(['OPD', 'Telemedicine', 'Inpatient', '']).default('OPD'),
+  echoDoneToday: z.boolean().default(false),
+  labsDrawnToday: z.boolean().default(false),
+
+  // Inpatient specifics
+  icuDays: z.coerce.number().optional().or(z.literal('')),
+  admissionReason: z.string().optional(),
+  dischargeDate: z.string().optional(),
 
   // Anthropometrics
   weight: z.coerce.number().positive().optional().or(z.literal('')),
@@ -142,8 +156,20 @@ const schema = z.object({
 
   // Follow-up
   followupDate: z.string().optional(),
-  followupType: z.enum(['OPD', 'Telemedicine', '']).default(''),
+  followupType: z.string().optional(),
   clinicalNotes: z.string().optional(),
+
+  // Novel biomarkers
+  hsTnT: z.coerce.number().optional().or(z.literal('')),
+  hsTnI: z.coerce.number().optional().or(z.literal('')),
+  sST2:  z.coerce.number().optional().or(z.literal('')),
+  galectin3: z.coerce.number().optional().or(z.literal('')),
+  gdf15: z.coerce.number().optional().or(z.literal('')),
+  ca125: z.coerce.number().optional().or(z.literal('')),
+  cystatinC: z.coerce.number().optional().or(z.literal('')),
+  crp: z.coerce.number().optional().or(z.literal('')),
+  esr: z.coerce.number().optional().or(z.literal('')),
+  proBNP: z.coerce.number().optional().or(z.literal('')),
 
   // Vascular
   vascular: z.object({
@@ -154,28 +180,109 @@ const schema = z.object({
     flowMediatedDilation: z.coerce.number().optional().or(z.literal('')),
     carotidImt: z.coerce.number().optional().or(z.literal('')),
     carotidPlaqueBurden: z.string().optional(),
-  }).default({}),
+  }).optional(),
 
-  // Holter Wearable
-  holterWearable: z.object({
-    afBurden: z.coerce.number().optional().or(z.literal('')),
-    pvcBurden: z.coerce.number().optional().or(z.literal('')),
-    circadianRhythmMetrics: z.string().optional(),
-  }).default({}),
-
-  // CTCA
-  ctca: z.object({
-    stenosisSeverity: z.string().optional(),
-    highRiskPlaqueFeatures: z.boolean().optional(),
-    notes: z.string().optional(),
-  }).default({}),
-
-  // MRI
+  // Cardiac MRI
   cardiacMRI: z.object({
+    lgePresent: z.boolean().optional(),
+    lgePattern: z.string().optional(),
     t1Native: z.coerce.number().optional().or(z.literal('')),
+    t2Star: z.coerce.number().optional().or(z.literal('')),
     t2Mapping: z.coerce.number().optional().or(z.literal('')),
     ecv: z.coerce.number().optional().or(z.literal('')),
     lgeBurden: z.coerce.number().optional().or(z.literal('')),
+    rvefMRI: z.coerce.number().optional().or(z.literal('')),
+    lvMassMRI: z.coerce.number().optional().or(z.literal('')),
+  }).optional(),
+
+  // CPET
+  cpet: z.object({
+    cpetDate: z.string().optional(),
+    protocol: z.string().optional(),
+    peakVO2: z.coerce.number().optional().or(z.literal('')),
+    veCO2Slope: z.coerce.number().optional().or(z.literal('')),
+    anaerobicThreshold: z.coerce.number().optional().or(z.literal('')),
+    peakRER: z.coerce.number().optional().or(z.literal('')),
+    o2Pulse: z.coerce.number().optional().or(z.literal('')),
+    oues: z.coerce.number().optional().or(z.literal('')),
+    peakWorkload: z.coerce.number().optional().or(z.literal('')),
+    exerciseDuration: z.coerce.number().optional().or(z.literal('')),
+    terminationReason: z.string().optional(),
+    weberClass: z.string().optional(),
+    cpetNotes: z.string().optional(),
+  }).optional(),
+
+  // RHC
+  rhc: z.object({
+    rhcDate: z.string().optional(),
+    indication: z.string().optional(),
+    mPAP: z.coerce.number().optional().or(z.literal('')),
+    sPAP: z.coerce.number().optional().or(z.literal('')),
+    dPAP: z.coerce.number().optional().or(z.literal('')),
+    pcwp: z.coerce.number().optional().or(z.literal('')),
+    cardiacOutput: z.coerce.number().optional().or(z.literal('')),
+    cardiacIndex: z.coerce.number().optional().or(z.literal('')),
+    pvr: z.coerce.number().optional().or(z.literal('')),
+    svr: z.coerce.number().optional().or(z.literal('')),
+    tpg: z.coerce.number().optional().or(z.literal('')),
+    dpg: z.coerce.number().optional().or(z.literal('')),
+    svO2: z.coerce.number().optional().or(z.literal('')),
+    raPressure: z.coerce.number().optional().or(z.literal('')),
+    vasoreactivity: z.boolean().optional(),
+    vasoreactivityAgent: z.string().optional(),
+    vasoreactivityPositive: z.boolean().optional(),
+  }).optional(),
+
+  // KCCQ
+  kccq: z.object({
+    physicalLimitation: z.coerce.number().optional().or(z.literal('')),
+    symptomFrequency: z.coerce.number().optional().or(z.literal('')),
+    symptomBurden: z.coerce.number().optional().or(z.literal('')),
+    qualityOfLife: z.coerce.number().optional().or(z.literal('')),
+    socialLimitation: z.coerce.number().optional().or(z.literal('')),
+    overallSummaryScore: z.coerce.number().optional().or(z.literal('')),
+  }).optional(),
+
+  // Sleep
+  sleep: z.object({
+    ahiIndex: z.coerce.number().optional().or(z.literal('')),
+    sleepApneaType: z.string().optional(),
+    epworthScore: z.coerce.number().optional().or(z.literal('')),
+    treatment: z.string().optional(),
+    nocturnalSatNadir: z.coerce.number().optional().or(z.literal('')),
+  }).optional(),
+
+  symptomTrajectory: z.enum(['Improving', 'Stable', 'Worsening', '']).default(''),
+  coronaryAnatomy: z.object({
+    lmStenosis: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+    ladStenosis: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+    lcxStenosis: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+    rcaStenosis: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+    syntaxScore: z.coerce.number().min(0).max(150).optional().or(z.literal('')),
+    priorPciDate: z.string().optional(),
+    priorCabgDate: z.string().optional(),
+    revascularizationType: z.enum(['None', 'PCI', 'CABG', 'Both', '']).default(''),
+  }).default({}),
+
+  valvularHemodynamics: z.object({
+    asAVA: z.coerce.number().min(0).max(10).optional().or(z.literal('')),
+    asMeanGradient: z.coerce.number().min(0).max(150).optional().or(z.literal('')),
+    asVmax: z.coerce.number().min(0).max(10).optional().or(z.literal('')),
+    mrRegurgitantVolume: z.coerce.number().min(0).max(200).optional().or(z.literal('')),
+    mrEROA: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+    arRegurgitantVolume: z.coerce.number().min(0).max(200).optional().or(z.literal('')),
+    arEROA: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+    msMVA: z.coerce.number().min(0).max(10).optional().or(z.literal('')),
+    msMeanGradient: z.coerce.number().min(0).max(50).optional().or(z.literal('')),
+  }).default({}),
+
+  eq5d: z.object({
+    mobility: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
+    selfCare: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
+    usualActivities: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
+    painDiscomfort: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
+    anxietyDepression: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
+    healthStateScore: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   }).default({}),
 }).superRefine((data, ctx) => {
   if (data.lvef !== undefined && data.lvef !== '') {
@@ -206,23 +313,11 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-const TABS = [
-  { id: 'visit',    label: 'Visit & Vitals' },
-  { id: 'clinical', label: 'Clinical' },
-  { id: 'echo',     label: 'Echo & ECG' },
-  { id: 'imaging',  label: 'Advanced Imaging' },
-  { id: 'labs',     label: 'Laboratory' },
-  { id: 'vascular', label: 'Vascular & Wearables' },
-  { id: 'meds',     label: 'Medications' },
-  { id: 'extended', label: 'Extended Meds' },
-  { id: 'device',   label: 'Device & Vacc.' },
-  { id: 'edu',      label: 'Education & F/U' },
-]
-
 // ─── Sub-component for a medication row ────────────────────────────────────
 
 function MedRow({
-  label, prescribedField, typeField, typeOptions, doseField, reasonField, control, register,
+  label, prescribedField, typeField, typeOptions, doseField, reasonField,
+  startDateField, stopDateField, changeReasonField, control, register, disabled
 }: {
   label: string
   prescribedField: string
@@ -230,12 +325,16 @@ function MedRow({
   typeOptions?: string[]
   doseField?: string
   reasonField?: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  control: any; register: any
+  startDateField?: string
+  stopDateField?: string
+  changeReasonField?: string
+  control: any
+  register: any
+  disabled?: boolean
 }) {
   return (
-    <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 space-y-3">
-      <p className="text-sm font-semibold text-gray-700">{label}</p>
+    <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4 space-y-3">
+      <p className="text-sm font-semibold text-white">{label}</p>
       <Controller
         name={prescribedField as never}
         control={control}
@@ -244,13 +343,14 @@ function MedRow({
             options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
             value={field.value as string}
             onChange={field.onChange}
+            disabled={disabled}
           />
         )}
       />
       <div className="grid grid-cols-2 gap-3">
         {typeField && typeOptions && (
           <FieldWrap label="Drug / Type">
-            <Select {...register(typeField)}>
+            <Select {...register(typeField)} disabled={disabled}>
               <option value="">Select</option>
               {typeOptions.map(o => <option key={o}>{o}</option>)}
             </Select>
@@ -258,12 +358,27 @@ function MedRow({
         )}
         {doseField && (
           <FieldWrap label="Dose">
-            <Input {...register(doseField)} placeholder="e.g. 40mg OD" />
+            <Input {...register(doseField)} placeholder="e.g. 40mg OD" disabled={disabled} />
+          </FieldWrap>
+        )}
+        {startDateField && (
+          <FieldWrap label="Start Date">
+            <Input type="date" {...register(startDateField)} disabled={disabled} />
+          </FieldWrap>
+        )}
+        {stopDateField && (
+          <FieldWrap label="Stop Date">
+            <Input type="date" {...register(stopDateField)} disabled={disabled} />
+          </FieldWrap>
+        )}
+        {changeReasonField && (
+          <FieldWrap label="Escalation / Change Reason" className="col-span-2">
+            <Input {...register(changeReasonField)} placeholder="Reason for change, e.g. dose escalation, side effects" disabled={disabled} />
           </FieldWrap>
         )}
         {reasonField && (
           <FieldWrap label="Reason if not prescribed" className="col-span-2">
-            <Input {...register(reasonField)} placeholder="Reason" />
+            <Input {...register(reasonField)} placeholder="Reason" disabled={disabled} />
           </FieldWrap>
         )}
       </div>
@@ -277,16 +392,20 @@ interface Props {
   defaultValues?: Partial<VisitInput>
   onSubmit: (data: VisitInput) => Promise<void>
   loading?: boolean
+  patientId?: string
 }
 
-export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
+export default function VisitForm({ defaultValues, onSubmit, loading, patientId }: Props) {
   const [tab, setTab] = useState(0)
+  const [draftSaved, setDraftSaved] = useState(false)
 
-  const { register, control, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       visitDate: new Date().toISOString().split('T')[0],
       visitType: 'OPD',
+      echoDoneToday: false,
+      labsDrawnToday: false,
       diuretic: { prescribed: '' },
       raasi: { prescribed: '' },
       betaBlocker: { prescribed: '' },
@@ -305,27 +424,157 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
       device: [],
       education: [],
       dmManagement: {},
+      dropNotes: '',
       vascular: {},
       holterWearable: {},
       ctca: {},
       cardiacMRI: {},
+      symptomTrajectory: '',
+      coronaryAnatomy: {
+        lmStenosis: '',
+        ladStenosis: '',
+        lcxStenosis: '',
+        rcaStenosis: '',
+        syntaxScore: '',
+        priorPciDate: '',
+        priorCabgDate: '',
+        revascularizationType: ''
+      },
+      valvularHemodynamics: {
+        asAVA: '',
+        asMeanGradient: '',
+        asVmax: '',
+        mrRegurgitantVolume: '',
+        mrEROA: '',
+        arRegurgitantVolume: '',
+        arEROA: '',
+        msMVA: '',
+        msMeanGradient: ''
+      },
+      eq5d: {
+        mobility: '',
+        selfCare: '',
+        usualActivities: '',
+        painDiscomfort: '',
+        anxietyDepression: '',
+        healthStateScore: ''
+      },
       ...(defaultValues as Partial<FormValues>),
     },
   })
 
+  const visitType = watch('visitType')
+  const echoDoneToday = watch('echoDoneToday')
+  const labsDrawnToday = watch('labsDrawnToday')
+  const hfType = watch('hfType')
+
+  // Generate dynamic tabs based on condition
+  const TABS = [
+    { id: 'visit', label: 'Vitals & Clinical' }
+  ]
+
+  const isTelemedicine = visitType === 'Telemedicine'
+
+  if (!isTelemedicine && echoDoneToday) {
+    TABS.push({ id: 'echo', label: 'Echocardiography' })
+  }
+  if (!isTelemedicine && labsDrawnToday) {
+    TABS.push({ id: 'labs', label: 'Labs & Biomarkers' })
+  }
+  
+  TABS.push(
+    { id: 'meds', label: 'Medications' },
+    { id: 'advanced', label: 'Advanced Studies' },
+    { id: 'qol', label: 'QoL & SDOH' }
+  )
+
+  // Auto-save draft functionality
+  const allValues = watch()
+  useEffect(() => {
+    if (patientId) {
+      const timer = setTimeout(() => {
+        localStorage.setItem(`visit_draft_${patientId}`, JSON.stringify(allValues))
+        setDraftSaved(true)
+        setTimeout(() => setDraftSaved(false), 2000)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [allValues, patientId])
+
+  // Load draft from localStorage on mount
+  useEffect(() => {
+    if (patientId) {
+      const draft = localStorage.getItem(`visit_draft_${patientId}`)
+      if (draft) {
+        try {
+          const parsed = JSON.parse(draft)
+          Object.keys(parsed).forEach(key => {
+            setValue(key as keyof FormValues, parsed[key])
+          })
+          toast.success('Restored draft from local auto-save')
+        } catch (e) {
+          console.warn('Failed to parse visit draft:', e)
+        }
+      }
+    }
+  }, [patientId, setValue])
+
+  const clearDraft = () => {
+    if (patientId) {
+      localStorage.removeItem(`visit_draft_${patientId}`)
+    }
+  }
+
+  const handleFormSubmit = async (data: FormValues) => {
+    clearDraft()
+    await onSubmit(data as unknown as VisitInput)
+  }
+
+  // Active Tab Index mapping based on TABS array
+  const activeTabId = TABS[tab]?.id || 'visit'
+
   return (
     <form
-      onSubmit={handleSubmit(v => onSubmit(v as unknown as VisitInput))}
-      className="space-y-0"
+      onSubmit={handleSubmit(handleFormSubmit)}
+      className="space-y-0 text-gray-300"
     >
+      {/* Draft Saved Indicator */}
+      <div className="flex justify-between items-center mb-4 pb-2 border-b border-blue-500/10">
+        <div className="flex gap-2">
+          {isTelemedicine && (
+            <span className="badge badge-amber text-[10px] flex items-center gap-1">
+              Telemedicine Visit Mode
+            </span>
+          )}
+          {visitType === 'Inpatient' && (
+            <span className="badge badge-blue text-[10px] flex items-center gap-1">
+              Inpatient Admission Mode
+            </span>
+          )}
+        </div>
+        <div className="text-[10px] text-gray-500 flex items-center gap-1 font-mono">
+          {draftSaved ? (
+            <>
+              <Save className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-emerald-400">Draft Auto-Saved</span>
+            </>
+          ) : (
+            <span>Changes saved locally</span>
+          )}
+        </div>
+      </div>
+
       {/* Tab bar */}
-      <div className="flex border-b border-gray-200 overflow-x-auto -mb-px">
+      <div className="flex border-b border-blue-500/10 overflow-x-auto -mb-px gap-2">
         {TABS.map((t, i) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(i)}
-            className={cn('tab-btn', tab === i && 'active')}
+            className={cn(
+              'tab-btn text-xs font-semibold pb-3 border-b-2 px-3 transition-all',
+              activeTabId === t.id ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-gray-200'
+            )}
           >
             {t.label}
           </button>
@@ -334,21 +583,21 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
 
       <div className="pt-5 space-y-4">
 
-        {/* ── Tab 0: Visit & Vitals ────────────────────────────────── */}
-        {tab === 0 && (
+        {/* ── Tab: Visit & Vitals ────────────────────────────────── */}
+        {activeTabId === 'visit' && (
           <div className="space-y-5">
             <div>
-              <p className="section-heading">Visit Information</p>
-              <div className="grid grid-cols-3 gap-4">
+              <p className="section-heading">Visit Information (OPD encounter details)</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FieldWrap label="Visit Date" required error={errors.visitDate?.message}>
                   <Input type="date" {...register('visitDate')} error={!!errors.visitDate} />
                 </FieldWrap>
-                <FieldWrap label="Visit Type">
-                  <Select {...register('visitType')}>
+                <FieldWrap label="Visit Type" required error={errors.visitType?.message}>
+                  <Select {...register('visitType')} error={!!errors.visitType}>
                     <option value="">Select</option>
-                    <option>OPD</option>
-                    <option>Telemedicine</option>
-                    <option>Inpatient</option>
+                    <option value="OPD">OPD</option>
+                    <option value="Telemedicine">Telemedicine</option>
+                    <option value="Inpatient">Inpatient</option>
                   </Select>
                 </FieldWrap>
                 <FieldWrap label="Oedema">
@@ -361,41 +610,89 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                   </Select>
                 </FieldWrap>
               </div>
+
+              {/* Conditional triggers for Echo and Labs */}
+              {!isTelemedicine && (
+                <div className="mt-4 p-4 bg-blue-500/5 border border-blue-500/10 rounded-xl grid grid-cols-2 gap-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" {...register('echoDoneToday')} className="w-5 h-5 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                    <div>
+                      <p className="text-xs font-bold text-white">Echocardiography performed today?</p>
+                      <p className="text-[10px] text-gray-500">Unlocks echo parameters input screen</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" {...register('labsDrawnToday')} className="w-5 h-5 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                    <div>
+                      <p className="text-xs font-bold text-white">Laboratory tests drawn today?</p>
+                      <p className="text-[10px] text-gray-500">Unlocks renal, biomarkers, and labs screen</p>
+                    </div>
+                  </label>
+                </div>
+              )}
             </div>
+
+            {/* Conditional Inpatient Fields */}
+            {visitType === 'Inpatient' && (
+              <div className="p-4 bg-violet-500/5 border border-violet-500/10 rounded-xl space-y-4">
+                <p className="text-xs font-bold text-violet-400">Inpatient Admission Details</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FieldWrap label="ICU / HDU Days" error={errors.icuDays?.message}>
+                    <Input type="number" {...register('icuDays')} placeholder="e.g. 2" />
+                  </FieldWrap>
+                  <FieldWrap label="Discharge Date">
+                    <Input type="date" {...register('dischargeDate')} />
+                  </FieldWrap>
+                  <FieldWrap label="Reason for Admission" className="md:col-span-3">
+                    <Input {...register('admissionReason')} placeholder="e.g., ADHF (Acute Decompensated Heart Failure), Cardiogenic Shock" />
+                  </FieldWrap>
+                </div>
+              </div>
+            )}
+
+            {/* Telemedicine Info Banner */}
+            {isTelemedicine && (
+              <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl flex items-start gap-3 text-xs text-amber-400">
+                <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold">Telemedicine Encounter Mode</p>
+                  <p className="text-gray-400 mt-1">
+                    Echocardiography and Laboratory test inputs are disabled since physical exams/samples cannot be obtained.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div>
               <p className="section-heading">Anthropometrics</p>
-              <div className="grid grid-cols-4 gap-4">
-                <FieldWrap label="Weight (kg)">
-                  <Input type="number" step="0.1" {...register('weight')} placeholder="72.5" />
+              <div className="grid grid-cols-3 gap-4">
+                <FieldWrap label="Weight (kg)" error={errors.weight?.message}>
+                  <Input type="number" step="0.1" {...register('weight')} placeholder="72.5" error={!!errors.weight} />
                 </FieldWrap>
-                <FieldWrap label="Height (cm)">
-                  <Input type="number" {...register('height')} placeholder="165" />
+                <FieldWrap label="Height (cm)" error={errors.height?.message}>
+                  <Input type="number" {...register('height')} placeholder="165" error={!!errors.height} />
                 </FieldWrap>
-                <FieldWrap label="O₂ Saturation (%)">
-                  <Input type="number" {...register('o2Sat')} placeholder="97" />
+                <FieldWrap label="O₂ Saturation (%)" error={errors.o2Sat?.message}>
+                  <Input type="number" {...register('o2Sat')} placeholder="97" error={!!errors.o2Sat} />
                 </FieldWrap>
               </div>
             </div>
+
             <div>
               <p className="section-heading">Vitals</p>
               <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="Systolic BP (mmHg)">
-                  <Input type="number" {...register('bpSystolic')} placeholder="120" />
+                <FieldWrap label="Systolic BP (mmHg)" disabled={isTelemedicine} error={errors.bpSystolic?.message}>
+                  <Input type="number" {...register('bpSystolic')} placeholder="120" disabled={isTelemedicine} error={!!errors.bpSystolic} />
                 </FieldWrap>
-                <FieldWrap label="Diastolic BP (mmHg)">
-                  <Input type="number" {...register('bpDiastolic')} placeholder="80" />
+                <FieldWrap label="Diastolic BP (mmHg)" disabled={isTelemedicine} error={errors.bpDiastolic?.message}>
+                  <Input type="number" {...register('bpDiastolic')} placeholder="80" disabled={isTelemedicine} error={!!errors.bpDiastolic} />
                 </FieldWrap>
-                <FieldWrap label="Heart Rate (bpm)">
-                  <Input type="number" {...register('heartRate')} placeholder="72" />
+                <FieldWrap label="Heart Rate (bpm)" disabled={isTelemedicine} error={errors.heartRate?.message}>
+                  <Input type="number" {...register('heartRate')} placeholder="72" disabled={isTelemedicine} error={!!errors.heartRate} />
                 </FieldWrap>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* ── Tab 1: Clinical ──────────────────────────────────────── */}
-        {tab === 1 && (
-          <div className="space-y-5">
             <div>
               <p className="section-heading">NYHA Functional Class</p>
               <Controller name="nyha" control={control} render={({ field }) => (
@@ -411,6 +708,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                 />
               )} />
             </div>
+
             <div>
               <p className="section-heading">Cardiac Rhythm</p>
               <Controller name="rhythm" control={control} render={({ field }) => (
@@ -428,6 +726,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                 />
               )} />
             </div>
+
             <div>
               <p className="section-heading">Type of Heart Failure</p>
               <Controller name="hfType" control={control} render={({ field, fieldState }) => (
@@ -445,6 +744,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                 </>
               )} />
             </div>
+
             <div>
               <p className="section-heading">Etiology</p>
               <Controller name="etiology" control={control} render={({ field }) => (
@@ -469,17 +769,10 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                 </FieldWrap>
               </div>
             </div>
-            <div>
-              <p className="section-heading">Functional Capacity</p>
-              <div className="grid grid-cols-2 gap-4">
-                <FieldWrap label="6-Minute Walk Test (metres)">
-                  <Input type="number" {...register('sixMWT')} placeholder="380" />
-                </FieldWrap>
-              </div>
-            </div>
+
             <div>
               <p className="section-heading">Hospitalisation History</p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FieldWrap label="H/O Hospitalisation">
                   <Controller name="hospHistory" control={control} render={({ field }) => (
                     <RadioChipGroup
@@ -492,7 +785,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                 <FieldWrap label="No. of Admissions (past year)">
                   <Input type="number" {...register('hospCount')} placeholder="0" />
                 </FieldWrap>
-                <FieldWrap label="Details" className="col-span-3">
+                <FieldWrap label="Details" className="col-span-2">
                   <Textarea {...register('hospDetails')} placeholder="Dates, reason, duration…" />
                 </FieldWrap>
               </div>
@@ -500,17 +793,17 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
           </div>
         )}
 
-        {/* ── Tab 2: Echo & ECG ───────────────────────────────────── */}
-        {tab === 2 && (
-          <div className="space-y-5">
+        {/* ── Tab: Echocardiography (conditional) ─────────────────── */}
+        {activeTabId === 'echo' && (
+          <div className="space-y-5 animate-fade-in">
             <div>
-              <p className="section-heading">Echocardiography</p>
+              <p className="section-heading">Echocardiography Details</p>
               <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="LVEF (%)" hint="Left ventricular ejection fraction">
-                  <Input type="number" step="0.1" {...register('lvef')} placeholder="55" />
+                <FieldWrap label="LVEF (%)" hint="Left ventricular ejection fraction" error={errors.lvef?.message}>
+                  <Input type="number" step="0.1" {...register('lvef')} placeholder="55" error={!!errors.lvef} />
                 </FieldWrap>
-                <FieldWrap label="Echo Date">
-                  <Input type="date" {...register('echoDate')} />
+                <FieldWrap label="Echo Date" error={errors.echoDate?.message}>
+                  <Input type="date" {...register('echoDate')} error={!!errors.echoDate} />
                 </FieldWrap>
                 <FieldWrap label="LV Diastolic Diameter (mm)">
                   <Input type="number" step="0.1" {...register('lvdd')} placeholder="50" />
@@ -548,95 +841,124 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                   <Textarea {...register('echNotes')} placeholder="Wall motion abnormalities, valve findings…" />
                 </FieldWrap>
               </div>
-            </div>
-            <div>
-              <p className="section-heading">ECG</p>
-              <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="QRS Duration (ms)">
-                  <Input type="number" {...register('qrsDuration')} placeholder="100" />
-                </FieldWrap>
-                <FieldWrap label="Bundle Branch Block">
-                  <Select {...register('bbb')}>
-                    <option value="">None</option>
-                    <option>LBBB</option>
-                    <option>RBBB</option>
-                    <option>IVCD</option>
-                  </Select>
-                </FieldWrap>
-                <FieldWrap label="QTc Interval (ms)">
-                  <Input type="number" {...register('qtcInterval')} placeholder="440" />
-                </FieldWrap>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* ── Tab 3: Advanced Imaging ─────────────────────────────── */}
-        {tab === 3 && (
-          <div className="space-y-5">
-            <div>
-              <p className="section-heading">Cardiac MRI</p>
-              <div className="grid grid-cols-2 gap-4">
-                <FieldWrap label="Native T1 mapping (ms)">
-                  <Input type="number" {...register('cardiacMRI.t1Native')} placeholder="1000" />
-                </FieldWrap>
-                <FieldWrap label="T2 mapping (ms)">
-                  <Input type="number" {...register('cardiacMRI.t2Mapping')} placeholder="50" />
-                </FieldWrap>
-                <FieldWrap label="Extracellular Volume (ECV) (%)">
-                  <Input type="number" step="0.1" {...register('cardiacMRI.ecv')} placeholder="28" />
-                </FieldWrap>
-                <FieldWrap label="LGE Burden (%)">
-                  <Input type="number" step="0.1" {...register('cardiacMRI.lgeBurden')} placeholder="5" />
-                </FieldWrap>
-              </div>
-            </div>
-            <div>
-              <p className="section-heading">CT Coronary Angiography</p>
-              <div className="grid grid-cols-2 gap-4">
-                <FieldWrap label="Stenosis Severity">
-                  <Select {...register('ctca.stenosisSeverity')}>
-                    <option value="">Select</option>
-                    <option>None</option>
-                    <option>Mild (&lt;50%)</option>
-                    <option>Moderate (50-69%)</option>
-                    <option>Severe (≥70%)</option>
-                  </Select>
-                </FieldWrap>
-                <div className="flex items-center space-x-2 pt-6">
-                  <input type="checkbox" id="highRiskPlaqueFeatures" {...register('ctca.highRiskPlaqueFeatures')} className="w-5 h-5" />
-                  <label htmlFor="highRiskPlaqueFeatures" className="text-sm text-gray-700">High Risk Plaque Features</label>
+              <p className="text-sm font-semibold text-white mt-6 mb-3 border-b border-gray-700/50 pb-2">Valvular Hemodynamics & Severity Grades</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Aortic Stenosis */}
+                <div className="space-y-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10">
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Aortic Stenosis (AS)</p>
+                  <FieldWrap label="AS Grade">
+                    <Select {...register('asGrade')}>
+                      <option value="">Select Grade</option>
+                      <option>None</option>
+                      <option>Mild</option>
+                      <option>Moderate</option>
+                      <option>Severe</option>
+                    </Select>
+                  </FieldWrap>
+                  <FieldWrap label="AVA (cm²)">
+                    <Input type="number" step="0.01" {...register('valvularHemodynamics.asAVA')} placeholder="e.g. 0.8" />
+                  </FieldWrap>
+                  <FieldWrap label="Mean Gradient (mmHg)">
+                    <Input type="number" step="0.1" {...register('valvularHemodynamics.asMeanGradient')} placeholder="e.g. 40" />
+                  </FieldWrap>
+                  <FieldWrap label="Peak Velocity Vmax (m/s)">
+                    <Input type="number" step="0.1" {...register('valvularHemodynamics.asVmax')} placeholder="e.g. 4.2" />
+                  </FieldWrap>
                 </div>
-                <FieldWrap label="Notes" className="col-span-2">
-                  <Textarea {...register('ctca.notes')} placeholder="Additional CT findings..." />
-                </FieldWrap>
+
+                {/* Mitral Stenosis */}
+                <div className="space-y-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10">
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Mitral Stenosis (MS)</p>
+                  <FieldWrap label="MS Grade">
+                    <Select {...register('msGrade')}>
+                      <option value="">Select Grade</option>
+                      <option>None</option>
+                      <option>Mild</option>
+                      <option>Moderate</option>
+                      <option>Severe</option>
+                    </Select>
+                  </FieldWrap>
+                  <FieldWrap label="MVA (cm²)">
+                    <Input type="number" step="0.01" {...register('valvularHemodynamics.msMVA')} placeholder="e.g. 1.2" />
+                  </FieldWrap>
+                  <FieldWrap label="Mean Diastolic Gradient (mmHg)">
+                    <Input type="number" step="0.1" {...register('valvularHemodynamics.msMeanGradient')} placeholder="e.g. 6" />
+                  </FieldWrap>
+                </div>
+
+                {/* Regurgitant Lesions (MR/AR) */}
+                <div className="space-y-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10">
+                  <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Regurgitant Lesions</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldWrap label="MR Grade">
+                      <Select {...register('mrGrade')}>
+                        <option value="">Select</option>
+                        <option>None</option>
+                        <option>Mild</option>
+                        <option>Moderate</option>
+                        <option>Severe</option>
+                      </Select>
+                    </FieldWrap>
+                    <FieldWrap label="AR Grade">
+                      <Select {...register('arGrade')}>
+                        <option value="">Select</option>
+                        <option>None</option>
+                        <option>Mild</option>
+                        <option>Moderate</option>
+                        <option>Severe</option>
+                      </Select>
+                    </FieldWrap>
+                  </div>
+                  <div className="border-t border-gray-800 pt-2 space-y-2">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Mitral Regurgitation (MR)</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <FieldWrap label="Volume (mL)">
+                        <Input type="number" {...register('valvularHemodynamics.mrRegurgitantVolume')} placeholder="45" />
+                      </FieldWrap>
+                      <FieldWrap label="EROA (mm²)">
+                        <Input type="number" step="0.1" {...register('valvularHemodynamics.mrEROA')} placeholder="35" />
+                      </FieldWrap>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-800 pt-2 space-y-2">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Aortic Regurgitation (AR)</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <FieldWrap label="Volume (mL)">
+                        <Input type="number" {...register('valvularHemodynamics.arRegurgitantVolume')} placeholder="50" />
+                      </FieldWrap>
+                      <FieldWrap label="EROA (mm²)">
+                        <Input type="number" step="0.1" {...register('valvularHemodynamics.arEROA')} placeholder="28" />
+                      </FieldWrap>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
-
-        {/* ── Tab 4: Laboratory ───────────────────────────────────── */}
-        {tab === 4 && (
-          <div className="space-y-5">
+        {/* ── Tab: Labs & Biomarkers (conditional) ───────────────── */}
+        {activeTabId === 'labs' && (
+          <div className="space-y-5 animate-fade-in">
             <div>
               <p className="section-heading">Biomarkers</p>
-              <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="NT-proBNP (pg/mL)">
-                  <Input type="number" {...register('ntProBNP')} placeholder="125" />
+              <div className="grid grid-cols-2 gap-4">
+                <FieldWrap label="NT-proBNP (pg/mL)" error={errors.ntProBNP?.message}>
+                  <Input type="number" {...register('ntProBNP')} placeholder="125" error={!!errors.ntProBNP} />
                 </FieldWrap>
-                <FieldWrap label="BNP (pg/mL)">
-                  <Input type="number" {...register('bnp')} placeholder="80" />
+                <FieldWrap label="BNP (pg/mL)" error={errors.bnp?.message}>
+                  <Input type="number" {...register('bnp')} placeholder="80" error={!!errors.bnp} />
                 </FieldWrap>
               </div>
             </div>
             <div>
               <p className="section-heading">Renal & Electrolytes</p>
               <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="eGFR (ml/min/1.73m²)">
-                  <Input type="number" step="0.1" {...register('egfr')} placeholder="60" />
+                <FieldWrap label="eGFR (ml/min/1.73m²)" error={errors.egfr?.message}>
+                  <Input type="number" step="0.1" {...register('egfr')} placeholder="60" error={!!errors.egfr} />
                 </FieldWrap>
-                <FieldWrap label="Creatinine (mg/dL)">
-                  <Input type="number" step="0.01" {...register('creatinine')} placeholder="1.0" />
+                <FieldWrap label="Creatinine (mg/dL)" error={errors.creatinine?.message}>
+                  <Input type="number" step="0.01" {...register('creatinine')} placeholder="1.0" error={!!errors.creatinine} />
                 </FieldWrap>
                 <FieldWrap label="Potassium (mmol/L)">
                   <Input type="number" step="0.1" {...register('potassium')} placeholder="4.2" />
@@ -661,7 +983,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                 <FieldWrap label="Transferrin Saturation (%)">
                   <Input type="number" {...register('transferrinSat')} placeholder="25" />
                 </FieldWrap>
-                <FieldWrap label="TFT — TSH (mIU/L)">
+                <FieldWrap label="TSH (mIU/L)">
                   <Input type="number" step="0.01" {...register('tft')} placeholder="2.5" />
                 </FieldWrap>
                 <FieldWrap label="HbA1c (%)">
@@ -675,267 +997,170 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                 </FieldWrap>
               </div>
             </div>
-            <div>
-              <p className="section-heading">Inflammation Markers</p>
-              <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="hs-CRP (mg/L)">
-                  <Input type="number" step="0.1" {...register('hsCrp')} placeholder="1.5" />
-                </FieldWrap>
-                <FieldWrap label="IL-6 (pg/mL)">
-                  <Input type="number" step="0.1" {...register('il6')} placeholder="5.0" />
-                </FieldWrap>
-                <FieldWrap label="TNF-alpha (pg/mL)">
-                  <Input type="number" step="0.1" {...register('tnfAlpha')} placeholder="2.5" />
-                </FieldWrap>
-              </div>
-            </div>
           </div>
         )}
 
-        {/* ── Tab 5: Vascular & Wearables ─────────────────────────── */}
-        {tab === 5 && (
+        {/* ── Tab: Medications ───────────────────────────────────── */}
+        {activeTabId === 'meds' && (
           <div className="space-y-5">
-            <div>
-              <p className="section-heading">Vascular & Endothelial Assessment</p>
-              <div className="grid grid-cols-2 gap-4">
-                <FieldWrap label="Pulse Wave Velocity (m/s)">
-                  <Input type="number" step="0.1" {...register('vascular.pulseWaveVelocity')} placeholder="8.5" />
-                </FieldWrap>
-                <FieldWrap label="Augmentation Index (%)">
-                  <Input type="number" step="0.1" {...register('vascular.augmentationIndex')} placeholder="25" />
-                </FieldWrap>
-                <FieldWrap label="Central Aortic Pressure (mmHg)">
-                  <Input type="number" {...register('vascular.centralAorticPressure')} placeholder="110" />
-                </FieldWrap>
-                <FieldWrap label="Arterial Stiffness Index">
-                  <Input type="number" step="0.1" {...register('vascular.arterialStiffnessIndex')} placeholder="7.5" />
-                </FieldWrap>
-                <FieldWrap label="Flow-Mediated Dilation (%)">
-                  <Input type="number" step="0.1" {...register('vascular.flowMediatedDilation')} placeholder="5.0" />
-                </FieldWrap>
-                <FieldWrap label="Carotid IMT (mm)">
-                  <Input type="number" step="0.01" {...register('vascular.carotidImt')} placeholder="0.8" />
-                </FieldWrap>
-                <FieldWrap label="Carotid Plaque Burden">
-                  <Select {...register('vascular.carotidPlaqueBurden')}>
-                    <option value="">Select</option>
-                    <option>None</option>
-                    <option>Mild</option>
-                    <option>Moderate</option>
-                    <option>Severe</option>
-                  </Select>
-                </FieldWrap>
-              </div>
-            </div>
-            <div>
-              <p className="section-heading">Holter / Wearables</p>
-              <div className="grid grid-cols-2 gap-4">
-                <FieldWrap label="AF Burden (%)">
-                  <Input type="number" step="0.1" {...register('holterWearable.afBurden')} placeholder="2" />
-                </FieldWrap>
-                <FieldWrap label="PVC Burden (%)">
-                  <Input type="number" step="0.1" {...register('holterWearable.pvcBurden')} placeholder="1" />
-                </FieldWrap>
-                <FieldWrap label="Circadian Rhythm Metrics" className="col-span-2">
-                  <Input {...register('holterWearable.circadianRhythmMetrics')} placeholder="e.g. Preserved, Blunted dipping" />
-                </FieldWrap>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Tab 6: Core Medications ─────────────────────────────── */}
-        {tab === 6 && (
-          <div className="space-y-4">
-            <p className="section-heading">Heart Failure Pharmacotherapy</p>
-            <MedRow label="Diuretics" prescribedField="diuretic.prescribed"
-              typeField="diuretic.type" typeOptions={['Furosemide','Torsemide','Bumetanide','Hydrochlorothiazide']}
-              doseField="diuretic.dose" reasonField="diuretic.reason"
-              control={control} register={register} />
-
-            <MedRow label="ACE Inhibitor / ARB / ARNI (RAASi)" prescribedField="raasi.prescribed"
-              typeField="raasi.type" typeOptions={['Ramipril (ACEi)','Enalapril (ACEi)','Lisinopril (ACEi)','Losartan (ARB)','Valsartan (ARB)','Telmisartan (ARB)','Sacubitril/Valsartan (ARNI)']}
-              doseField="raasi.dose" reasonField="raasi.reason"
-              control={control} register={register} />
-
-            <MedRow label="Beta Blocker" prescribedField="betaBlocker.prescribed"
-              typeField="betaBlocker.type" typeOptions={['Carvedilol','Metoprolol Succinate','Bisoprolol','Nebivolol']}
-              doseField="betaBlocker.dose" reasonField="betaBlocker.reason"
-              control={control} register={register} />
-
-            <MedRow label="MRA — Mineralocorticoid Receptor Antagonist" prescribedField="mra.prescribed"
-              typeField="mra.type" typeOptions={['Spironolactone','Eplerenone','Finerenone']}
-              doseField="mra.dose" reasonField="mra.reason"
-              control={control} register={register} />
-
-            <MedRow label="SGLT2 Inhibitor" prescribedField="sglt2i.prescribed"
-              typeField="sglt2i.type" typeOptions={['Dapagliflozin 10mg OD','Empagliflozin 10mg OD']}
-              doseField="sglt2i.dose" reasonField="sglt2i.reason"
-              control={control} register={register} />
-
-            <MedRow label="Ivabradine" prescribedField="ivabradine.prescribed"
-              doseField="ivabradine.dose" reasonField="ivabradine.reason"
-              control={control} register={register} />
-
-            <MedRow label="Digoxin" prescribedField="digoxin.prescribed"
-              doseField="digoxin.dose" reasonField="digoxin.reason"
-              control={control} register={register} />
-          </div>
-        )}
-
-        {/* ── Tab 7: Extended Medications ────────────────────────── */}
-        {tab === 7 && (
-          <div className="space-y-5">
-            <div>
-              <p className="section-heading">Dyslipidemia Management</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Aspirin</p>
-                  <Controller name="aspirin.prescribed" control={control} render={({ field }) => (
-                    <RadioChipGroup
-                      options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                      value={field.value} onChange={field.onChange} />
-                  )} />
-                  <div className="mt-3">
-                    <FieldWrap label="Dose">
-                      <Input {...register('aspirin.dose')} placeholder="75mg OD" />
-                    </FieldWrap>
-                  </div>
-                </div>
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Statin</p>
-                  <Controller name="statin.prescribed" control={control} render={({ field }) => (
-                    <RadioChipGroup
-                      options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                      value={field.value} onChange={field.onChange} />
-                  )} />
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <FieldWrap label="Type">
-                      <Select {...register('statin.type')}>
-                        <option value="">Select</option>
-                        <option>Atorvastatin</option><option>Rosuvastatin</option>
-                        <option>Pitavastatin</option><option>Simvastatin</option>
-                      </Select>
-                    </FieldWrap>
-                    <FieldWrap label="Dose">
-                      <Input {...register('statin.dose')} placeholder="40mg OD" />
-                    </FieldWrap>
-                  </div>
-                </div>
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Fibrate</p>
-                  <Controller name="fibrate.prescribed" control={control} render={({ field }) => (
-                    <RadioChipGroup
-                      options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                      value={field.value} onChange={field.onChange} />
-                  )} />
-                  <div className="mt-3">
-                    <FieldWrap label="Type">
-                      <Select {...register('fibrate.type')}>
-                        <option value="">Select</option>
-                        <option>Fenofibrate</option><option>Gemfibrozil</option>
-                      </Select>
-                    </FieldWrap>
-                  </div>
-                </div>
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">PCSK-9 Inhibitor</p>
-                  <Controller name="pcsk9.prescribed" control={control} render={({ field }) => (
-                    <RadioChipGroup
-                      options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                      value={field.value} onChange={field.onChange} />
-                  )} />
-                  <div className="mt-3">
-                    <FieldWrap label="Type">
-                      <Select {...register('pcsk9.type')}>
-                        <option value="">Select</option>
-                        <option>Evolocumab</option><option>Alirocumab</option>
-                      </Select>
-                    </FieldWrap>
-                  </div>
+            {/* GDMT Validation / Alert for HFrEF */}
+            {hfType === 'HFrEF' && (
+              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex gap-3 items-start text-xs text-rose-300">
+                <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5 text-rose-400 animate-pulse" />
+                <div>
+                  <p className="font-bold">Guideline-Directed Medical Therapy (GDMT) Required</p>
+                  <p className="text-gray-400 mt-1">
+                    For HFrEF patients, evaluate all core columns: 1) RAASi/ARNI, 2) Beta-Blockers, 3) MRA, and 4) SGLT2 inhibitors.
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div>
-              <p className="section-heading">Diabetes Management (if DM diagnosed)</p>
-              <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="HbA1c (%)">
-                  <Input type="number" step="0.1" {...register('dmManagement.hba1c')} placeholder="7.0" />
-                </FieldWrap>
-                <FieldWrap label="Anti-diabetic Drug & Dose">
-                  <Input {...register('dmManagement.drug')} placeholder="Metformin 500mg BD" />
-                </FieldWrap>
-                <FieldWrap label="Reason if not optimally treated">
-                  <Input {...register('dmManagement.reason')} placeholder="Reason" />
-                </FieldWrap>
-              </div>
-            </div>
+            <p className="section-heading font-semibold text-white">1. Core Heart Failure Therapy</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <MedRow label="Beta Blocker" prescribedField="betaBlocker.prescribed"
+                typeField="betaBlocker.type" typeOptions={['Carvedilol','Metoprolol Succinate','Bisoprolol','Nebivolol']}
+                doseField="betaBlocker.dose" reasonField="betaBlocker.reason"
+                startDateField="betaBlocker.startDate" stopDateField="betaBlocker.stopDate" changeReasonField="betaBlocker.changeReason"
+                control={control} register={register} />
 
-            <div>
-              <p className="section-heading">Iron Deficiency / Anaemia</p>
-              <MedRow label="IV Iron Therapy" prescribedField="ivIron.prescribed"
-                doseField="ivIron.dose" reasonField="ivIron.reason"
+              <MedRow label="ACE Inhibitor / ARB / ARNI (RAASi)" prescribedField="raasi.prescribed"
+                typeField="raasi.type" typeOptions={['Ramipril (ACEi)','Enalapril (ACEi)','Lisinopril (ACEi)','Losartan (ARB)','Valsartan (ARB)','Telmisartan (ARB)','Sacubitril/Valsartan (ARNI)']}
+                doseField="raasi.dose" reasonField="raasi.reason"
+                startDateField="raasi.startDate" stopDateField="raasi.stopDate" changeReasonField="raasi.changeReason"
+                control={control} register={register} />
+
+              <MedRow label="MRA — Mineralocorticoid Receptor Antagonist" prescribedField="mra.prescribed"
+                typeField="mra.type" typeOptions={['Spironolactone','Eplerenone','Finerenone']}
+                doseField="mra.dose" reasonField="mra.reason"
+                startDateField="mra.startDate" stopDateField="mra.stopDate" changeReasonField="mra.changeReason"
+                control={control} register={register} />
+
+              <MedRow label="SGLT2 Inhibitor" prescribedField="sglt2i.prescribed"
+                typeField="sglt2i.type" typeOptions={['Dapagliflozin 10mg OD','Empagliflozin 10mg OD']}
+                doseField="sglt2i.dose" reasonField="sglt2i.reason"
+                startDateField="sglt2i.startDate" stopDateField="sglt2i.stopDate" changeReasonField="sglt2i.changeReason"
                 control={control} register={register} />
             </div>
 
-            <div>
-              <p className="section-heading">Anticoagulation / Anti-arrhythmic</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">NOAC</p>
-                  <Controller name="noac.prescribed" control={control} render={({ field }) => (
-                    <RadioChipGroup
-                      options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                      value={field.value} onChange={field.onChange} />
-                  )} />
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <FieldWrap label="Type">
-                      <Select {...register('noac.type')}>
-                        <option value="">Select</option>
-                        <option>Apixaban</option><option>Rivaroxaban</option>
-                        <option>Dabigatran</option><option>Edoxaban</option>
-                      </Select>
-                    </FieldWrap>
-                    <FieldWrap label="Dose">
-                      <Input {...register('noac.dose')} placeholder="5mg BD" />
-                    </FieldWrap>
-                  </div>
-                </div>
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Vitamin K Inhibitor</p>
-                  <Controller name="vki.prescribed" control={control} render={({ field }) => (
-                    <RadioChipGroup
-                      options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                      value={field.value} onChange={field.onChange} />
-                  )} />
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <FieldWrap label="Type">
-                      <Select {...register('vki.type')}>
-                        <option value="">Select</option>
-                        <option>Warfarin</option><option>Acenocoumarol</option>
-                      </Select>
-                    </FieldWrap>
-                    <FieldWrap label="Dose / INR target">
-                      <Input {...register('vki.dose')} placeholder="INR 2–3" />
-                    </FieldWrap>
-                  </div>
+            <p className="section-heading font-semibold text-white mt-4">2. Other Heart Failure / Clinical Medications</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <MedRow label="Diuretics" prescribedField="diuretic.prescribed"
+                typeField="diuretic.type" typeOptions={['Furosemide','Torsemide','Bumetanide','Hydrochlorothiazide']}
+                doseField="diuretic.dose" reasonField="diuretic.reason"
+                startDateField="diuretic.startDate" stopDateField="diuretic.stopDate" changeReasonField="diuretic.changeReason"
+                control={control} register={register} />
+
+              <MedRow label="Ivabradine" prescribedField="ivabradine.prescribed"
+                doseField="ivabradine.dose" reasonField="ivabradine.reason"
+                startDateField="ivabradine.startDate" stopDateField="ivabradine.stopDate" changeReasonField="ivabradine.changeReason"
+                control={control} register={register} />
+
+              <MedRow label="Digoxin" prescribedField="digoxin.prescribed"
+                doseField="digoxin.dose" reasonField="digoxin.reason"
+                startDateField="digoxin.startDate" stopDateField="digoxin.stopDate" changeReasonField="digoxin.changeReason"
+                control={control} register={register} />
+
+              <MedRow label="IV Iron Therapy" prescribedField="ivIron.prescribed"
+                doseField="ivIron.dose" reasonField="ivIron.reason"
+                startDateField="ivIron.startDate" stopDateField="ivIron.stopDate" changeReasonField="ivIron.changeReason"
+                control={control} register={register} />
+            </div>
+
+            <p className="section-heading font-semibold text-white mt-4">3. Comorbidity & Cardiovascular Therapies</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Aspirin */}
+              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4">
+                <p className="text-sm font-semibold text-white mb-2">Aspirin</p>
+                <Controller name="aspirin.prescribed" control={control} render={({ field }) => (
+                  <RadioChipGroup
+                    options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
+                    value={field.value} onChange={field.onChange} />
+                )} />
+                <div className="mt-3">
+                  <FieldWrap label="Dose">
+                    <Input {...register('aspirin.dose')} placeholder="75mg OD" />
+                  </FieldWrap>
                 </div>
               </div>
-              <div className="mt-3">
-                <FieldWrap label="Reason if anticoagulation not prescribed">
-                  <Input {...register('antiarrhythmicReason')} placeholder="Reason" />
-                </FieldWrap>
+
+              {/* Statin */}
+              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4">
+                <p className="text-sm font-semibold text-white mb-2">Statin</p>
+                <Controller name="statin.prescribed" control={control} render={({ field }) => (
+                  <RadioChipGroup
+                    options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
+                    value={field.value} onChange={field.onChange} />
+                )} />
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <FieldWrap label="Type">
+                    <Select {...register('statin.type')}>
+                      <option value="">Select</option>
+                      <option>Atorvastatin</option><option>Rosuvastatin</option>
+                      <option>Pitavastatin</option><option>Simvastatin</option>
+                    </Select>
+                  </FieldWrap>
+                  <FieldWrap label="Dose">
+                    <Input {...register('statin.dose')} placeholder="40mg OD" />
+                  </FieldWrap>
+                </div>
+              </div>
+
+              {/* Anticoagulants */}
+              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4 col-span-1 md:col-span-2">
+                <p className="text-sm font-semibold text-white mb-3">Anticoagulation / Anti-arrhythmic</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 bg-gray-900/40 border border-blue-500/5 rounded-lg">
+                    <p className="text-xs font-semibold text-gray-400 mb-2">NOAC</p>
+                    <Controller name="noac.prescribed" control={control} render={({ field }) => (
+                      <RadioChipGroup
+                        options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
+                        value={field.value} onChange={field.onChange} />
+                    )} />
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <FieldWrap label="Type">
+                        <Select {...register('noac.type')}>
+                          <option value="">Select</option>
+                          <option>Apixaban</option><option>Rivaroxaban</option>
+                          <option>Dabigatran</option><option>Edoxaban</option>
+                        </Select>
+                      </FieldWrap>
+                      <FieldWrap label="Dose">
+                        <Input {...register('noac.dose')} placeholder="5mg BD" />
+                      </FieldWrap>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-gray-900/40 border border-blue-500/5 rounded-lg">
+                    <p className="text-xs font-semibold text-gray-400 mb-2">Vitamin K Inhibitor</p>
+                    <Controller name="vki.prescribed" control={control} render={({ field }) => (
+                      <RadioChipGroup
+                        options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
+                        value={field.value} onChange={field.onChange} />
+                    )} />
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <FieldWrap label="Type">
+                        <Select {...register('vki.type')}>
+                          <option value="">Select</option>
+                          <option>Warfarin</option><option>Acenocoumarol</option>
+                        </Select>
+                      </FieldWrap>
+                      <FieldWrap label="Dose">
+                        <Input {...register('vki.dose')} placeholder="INR 2-3" />
+                      </FieldWrap>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Tab 8: Device & Vaccination ─────────────────────────── */}
-        {tab === 8 && (
+        {/* ── Tab: Advanced Studies ──────────────────────────────── */}
+        {activeTabId === 'advanced' && (
           <div className="space-y-5">
             <div>
-              <p className="section-heading">Device Therapy</p>
+              <p className="section-heading">Cardiac Rhythm Devices</p>
               <Controller name="device" control={control} render={({ field }) => (
                 <CheckChipGroup
                   options={[
@@ -956,64 +1181,92 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
             </div>
 
             <div>
-              <p className="section-heading">Vaccination</p>
-              <div className="grid grid-cols-2 gap-4">
-                <FieldWrap label="Influenza Vaccine">
-                  <Select {...register('vaccInfluenza')}>
+              <p className="section-heading">Advanced Diagnostics (Vascular / Holter / MRI)</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FieldWrap label="Pulse Wave Velocity (m/s)">
+                  <Input type="number" step="0.1" {...register('vascular.pulseWaveVelocity')} placeholder="8.5" />
+                </FieldWrap>
+                <FieldWrap label="AF Burden (%)">
+                  <Input type="number" step="0.1" {...register('holterWearable.afBurden')} placeholder="2%" />
+                </FieldWrap>
+                <FieldWrap label="Cardiac MRI - LGE Burden (%)">
+                  <Input type="number" step="0.1" {...register('cardiacMRI.lgeBurden')} placeholder="5%" />
+                </FieldWrap>
+                <FieldWrap label="CTCA - Stenosis Severity">
+                  <Select {...register('ctca.stenosisSeverity')}>
                     <option value="">Select</option>
-                    <option>Given – Right arm</option>
-                    <option>Given – Left arm</option>
-                    <option>Not given</option>
-                    <option>Declined</option>
-                    <option>Previously vaccinated</option>
+                    <option>None</option>
+                    <option>Mild (&lt;50%)</option>
+                    <option>Moderate (50-69%)</option>
+                    <option>Severe (≥70%)</option>
                   </Select>
-                </FieldWrap>
-                <FieldWrap label="Influenza Vaccine Date">
-                  <Input type="date" {...register('vaccInfluenzaDate')} />
-                </FieldWrap>
-                <FieldWrap label="Pneumococcal Vaccine">
-                  <Select {...register('vaccPneumo')}>
-                    <option value="">Select</option>
-                    <option>Given – Right arm</option>
-                    <option>Given – Left arm</option>
-                    <option>Not given</option>
-                    <option>Declined</option>
-                    <option>Previously vaccinated</option>
-                  </Select>
-                </FieldWrap>
-                <FieldWrap label="Pneumococcal Vaccine Date">
-                  <Input type="date" {...register('vaccPneumoDate')} />
                 </FieldWrap>
               </div>
             </div>
 
             <div>
-              <p className="section-heading">Functional Assessment</p>
-              <div className="grid grid-cols-3 gap-4">
-                <FieldWrap label="Hand Grip — Right (kg)">
+              <p className="section-heading">Vaccinations & Strength</p>
+              <div className="grid grid-cols-2 gap-4">
+                <FieldWrap label="Influenza Vaccine Status">
+                  <Select {...register('vaccInfluenza')}>
+                    <option value="">Select</option>
+                    <option>Given</option>
+                    <option>Not given</option>
+                    <option>Declined</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="Hand Grip Strength - Right (kg)">
                   <Input type="number" step="0.1" {...register('gripRight')} placeholder="28" />
                 </FieldWrap>
-                <FieldWrap label="Hand Grip — Left (kg)">
-                  <Input type="number" step="0.1" {...register('gripLeft')} placeholder="26" />
+              </div>
+            </div>
+
+            <div>
+              <p className="section-heading text-white">Coronary Anatomy & Prior Revascularization</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <FieldWrap label="LM Stenosis (%)" error={errors.coronaryAnatomy?.lmStenosis?.message}>
+                  <Input type="number" {...register('coronaryAnatomy.lmStenosis')} placeholder="e.g. 50" error={!!errors.coronaryAnatomy?.lmStenosis} />
                 </FieldWrap>
-                <FieldWrap label="Frailty Assessment">
-                  <Select {...register('frailty')}>
-                    <option value="">Select</option>
-                    <option>Not frail</option>
-                    <option>Pre-frail</option>
-                    <option>Frail</option>
+                <FieldWrap label="LAD Stenosis (%)" error={errors.coronaryAnatomy?.ladStenosis?.message}>
+                  <Input type="number" {...register('coronaryAnatomy.ladStenosis')} placeholder="e.g. 70" error={!!errors.coronaryAnatomy?.ladStenosis} />
+                </FieldWrap>
+                <FieldWrap label="LCx Stenosis (%)" error={errors.coronaryAnatomy?.lcxStenosis?.message}>
+                  <Input type="number" {...register('coronaryAnatomy.lcxStenosis')} placeholder="e.g. 30" error={!!errors.coronaryAnatomy?.lcxStenosis} />
+                </FieldWrap>
+                <FieldWrap label="RCA Stenosis (%)" error={errors.coronaryAnatomy?.rcaStenosis?.message}>
+                  <Input type="number" {...register('coronaryAnatomy.rcaStenosis')} placeholder="e.g. 0" error={!!errors.coronaryAnatomy?.rcaStenosis} />
+                </FieldWrap>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <FieldWrap label="SYNTAX Score" error={errors.coronaryAnatomy?.syntaxScore?.message} hint="Lesion complexity score">
+                  <Input type="number" {...register('coronaryAnatomy.syntaxScore')} placeholder="e.g. 22" error={!!errors.coronaryAnatomy?.syntaxScore} />
+                </FieldWrap>
+                <FieldWrap label="Prior Revascularization">
+                  <Select {...register('coronaryAnatomy.revascularizationType')}>
+                    <option value="">None / Select</option>
+                    <option value="None">None</option>
+                    <option value="PCI">PCI</option>
+                    <option value="CABG">CABG</option>
+                    <option value="Both">Both PCI & CABG</option>
                   </Select>
+                </FieldWrap>
+                <FieldWrap label="Prior PCI Date">
+                  <Input type="date" {...register('coronaryAnatomy.priorPciDate')} />
+                </FieldWrap>
+                <FieldWrap label="Prior CABG Date">
+                  <Input type="date" {...register('coronaryAnatomy.priorCabgDate')} />
                 </FieldWrap>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Tab 9: Education & Follow-up ────────────────────────── */}
-        {tab === 9 && (
+        {/* ── Tab: QoL & SDOH ─────────────────────────────────────── */}
+        {activeTabId === 'qol' && (
           <div className="space-y-5">
             <div>
-              <p className="section-heading">Patient Education Provided</p>
+              <p className="section-heading">Patient Lifestyle Education</p>
               <Controller name="education" control={control} render={({ field }) => (
                 <CheckChipGroup
                   options={[
@@ -1024,38 +1277,104 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
                     { value: 'Worsening symptoms',  label: 'Detection of worsening symptoms' },
                     { value: 'Medication adherence',label: 'Medication adherence' },
                     { value: 'Salt restriction',    label: 'Salt restriction (<2g/day)' },
-                    { value: 'Smoking cessation',   label: 'Smoking cessation' },
-                    { value: 'Alcohol restriction', label: 'Alcohol restriction' },
                   ]}
                   value={field.value}
                   onChange={field.onChange}
                 />
               )} />
-              <div className="mt-3">
-                <FieldWrap label="Education notes">
-                  <Textarea {...register('eduNotes')} placeholder="Additional patient education notes…" />
+            </div>
+
+            <div>
+              <p className="section-heading text-white">Symptom Trajectory & EQ-5D-5L QoL Index</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <FieldWrap label="Symptom Trajectory" hint="Clinical status change since last visit">
+                  <Select {...register('symptomTrajectory')}>
+                    <option value="">Select Trajectory</option>
+                    <option value="Improving">Improving</option>
+                    <option value="Stable">Stable</option>
+                    <option value="Worsening">Worsening</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="EQ-VAS Health State Score (0-100)" hint="0 (worst) to 100 (best) self-rated health" error={errors.eq5d?.healthStateScore?.message}>
+                  <Input type="number" {...register('eq5d.healthStateScore')} placeholder="e.g. 75" error={!!errors.eq5d?.healthStateScore} />
+                </FieldWrap>
+              </div>
+
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">EQ-5D-5L Dimension Scores (1: Best, 5: Worst)</p>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10">
+                <FieldWrap label="Mobility" error={errors.eq5d?.mobility?.message}>
+                  <Select {...register('eq5d.mobility')}>
+                    <option value="">Select</option>
+                    <option value="1">1 - No problems</option>
+                    <option value="2">2 - Slight problems</option>
+                    <option value="3">3 - Moderate problems</option>
+                    <option value="4">4 - Severe problems</option>
+                    <option value="5">5 - Extreme problems</option>
+                  </Select>
+                </FieldWrap>
+
+                <FieldWrap label="Self-Care" error={errors.eq5d?.selfCare?.message}>
+                  <Select {...register('eq5d.selfCare')}>
+                    <option value="">Select</option>
+                    <option value="1">1 - No problems</option>
+                    <option value="2">2 - Slight problems</option>
+                    <option value="3">3 - Moderate problems</option>
+                    <option value="4">4 - Severe problems</option>
+                    <option value="5">5 - Extreme problems</option>
+                  </Select>
+                </FieldWrap>
+
+                <FieldWrap label="Usual Activities" error={errors.eq5d?.usualActivities?.message}>
+                  <Select {...register('eq5d.usualActivities')}>
+                    <option value="">Select</option>
+                    <option value="1">1 - No problems</option>
+                    <option value="2">2 - Slight problems</option>
+                    <option value="3">3 - Moderate problems</option>
+                    <option value="4">4 - Severe problems</option>
+                    <option value="5">5 - Extreme problems</option>
+                  </Select>
+                </FieldWrap>
+
+                <FieldWrap label="Pain / Discomfort" error={errors.eq5d?.painDiscomfort?.message}>
+                  <Select {...register('eq5d.painDiscomfort')}>
+                    <option value="">Select</option>
+                    <option value="1">1 - No discomfort</option>
+                    <option value="2">2 - Slight discomfort</option>
+                    <option value="3">3 - Moderate discomfort</option>
+                    <option value="4">4 - Severe discomfort</option>
+                    <option value="5">5 - Extreme discomfort</option>
+                  </Select>
+                </FieldWrap>
+
+                <FieldWrap label="Anxiety / Depression" error={errors.eq5d?.anxietyDepression?.message}>
+                  <Select {...register('eq5d.anxietyDepression')}>
+                    <option value="">Select</option>
+                    <option value="1">1 - Not anxious/depressed</option>
+                    <option value="2">2 - Slightly anxious/depressed</option>
+                    <option value="3">3 - Moderately anxious/depressed</option>
+                    <option value="4">4 - Severely anxious/depressed</option>
+                    <option value="5">5 - Extremely anxious/depressed</option>
+                  </Select>
                 </FieldWrap>
               </div>
             </div>
+
             <div>
-              <p className="section-heading">Follow-up Plan</p>
-              <div className="grid grid-cols-2 gap-4">
+              <p className="section-heading">Follow-up Plan & Clinical Notes</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FieldWrap label="Next Follow-up Date">
                   <Input type="date" {...register('followupDate')} />
                 </FieldWrap>
                 <FieldWrap label="Follow-up Type">
                   <Select {...register('followupType')}>
                     <option value="">Select</option>
-                    <option>OPD</option>
-                    <option>Telemedicine</option>
+                    <option value="OPD">OPD</option>
+                    <option value="Telemedicine">Telemedicine</option>
+                    <option value="Inpatient">Inpatient</option>
                   </Select>
                 </FieldWrap>
-                <FieldWrap label="Clinical Notes / Assessment" className="col-span-2">
-                  <Textarea
-                    {...register('clinicalNotes')}
-                    rows={5}
-                    placeholder="Clinical assessment, differential diagnoses, management plan, response to treatment…"
-                  />
+                <FieldWrap label="Clinical Assessment Notes" className="md:col-span-2">
+                  <Textarea {...register('clinicalNotes')} rows={5} placeholder="Clinical assessment, differential diagnoses, management plan, response to treatment…" />
                 </FieldWrap>
               </div>
             </div>
@@ -1063,7 +1382,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading }: Props) {
         )}
 
         {/* Navigation */}
-        <div className="flex justify-between pt-4 border-t border-gray-100">
+        <div className="flex justify-between pt-4 border-t border-blue-500/10">
           <Button
             type="button"
             variant="outline"

@@ -95,6 +95,64 @@ function VisitCard({ visit, onDelete }: { visit: Visit; onDelete?: (id: string) 
             </div>
           )}
 
+          {/* Valvular Hemodynamics */}
+          {(visit.valvularHemodynamics && Object.values(visit.valvularHemodynamics).some(v => v !== undefined && v !== '')) && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 mb-2">Valvular Hemodynamics</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                {visit.asGrade && <div><span className="text-gray-400">AS Grade:</span> <span className="font-semibold text-gray-700">{visit.asGrade}</span></div>}
+                {visit.valvularHemodynamics.asAVA && <div><span className="text-gray-400">AVA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asAVA} cm²</span></div>}
+                {visit.valvularHemodynamics.asMeanGradient && <div><span className="text-gray-400">AS Mean Grad:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asMeanGradient} mmHg</span></div>}
+                {visit.valvularHemodynamics.asVmax && <div><span className="text-gray-400">AS Vmax:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asVmax} m/s</span></div>}
+                
+                {visit.msGrade && <div><span className="text-gray-400">MS Grade:</span> <span className="font-semibold text-gray-700">{visit.msGrade}</span></div>}
+                {visit.valvularHemodynamics.msMVA && <div><span className="text-gray-400">MVA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.msMVA} cm²</span></div>}
+                {visit.valvularHemodynamics.msMeanGradient && <div><span className="text-gray-400">MS Mean Grad:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.msMeanGradient} mmHg</span></div>}
+
+                {visit.mrGrade && <div><span className="text-gray-400">MR Grade:</span> <span className="font-semibold text-gray-700">{visit.mrGrade}</span></div>}
+                {visit.valvularHemodynamics.mrRegurgitantVolume && <div><span className="text-gray-400">MR Regurg. Vol:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.mrRegurgitantVolume} mL</span></div>}
+                {visit.valvularHemodynamics.mrEROA && <div><span className="text-gray-400">MR EROA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.mrEROA} mm²</span></div>}
+
+                {visit.arGrade && <div><span className="text-gray-400">AR Grade:</span> <span className="font-semibold text-gray-700">{visit.arGrade}</span></div>}
+                {visit.valvularHemodynamics.arRegurgitantVolume && <div><span className="text-gray-400">AR Regurg. Vol:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.arRegurgitantVolume} mL</span></div>}
+                {visit.valvularHemodynamics.arEROA && <div><span className="text-gray-400">AR EROA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.arEROA} mm²</span></div>}
+              </div>
+            </div>
+          )}
+
+          {/* Coronary Anatomy */}
+          {(visit.coronaryAnatomy && Object.values(visit.coronaryAnatomy).some(v => v !== undefined && v !== '')) && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 mb-2">Coronary Anatomy & Prior Interventions</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                {visit.coronaryAnatomy.lmStenosis && <div><span className="text-gray-400">LM Stenosis:</span> <span className="font-semibold text-gray-700">{visit.coronaryAnatomy.lmStenosis}%</span></div>}
+                {visit.coronaryAnatomy.ladStenosis && <div><span className="text-gray-400">LAD Stenosis:</span> <span className="font-semibold text-gray-700">{visit.coronaryAnatomy.ladStenosis}%</span></div>}
+                {visit.coronaryAnatomy.lcxStenosis && <div><span className="text-gray-400">LCx Stenosis:</span> <span className="font-semibold text-gray-700">{visit.coronaryAnatomy.lcxStenosis}%</span></div>}
+                {visit.coronaryAnatomy.rcaStenosis && <div><span className="text-gray-400">RCA Stenosis:</span> <span className="font-semibold text-gray-700">{visit.coronaryAnatomy.rcaStenosis}%</span></div>}
+                {visit.coronaryAnatomy.syntaxScore && <div><span className="text-gray-400">SYNTAX Score:</span> <span className="font-semibold text-red-600">{visit.coronaryAnatomy.syntaxScore}</span></div>}
+                {visit.coronaryAnatomy.revascularizationType && <div><span className="text-gray-400">Prior Revascularization:</span> <span className="font-semibold text-gray-700">{visit.coronaryAnatomy.revascularizationType}</span></div>}
+                {visit.coronaryAnatomy.priorPciDate && <div><span className="text-gray-400">PCI Date:</span> <span className="font-semibold text-gray-700">{visit.coronaryAnatomy.priorPciDate}</span></div>}
+                {visit.coronaryAnatomy.priorCabgDate && <div><span className="text-gray-400">CABG Date:</span> <span className="font-semibold text-gray-700">{visit.coronaryAnatomy.priorCabgDate}</span></div>}
+              </div>
+            </div>
+          )}
+
+          {/* QoL & Trajectory */}
+          {((visit.eq5d && Object.values(visit.eq5d).some(v => v !== undefined && v !== '')) || visit.symptomTrajectory) && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 mb-2">Symptom Trajectory & EQ-5D-5L</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                {visit.symptomTrajectory && <div><span className="text-gray-400">Symptom Trajectory:</span> <span className={cn('font-bold', visit.symptomTrajectory === 'Improving' ? 'text-green-600' : visit.symptomTrajectory === 'Worsening' ? 'text-red-600' : 'text-blue-600')}>{visit.symptomTrajectory}</span></div>}
+                {visit.eq5d?.healthStateScore && <div><span className="text-gray-400">EQ-VAS Score:</span> <span className="font-semibold text-gray-700">{visit.eq5d.healthStateScore}/100</span></div>}
+                {visit.eq5d?.mobility && <div><span className="text-gray-400">Mobility:</span> <span className="font-semibold text-gray-700">{visit.eq5d.mobility}/5</span></div>}
+                {visit.eq5d?.selfCare && <div><span className="text-gray-400">Self-Care:</span> <span className="font-semibold text-gray-700">{visit.eq5d.selfCare}/5</span></div>}
+                {visit.eq5d?.usualActivities && <div><span className="text-gray-400">Usual Activities:</span> <span className="font-semibold text-gray-700">{visit.eq5d.usualActivities}/5</span></div>}
+                {visit.eq5d?.painDiscomfort && <div><span className="text-gray-400">Pain/Discomfort:</span> <span className="font-semibold text-gray-700">{visit.eq5d.painDiscomfort}/5</span></div>}
+                {visit.eq5d?.anxietyDepression && <div><span className="text-gray-400">Anxiety/Depression:</span> <span className="font-semibold text-gray-700">{visit.eq5d.anxietyDepression}/5</span></div>}
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           {visit.clinicalNotes && (
             <div className="mt-3 pt-3 border-t border-gray-100">

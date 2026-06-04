@@ -3,19 +3,27 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  getPatient, getVisits, deleteVisit, updatePatient,
+  getPatient, getVisits, deleteVisit, updatePatient, getPatientTrends,
+  getOutcomeEvents, addOutcomeEvent, deleteOutcomeEvent, deletePatient
 } from '@/lib/firestore'
-import { getPatientTrends } from '@/lib/firestore'
-import type { Patient, Visit } from '@/lib/types'
+import type { Patient, Visit, OutcomeEvent, OutcomeEventInput, EventType } from '@/lib/types'
 import { getAge, formatDate, nyhaBadgeColor, hfTypeBadgeColor, lvefColor, initials, cn } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card'
+import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
 import Button from '@/components/ui/Button'
 import VisitTimeline from '@/components/patients/VisitTimeline'
 import MetricTrendChart from '@/components/charts/MetricTrendChart'
 import PatientForm from '@/components/forms/PatientForm'
 import type { PatientTrends } from '@/lib/types'
 import { toast } from 'sonner'
-import { PlusCircle, Edit2, X, Activity } from 'lucide-react'
+import { PlusCircle, Edit2, X, Activity, ShieldAlert, Award, Calendar, Trash2 } from 'lucide-react'
+
+const EVENT_TYPES: EventType[] = [
+  'All-cause death', 'CV death', 'HF hospitalisation', 'Urgent HF visit', 'LVAD implant',
+  'Heart transplant', 'ICD appropriate shock', 'ICD inappropriate shock', 'Stroke / TIA',
+  'Myocardial infarction', 'AKI requiring RRT', 'Worsening HF (outpatient)', 'Ventricular arrhythmia',
+  'AF new-onset', 'Other CV event'
+]
 
 export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -25,13 +33,24 @@ export default function PatientDetailPage() {
   const [patient, setPatient] = useState<Patient | null>(null)
   const [visits, setVisits] = useState<Visit[]>([])
   const [trends, setTrends] = useState<PatientTrends | null>(null)
+  const [outcomeEvents, setOutcomeEvents] = useState<OutcomeEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends'>('overview')
+  const [addingEvent, setAddingEvent] = useState(false)
+  const [savingEvent, setSavingEvent] = useState(false)
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends' | 'outcomes'>('overview')
+
+  // Outcome Event Form State
+  const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0])
+  const [eventType, setEventType] = useState<EventType>('HF hospitalisation')
+  const [eventDesc, setEventDesc] = useState('')
+  const [eventHosp, setEventHosp] = useState('')
+  const [eventAdjudicated, setEventAdjudicated] = useState(true)
+  const [eventAdjudicator, setEventAdjudicator] = useState('Dr. A. Jayachandra')
 
   useEffect(() => {
-    if (tabParam === 'overview' || tabParam === 'timeline' || tabParam === 'trends') {
+    if (tabParam === 'overview' || tabParam === 'timeline' || tabParam === 'trends' || tabParam === 'outcomes') {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -40,19 +59,20 @@ export default function PatientDetailPage() {
     let p = await getPatient(id)
     let v = await getVisits(id)
     let t = await getPatientTrends(id)
+    let o = await getOutcomeEvents(id)
 
     // Fallback Mock data for demo patients
     if (!p) {
       const mockDb: Record<string, Patient> = {
-        '1': { id: '1', firstName: 'Arjun', lastName: 'Talpade', dob: '1978-05-19', sex: 'Male', mrn: 'MRN-784019', contact: '+91 9823019283', address: 'Kothrud, Pune, Maharashtra', comorbidities: 'HTN, Type 2 Diabetes', allergies: 'Penicillin', createdAt: '2026-05-19T10:00:00Z', updatedAt: '2026-05-19T10:00:00Z' },
-        '2': { id: '2', firstName: 'Sunita', lastName: 'Deshmukh', dob: '1982-11-20', sex: 'Female', mrn: 'MRN-201948', contact: '+91 9123049182', address: 'Shivajinagar, Pune, Maharashtra', comorbidities: 'Dyslipidemia', allergies: 'None', createdAt: '2026-05-20T10:00:00Z', updatedAt: '2026-05-20T10:00:00Z' },
-        '3': { id: '3', firstName: 'Ramesh', lastName: 'Kulkarni', dob: '1965-03-22', sex: 'Male', mrn: 'MRN-849102', contact: '+91 9422019283', address: 'Deccan Gymkhana, Pune, Maharashtra', comorbidities: 'CAD, Prior CABG', allergies: 'Aspirin (Mild GI)', createdAt: '2026-05-22T10:00:00Z', updatedAt: '2026-05-22T10:00:00Z' },
-        '4': { id: '4', firstName: 'Priya', lastName: 'Sharma', dob: '1990-07-23', sex: 'Female', mrn: 'MRN-102948', contact: '+91 9011029481', address: 'Aundh, Pune, Maharashtra', comorbidities: 'None', allergies: 'Sulfa drugs', createdAt: '2026-05-23T10:00:00Z', updatedAt: '2026-05-23T10:00:00Z' },
-        '5': { id: '5', firstName: 'Vijay', lastName: 'Mallya', dob: '1955-12-18', sex: 'Male', mrn: 'MRN-998822', contact: '+91 9890123456', address: 'Cuffe Parade, Mumbai, Maharashtra', comorbidities: 'Gout, HTN', allergies: 'None', createdAt: '2026-05-24T10:00:00Z', updatedAt: '2026-05-24T10:00:00Z' },
-        '6': { id: '6', firstName: 'Ananya', lastName: 'Rao', dob: '1995-04-26', sex: 'Female', mrn: 'MRN-334455', contact: '+91 9881122334', address: 'Viman Nagar, Pune, Maharashtra', comorbidities: 'Asthma', allergies: 'None', createdAt: '2026-05-26T10:00:00Z', updatedAt: '2026-05-26T10:00:00Z' },
-        '7': { id: '7', firstName: 'Amitabh', lastName: 'Bachchan', dob: '1942-10-11', sex: 'Male', mrn: 'MRN-000777', contact: '+91 9820098200', address: 'Juhu, Mumbai, Maharashtra', comorbidities: 'COPD, Prior Angioplasty', allergies: 'None', createdAt: '2026-05-28T10:00:00Z', updatedAt: '2026-05-28T10:00:00Z' },
-        '8': { id: '8', firstName: 'Sanjay', lastName: 'More', dob: '1980-08-15', sex: 'Male', mrn: 'MRN-554432', contact: '+91 9869234857', address: 'Dadar, Mumbai, Maharashtra', comorbidities: 'CAD, STEMI post-PCI', allergies: 'None', createdAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-01T10:00:00Z' },
-        '9': { id: '9', firstName: 'Lata', lastName: 'Patwardhan', dob: '1972-02-14', sex: 'Female', mrn: 'MRN-887766', contact: '+91 9371029485', address: 'Dhantoli, Nagpur, Maharashtra', comorbidities: 'HFrEF, Chronic Kidney Disease', allergies: 'Contrast (Mild)', createdAt: '2026-06-02T10:00:00Z', updatedAt: '2026-06-02T10:00:00Z' }
+        '1': { id: '1', firstName: 'Arjun', lastName: 'Talpade', dob: '1978-05-19', sex: 'Male', mrn: 'MRN-784019', contact: '+91 9823019283', address: 'Kothrud, Pune, Maharashtra', comorbidities: 'HTN, Type 2 Diabetes', allergies: 'Penicillin', createdAt: '2026-05-19T10:00:00Z', updatedAt: '2026-05-19T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
+        '2': { id: '2', firstName: 'Sunita', lastName: 'Deshmukh', dob: '1982-11-20', sex: 'Female', mrn: 'MRN-201948', contact: '+91 9123049182', address: 'Shivajinagar, Pune, Maharashtra', comorbidities: 'Dyslipidemia', allergies: 'None', createdAt: '2026-05-20T10:00:00Z', updatedAt: '2026-05-20T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
+        '3': { id: '3', firstName: 'Ramesh', lastName: 'Kulkarni', dob: '1965-03-22', sex: 'Male', mrn: 'MRN-849102', contact: '+91 9422019283', address: 'Deccan Gymkhana, Pune, Maharashtra', comorbidities: 'CAD, Prior CABG', allergies: 'Aspirin (Mild GI)', createdAt: '2026-05-22T10:00:00Z', updatedAt: '2026-05-22T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
+        '4': { id: '4', firstName: 'Priya', lastName: 'Sharma', dob: '1990-07-23', sex: 'Female', mrn: 'MRN-102948', contact: '+91 9011029481', address: 'Aundh, Pune, Maharashtra', comorbidities: 'None', allergies: 'Sulfa drugs', createdAt: '2026-05-23T10:00:00Z', updatedAt: '2026-05-23T10:00:00Z', status: 'Inactive', consentStatus: 'Declined' },
+        '5': { id: '5', firstName: 'Vijay', lastName: 'Mallya', dob: '1955-12-18', sex: 'Male', mrn: 'MRN-998822', contact: '+91 9890123456', address: 'Cuffe Parade, Mumbai, Maharashtra', comorbidities: 'Gout, HTN', allergies: 'None', createdAt: '2026-05-24T10:00:00Z', updatedAt: '2026-05-24T10:00:00Z', status: 'Active', consentStatus: 'Pending' },
+        '6': { id: '6', firstName: 'Ananya', lastName: 'Rao', dob: '1995-04-26', sex: 'Female', mrn: 'MRN-334455', contact: '+91 9881122334', address: 'Viman Nagar, Pune, Maharashtra', comorbidities: 'Asthma', allergies: 'None', createdAt: '2026-05-26T10:00:00Z', updatedAt: '2026-05-26T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
+        '7': { id: '7', firstName: 'Amitabh', lastName: 'Bachchan', dob: '1942-10-11', sex: 'Male', mrn: 'MRN-000777', contact: '+91 9820098200', address: 'Juhu, Mumbai, Maharashtra', comorbidities: 'COPD, Prior Angioplasty', allergies: 'None', createdAt: '2026-05-28T10:00:00Z', updatedAt: '2026-05-28T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
+        '8': { id: '8', firstName: 'Sanjay', lastName: 'More', dob: '1980-08-15', sex: 'Male', mrn: 'MRN-554432', contact: '+91 9869234857', address: 'Dadar, Mumbai, Maharashtra', comorbidities: 'CAD, STEMI post-PCI', allergies: 'None', createdAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-01T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
+        '9': { id: '9', firstName: 'Lata', lastName: 'Patwardhan', dob: '1972-02-14', sex: 'Female', mrn: 'MRN-887766', contact: '+91 9371029485', address: 'Dhantoli, Nagpur, Maharashtra', comorbidities: 'HFrEF, Chronic Kidney Disease', allergies: 'Contrast (Mild)', createdAt: '2026-06-02T10:00:00Z', updatedAt: '2026-06-02T10:00:00Z', status: 'Active', consentStatus: 'Granted' }
       }
       p = mockDb[id] || null
       if (p) {
@@ -105,6 +125,7 @@ export default function PatientDetailPage() {
     setPatient(p)
     setVisits(v)
     setTrends(t)
+    setOutcomeEvents(o)
     setLoading(false)
   }, [id])
 
@@ -128,6 +149,59 @@ export default function PatientDetailPage() {
     finally { setSaving(false) }
   }
 
+  const handleAddEventSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingEvent(true)
+    try {
+      const input: OutcomeEventInput = {
+        patientId: id,
+        eventDate,
+        eventType,
+        description: eventDesc,
+        hospitalName: eventHosp,
+        adjudicated: eventAdjudicated,
+        adjudicatedBy: eventAdjudicator
+      }
+      await addOutcomeEvent(id, input)
+      toast.success('Outcome event recorded')
+      setAddingEvent(false)
+      setEventDesc('')
+      setEventHosp('')
+      load()
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to add outcome event')
+    } finally {
+      setSavingEvent(false)
+    }
+  }
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!confirm('Delete this outcome event?')) return
+    try {
+      await deleteOutcomeEvent(id, eventId)
+      toast.success('Outcome event deleted')
+      load()
+    } catch {
+      toast.error('Failed to delete event')
+    }
+  }
+
+  const handleDeletePatient = async () => {
+    if (typeof window === 'undefined') return
+    const ok = window.confirm("WARNING: Are you sure you want to delete this patient? This action is permanent and will cascade to delete all visits, events, and outcomes.")
+    if (!ok) return
+
+    try {
+      await deletePatient(id)
+      toast.success('Patient record deleted successfully')
+      router.push('/patients')
+    } catch (e) {
+      console.error(e)
+      toast.error('Failed to delete patient')
+    }
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <Activity className="w-6 h-6 text-blue-400 animate-pulse" />
@@ -141,6 +215,10 @@ export default function PatientDetailPage() {
 
   const latest = visits[0] ?? null
   const age = getAge(patient.dob)
+
+  // Consent Status Check for Visit Gating
+  const consentStatus = patient.consentStatus || 'Pending'
+  const isConsentGated = consentStatus === 'Pending' || consentStatus === 'Declined'
 
   return (
     <div className="space-y-6 text-gray-300">
@@ -161,6 +239,13 @@ export default function PatientDetailPage() {
               Region: Maharashtra, India
             </p>
             <div className="flex gap-2 mt-3 flex-wrap justify-center md:justify-start">
+              {/* Consent Badge */}
+              <span className={cn('badge text-[10px] uppercase font-extrabold',
+                consentStatus === 'Granted' ? 'badge-green' :
+                consentStatus === 'Declined' ? 'badge-red' : 'badge-amber'
+              )}>
+                Consent: {consentStatus}
+              </span>
               {latest?.hfType && (
                 <span className={cn('badge text-[10px] uppercase font-bold', hfTypeBadgeColor(latest.hfType))}>
                   {latest.hfType}
@@ -185,20 +270,54 @@ export default function PatientDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Link href={`/patients/${id}/visits/new`}>
-            <Button size="sm"><PlusCircle className="w-4 h-4" /> Record Visit</Button>
-          </Link>
+          {isConsentGated ? (
+            <button
+              disabled
+              title={`Cannot record visit while consent is ${consentStatus}`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30"
+            >
+              <PlusCircle className="w-4 h-4" /> Record Visit Gated
+            </button>
+          ) : (
+            <Link href={`/patients/${id}/visits/new`}>
+              <Button size="sm"><PlusCircle className="w-4 h-4" /> Record Visit</Button>
+            </Link>
+          )}
           <Button variant="outline" size="sm" onClick={() => setEditing(e => !e)}>
             {editing ? <><X className="w-4 h-4" /> Cancel</> : <><Edit2 className="w-4 h-4" /> Edit Profile</>}
           </Button>
+          {!editing && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+              onClick={handleDeletePatient}
+            >
+              <Trash2 className="w-4 h-4" /> Delete Patient
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Consent Gating Warning Banner */}
+      {isConsentGated && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex gap-3 items-start text-xs text-rose-300">
+          <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5 text-rose-400 animate-pulse" />
+          <div>
+            <p className="font-bold">Regulatory Consent Required</p>
+            <p className="text-gray-400 mt-1">
+              Data capture is disabled because this patient's consent status is currently <strong>{consentStatus}</strong>.
+              Go to "Edit Profile" or register patient consent status as "Granted" to record clinical visits.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Edit patient form */}
       {editing && (
         <Card className="mb-5">
           <CardHeader>
-            <CardTitle>Edit Patient Demographics</CardTitle>
+            <CardTitle>Edit Patient Demographics & Consent</CardTitle>
           </CardHeader>
           <CardBody>
             <PatientForm
@@ -236,14 +355,19 @@ export default function PatientDetailPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-5">
-        {(['overview', 'timeline', 'trends'] as const).map(t => (
+      <div className="flex border-b border-blue-500/10 mb-5 gap-4">
+        {([
+          { id: 'overview', label: 'Overview' },
+          { id: 'timeline', label: 'Timeline' },
+          { id: 'trends', label: 'Trends' },
+          { id: 'outcomes', label: 'Outcome Events' }
+        ] as const).map(t => (
           <button
-            key={t}
-            className={cn('tab-btn capitalize', activeTab === t && 'active')}
-            onClick={() => setActiveTab(t)}
+            key={t.id}
+            className={cn('tab-btn pb-3 border-b-2 font-semibold text-xs', activeTab === t.id ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-gray-200')}
+            onClick={() => setActiveTab(t.id)}
           >
-            {t}
+            {t.label}
           </button>
         ))}
       </div>
@@ -260,14 +384,16 @@ export default function PatientDetailPage() {
                 ['Date of Birth', formatDate(patient.dob)],
                 ['Age', age ? `${age} years` : '—'],
                 ['Sex', patient.sex],
+                ['Index Date', patient.indexDate ? formatDate(patient.indexDate) : '—'],
+                ['Consent status', patient.consentStatus ?? 'Pending'],
                 ['Contact', patient.contact ?? '—'],
                 ['Email', patient.email ?? '—'],
-                ['Comorbidities', patient.comorbidities ?? '—'],
+                ['Comorbidities', Array.isArray(patient.comorbidities) ? patient.comorbidities.join(', ') : (patient.comorbidities ?? '—')],
                 ['Allergies', patient.allergies ?? '—'],
               ].map(([k, v]) => (
-                <div key={k} className="flex justify-between py-1 border-b border-gray-50">
+                <div key={k} className="flex justify-between py-1.5 border-b border-blue-500/5">
                   <span className="text-gray-500">{k}</span>
-                  <span className="font-medium text-gray-700 text-right max-w-[55%]">{v}</span>
+                  <span className="font-medium text-white text-right max-w-[55%]">{v}</span>
                 </div>
               ))}
             </CardBody>
@@ -289,9 +415,9 @@ export default function PatientDetailPage() {
                   ['TSH', latest.tft != null ? `${latest.tft} mIU/L` : '—'],
                   ['Next Follow-up', formatDate(latest.followupDate)],
                 ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between py-1 border-b border-gray-50">
+                  <div key={k} className="flex justify-between py-1.5 border-b border-blue-500/5">
                     <span className="text-gray-500">{k}</span>
-                    <span className="font-medium text-gray-700 text-right max-w-[55%]">{v}</span>
+                    <span className="font-medium text-white text-right max-w-[55%]">{v}</span>
                   </div>
                 ))}
               </CardBody>
@@ -314,20 +440,25 @@ export default function PatientDetailPage() {
                     { label: 'IV Iron', med: latest.ivIron },
                   ].map(({ label, med }) => (
                     <div key={label} className={cn(
-                      'p-3 rounded-lg border text-xs',
-                      med?.prescribed === 'Yes' ? 'bg-green-50 border-green-200' :
-                      med?.prescribed === 'No' ? 'bg-gray-50 border-gray-200' : 'bg-gray-50 border-gray-100'
+                      'p-3 rounded-lg border text-xs bg-gray-800/40 border-blue-500/10'
                     )}>
-                      <p className="font-semibold text-gray-700">{label}</p>
+                      <p className="font-semibold text-white">{label}</p>
                       {med?.prescribed === 'Yes' ? (
                         <>
-                          {med.type && <p className="text-gray-600 mt-0.5">{med.type}</p>}
-                          {med.dose && <p className="font-semibold text-green-700">{med.dose}</p>}
+                          {med.type && <p className="text-gray-400 mt-0.5">{med.type}</p>}
+                          {med.dose && <p className="font-semibold text-blue-400 mt-1">{med.dose}</p>}
+                          {med.startDate && <p className="text-[10px] text-gray-500 mt-1">Start: {formatDate(med.startDate)}</p>}
+                          {med.changeReason && <p className="text-[10px] text-amber-400 mt-0.5 italic">Note: {med.changeReason}</p>}
                         </>
                       ) : med?.prescribed === 'No' ? (
-                        <p className="text-gray-400">Not prescribed</p>
+                        <>
+                          <p className="text-gray-500 mt-1">Not prescribed</p>
+                          {med.reason && <p className="text-[10px] text-amber-500 mt-0.5">Reason: {med.reason}</p>}
+                          {med.stopDate && <p className="text-[10px] text-gray-500 mt-1">Stop: {formatDate(med.stopDate)}</p>}
+                          {med.changeReason && <p className="text-[10px] text-amber-400 mt-0.5 italic">Note: {med.changeReason}</p>}
+                        </>
                       ) : (
-                        <p className="text-gray-300">Not recorded</p>
+                        <p className="text-gray-600 mt-1">Not recorded</p>
                       )}
                     </div>
                   ))}
@@ -436,6 +567,107 @@ export default function PatientDetailPage() {
               />
             </CardBody>
           </Card>
+        </div>
+      )}
+
+      {/* Outcome Events Tab */}
+      {activeTab === 'outcomes' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-base font-bold text-white">Registry Adjudicated Endpoints</h3>
+              <p className="text-xs text-gray-500 mt-1">Track MACE, mortality, and heart failure outcomes for research analysis.</p>
+            </div>
+            <Button size="sm" onClick={() => setAddingEvent(a => !a)}>
+              {addingEvent ? 'Cancel' : <><PlusCircle className="w-4 h-4" /> Add Outcome Event</>}
+            </Button>
+          </div>
+
+          {addingEvent && (
+            <Card>
+              <CardHeader><CardTitle>Record Outcome Event</CardTitle></CardHeader>
+              <CardBody>
+                <form onSubmit={handleAddEventSubmit} className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FieldWrap label="Event Date" required>
+                      <Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} required />
+                    </FieldWrap>
+                    <FieldWrap label="Event Endpoint Type" required>
+                      <Select value={eventType} onChange={e => setEventType(e.target.value as EventType)}>
+                        {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </Select>
+                    </FieldWrap>
+                    <FieldWrap label="Facility / Hospital">
+                      <Input value={eventHosp} onChange={e => setEventHosp(e.target.value)} placeholder="e.g. AICTS Pune" />
+                    </FieldWrap>
+                    <FieldWrap label="Adjudicated By (Investigator)">
+                      <Input value={eventAdjudicator} onChange={e => setEventAdjudicator(e.target.value)} placeholder="Dr. A. Jayachandra" />
+                    </FieldWrap>
+                    <FieldWrap label="Details / Description" className="md:col-span-2">
+                      <Textarea value={eventDesc} onChange={e => setEventDesc(e.target.value)} placeholder="Clinical notes, clinical classification..." />
+                    </FieldWrap>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button type="submit" loading={savingEvent}>Save Endpoint</Button>
+                  </div>
+                </form>
+              </CardBody>
+            </Card>
+          )}
+
+          <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto text-xs">
+              <table className="registry-table">
+                <thead>
+                  <tr>
+                    <th>Event Date</th>
+                    <th>Endpoint Type</th>
+                    <th>Facility</th>
+                    <th>Details</th>
+                    <th>Adjudicated By</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {outcomeEvents.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-gray-500">
+                        No outcome events recorded for this patient.
+                      </td>
+                    </tr>
+                  ) : (
+                    outcomeEvents.map(ev => (
+                      <tr key={ev.id}>
+                        <td className="font-mono text-white">{formatDate(ev.eventDate)}</td>
+                        <td>
+                          <span className={cn('badge text-[10px] font-bold',
+                            ev.eventType.includes('death') ? 'badge-red' :
+                            ev.eventType.includes('hospitalisation') ? 'badge-amber' : 'badge-blue'
+                          )}>
+                            {ev.eventType}
+                          </span>
+                        </td>
+                        <td className="text-gray-300">{ev.hospitalName || '—'}</td>
+                        <td className="text-gray-400 max-w-xs whitespace-normal">{ev.description || '—'}</td>
+                        <td className="text-gray-300 font-semibold">{ev.adjudicatedBy || '—'}</td>
+                        <td>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => handleDeleteEvent(ev.id)}
+                              className="text-rose-400 hover:text-rose-300 p-1.5 rounded hover:bg-rose-500/10"
+                              title="Delete event"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>

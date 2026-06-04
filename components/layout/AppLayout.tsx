@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import { usePathname, useRouter } from 'next/navigation'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -9,9 +10,41 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const pathname = usePathname()
+  const router = useRouter()
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
   const closeSidebar = () => setSidebarOpen(false)
+
+  useEffect(() => {
+    const auth = localStorage.getItem('cardiokonnect_auth') === 'true'
+    setIsAuthenticated(auth)
+    if (!auth && pathname !== '/login') {
+      router.replace('/login')
+    }
+  }, [pathname, router])
+
+  // If viewing the login page, render it directly without sidebar/topbar layouts
+  if (pathname === '/login') {
+    return <div className="min-h-screen bg-[#070e1b] text-gray-300">{children}</div>
+  }
+
+  // Prevent flash of guarded layout while auth status is being resolved
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-[#070e1b] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+          <p className="text-xs text-gray-500 tracking-wider uppercase font-semibold">Authorizing Session...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return null
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a1931] text-gray-300">
