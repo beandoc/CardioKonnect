@@ -12,51 +12,29 @@ import { toast } from 'sonner'
 
 const NAV = [
   {
-    section: 'Main',
-    items: [
-      { href: '/home',       label: 'Registry Home', icon: Heart },
-      { href: '/',           label: 'Dashboard',     icon: LayoutDashboard },
-    ],
-  },
-  {
-    section: 'Appointments',
-    items: [
-      { href: '/appointments', label: 'Appointments',  icon: Calendar },
-      { href: '/consents',     label: 'Consents',      icon: UserCheck },
-    ],
-  },
-  {
     section: 'Patients',
     items: [
-      { href: '/patients',    label: 'Patient List',  icon: Users },
+      { href: '/patients',    label: 'All Patients',  icon: Users },
       { href: '/patients/new',label: 'Add Patient',   icon: UserPlus },
     ],
   },
   {
-    section: 'Registry Tools',
+    section: 'Analytics & Research',
     items: [
-      { href: '/registry',    label: 'Registry Fields', icon: Database },
-      { href: '/reports',     label: 'Registry Reports', icon: FileText },
+      { href: '/',            label: 'Dashboard (merged)', icon: LayoutDashboard },
+      { href: '/analytics',   label: 'Population Analytics', icon: BarChart3 },
+      { href: '/risk',        label: 'Risk Calculators',  icon: FlaskConical },
       { href: '/cohort',      label: 'Cohort Builder',  icon: Layers },
       { href: '/alerts',      label: 'Clinical Alerts', icon: Bell },
     ],
   },
   {
-    section: 'Research Tools',
+    section: 'Registry & Admin',
     items: [
-      { href: '/analytics-dashboard', label: 'Executive Intelligence', icon: TrendingUp },
-      { href: '/analytics',   label: 'Population Analytics', icon: BarChart3 },
-      { href: '/risk',        label: 'Risk Calculators',  icon: FlaskConical },
-    ],
-  },
-  {
-    section: 'Admin',
-    items: [
-      { href: '/admin',       label: 'Administration',   icon: ShieldCheck },
+      { href: '/registry',    label: 'Registry Fields', icon: Database },
+      { href: '/reports',     label: 'Reports & Exports', icon: FileText },
+      { href: '/appointments', label: 'Appointments & Consents', icon: Calendar },
       { href: '/settings',    label: 'Settings',          icon: Settings },
-      { href: '/logs',        label: 'My Logs',           icon: FileText },
-      { href: '/log-categories', label: 'Log Categories', icon: Database },
-      { href: '/languages',   label: 'Language Master',   icon: Heart },
     ],
   },
 ]
