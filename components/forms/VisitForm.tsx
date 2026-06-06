@@ -280,6 +280,7 @@ const schema = z.object({
 
   // KCCQ
   kccq: z.object({
+    date: z.string().optional(),
     physicalLimitation: z.coerce.number().optional().or(z.literal('')),
     symptomFrequency: z.coerce.number().optional().or(z.literal('')),
     symptomBurden: z.coerce.number().optional().or(z.literal('')),
@@ -1629,6 +1630,30 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                   onChange={field.onChange}
                 />
               )} />
+            </div>
+
+            <div>
+              <p className="section-heading text-white">KCCQ — Kansas City Cardiomyopathy Questionnaire</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FieldWrap label="Overall Summary Score (0–100)" hint="Primary QoL endpoint in HF trials (DAPA-HF, EMPEROR)">
+                  <Input type="number" step="0.1" min={0} max={100} {...register('kccq.overallSummaryScore')} placeholder="e.g. 65" />
+                </FieldWrap>
+                <FieldWrap label="Physical Limitation Score (0–100)">
+                  <Input type="number" step="0.1" min={0} max={100} {...register('kccq.physicalLimitation')} placeholder="e.g. 70" />
+                </FieldWrap>
+                <FieldWrap label="Symptom Frequency Score (0–100)">
+                  <Input type="number" step="0.1" min={0} max={100} {...register('kccq.symptomFrequency')} placeholder="e.g. 60" />
+                </FieldWrap>
+                <FieldWrap label="Quality of Life Score (0–100)">
+                  <Input type="number" step="0.1" min={0} max={100} {...register('kccq.qualityOfLife')} placeholder="e.g. 55" />
+                </FieldWrap>
+                <FieldWrap label="Social Limitation Score (0–100)">
+                  <Input type="number" step="0.1" min={0} max={100} {...register('kccq.socialLimitation')} placeholder="e.g. 60" />
+                </FieldWrap>
+                <FieldWrap label="KCCQ Date">
+                  <Input type="date" {...register('kccq.date')} />
+                </FieldWrap>
+              </div>
             </div>
 
             <div>
