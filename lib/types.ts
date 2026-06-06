@@ -54,6 +54,11 @@ export interface Patient {
   secondaryContact?: string
   caregiverContact?: string
   caregiverSecondaryContact?: string
+
+  // Mortality / vital status
+  vitalStatus?: 'Alive' | 'Dead'
+  dateOfDeath?: string              // ISO date
+  deathCauseCategory?: 'Cardiovascular' | 'Non-cardiovascular' | 'Unknown'
 }
 
 export type PatientInput = Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>
@@ -73,6 +78,7 @@ export interface Visit {
   // Anthropometrics
   weight?: number      // kg
   height?: number      // cm
+  bmi?: number         // kg/m²
   o2Sat?: number       // %
   oedema?: string      // None / Mild / Moderate / Severe
 
@@ -538,6 +544,13 @@ export interface Visit {
   // ── MACE Composite (last follow-up period) ───────────────────────────────────
   // Note: individual events are in the OutcomeEvent subcollection.
   // These fields store the most recent period summary for quick analytics.
+  // ── Interval Events (since last visit) ───────────────────────────────────
+  eventMI?: boolean                  // Myocardial infarction since last visit
+  eventStroke?: boolean              // Stroke / TIA since last visit
+  eventVTVF?: boolean                // VT / VF episode since last visit
+  eventICDShock?: boolean            // ICD appropriate shock since last visit
+  eventHospitalisation?: boolean     // Any hospitalisation since last visit (see hospCount)
+
   maceOccurred?: boolean             // MACE = CV death + MI + Stroke
   primaryEndpointMet?: boolean       // Site-defined primary endpoint
   primaryEndpointDate?: string

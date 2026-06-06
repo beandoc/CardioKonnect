@@ -41,6 +41,11 @@ const schema = z.object({
   secondaryContact: z.string().optional(),
   caregiverContact: z.string().optional(),
   caregiverSecondaryContact: z.string().optional(),
+
+  // Mortality / vital status
+  vitalStatus: z.enum(['Alive', 'Dead']).optional(),
+  dateOfDeath: z.string().optional(),
+  deathCauseCategory: z.enum(['Cardiovascular', 'Non-cardiovascular', 'Unknown']).optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -289,6 +294,31 @@ export default function PatientForm({ defaultValues, onSubmit, loading, submitLa
           </FieldWrap>
           <FieldWrap label="Known Drug Allergies">
             <Textarea {...register('allergies')} placeholder="e.g. Penicillin, Aspirin" />
+          </FieldWrap>
+        </div>
+      </div>
+
+      {/* ── Section: Mortality / Vital Status ─────────────────────── */}
+      <div>
+        <p className="section-heading">Mortality &amp; Vital Status</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FieldWrap label="Vital Status">
+            <Select {...register('vitalStatus')}>
+              <option value="">Not recorded</option>
+              <option value="Alive">Alive</option>
+              <option value="Dead">Dead</option>
+            </Select>
+          </FieldWrap>
+          <FieldWrap label="Date of Death">
+            <Input type="date" {...register('dateOfDeath')} />
+          </FieldWrap>
+          <FieldWrap label="Cause of Death Category">
+            <Select {...register('deathCauseCategory')}>
+              <option value="">Not applicable</option>
+              <option value="Cardiovascular">Cardiovascular</option>
+              <option value="Non-cardiovascular">Non-cardiovascular</option>
+              <option value="Unknown">Unknown</option>
+            </Select>
           </FieldWrap>
         </div>
       </div>

@@ -52,6 +52,7 @@ const schema = z.object({
   // Anthropometrics
   weight: z.coerce.number().positive().optional().or(z.literal('')),
   height: z.coerce.number().positive().optional().or(z.literal('')),
+  bmi:    z.coerce.number().optional().or(z.literal('')),
   o2Sat:  z.coerce.number().min(50).max(100).optional().or(z.literal('')),
   oedema: z.string().optional(),
 
@@ -88,6 +89,13 @@ const schema = z.object({
   jvpStatus: z.enum(['Elevated', 'Not elevated', '']).default(''),
   ventricularArrhythmia: z.boolean().default(false),
 
+  // Interval Events (since last visit)
+  eventMI:            z.boolean().default(false),
+  eventStroke:        z.boolean().default(false),
+  eventVTVF:          z.boolean().default(false),
+  eventICDShock:      z.boolean().default(false),
+  eventHospitalisation: z.boolean().default(false),
+
   // Hospitalisation
   hospHistory: z.enum(['Yes', 'No', '']).default(''),
   hospCount:   z.coerce.number().optional().or(z.literal('')),
@@ -101,6 +109,7 @@ const schema = z.object({
   eEPrime:  z.coerce.number().optional().or(z.literal('')),
   ddGrade:  z.string().optional(),
   rvsp:     z.coerce.number().optional().or(z.literal('')),
+  tapse:    z.coerce.number().optional().or(z.literal('')),
   laStrain: z.coerce.number().optional().or(z.literal('')),
   rvFreeWallStrain: z.coerce.number().optional().or(z.literal('')),
   lvMassIndex: z.coerce.number().optional().or(z.literal('')),
@@ -500,6 +509,11 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
       signCardiomegaly: false,
       jvpStatus: '',
       ventricularArrhythmia: false,
+      eventMI: false,
+      eventStroke: false,
+      eventVTVF: false,
+      eventICDShock: false,
+      eventHospitalisation: false,
       peakTropT: '',
       tropTPositive: false,
       peakTropI: '',
@@ -551,6 +565,18 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
   const echoDoneToday = watch('echoDoneToday')
   const labsDrawnToday = watch('labsDrawnToday')
   const hfType = watch('hfType')
+  const watchedWeight = watch('weight')
+  const watchedHeight = watch('height')
+
+  // Auto-calculate BMI when weight or height changes
+  useEffect(() => {
+    const w = Number(watchedWeight)
+    const h = Number(watchedHeight)
+    if (w > 0 && h > 0) {
+      const bmi = parseFloat((w / ((h / 100) ** 2)).toFixed(1))
+      setValue('bmi', bmi)
+    }
+  }, [watchedWeight, watchedHeight, setValue])
 
   // Generate dynamic tabs based on condition
   const TABS = [
@@ -807,6 +833,9 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 <FieldWrap label="Height (cm)" error={errors.height?.message}>
                   <Input type="number" {...register('height')} placeholder="165" error={!!errors.height} />
                 </FieldWrap>
+                <FieldWrap label="BMI (kg/m²)" hint="Auto-calculated from Wt/Ht">
+                  <Input type="number" step="0.1" {...register('bmi')} placeholder="—" readOnly className="opacity-70 cursor-default" />
+                </FieldWrap>
                 <FieldWrap label="O₂ Saturation (%)" error={errors.o2Sat?.message}>
                   <Input type="number" {...register('o2Sat')} placeholder="97" error={!!errors.o2Sat} />
                 </FieldWrap>
@@ -955,6 +984,26 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
             </div>
 
             <div>
+              <p className="section-heading">ECG</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FieldWrap label="QRS Duration (ms)">
+                  <Input type="number" {...register('qrsDuration')} placeholder="e.g. 120" />
+                </FieldWrap>
+                <FieldWrap label="Bundle Branch Block">
+                  <Select {...register('bbb')}>
+                    <option value="">None / Not assessed</option>
+                    <option value="LBBB">LBBB</option>
+                    <option value="RBBB">RBBB</option>
+                    <option value="IVCD">IVCD</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="QTc Interval (ms)">
+                  <Input type="number" {...register('qtcInterval')} placeholder="e.g. 440" />
+                </FieldWrap>
+              </div>
+            </div>
+
+            <div>
               <p className="section-heading">Type of Heart Failure</p>
               <Controller name="hfType" control={control} render={({ field, fieldState }) => (
                 <>
@@ -994,6 +1043,24 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 <FieldWrap label="Other etiology (specify)">
                   <Input {...register('etiologyOther')} placeholder="Specify" />
                 </FieldWrap>
+              </div>
+            </div>
+
+            <div>
+              <p className="section-heading">Events Since Last Visit</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {([
+                  { name: 'eventMI',            label: 'Myocardial Infarction (MI)' },
+                  { name: 'eventStroke',         label: 'Stroke / TIA' },
+                  { name: 'eventVTVF',           label: 'VT / VF Episode' },
+                  { name: 'eventICDShock',        label: 'ICD Shock' },
+                  { name: 'eventHospitalisation', label: 'Hospitalisation' },
+                ] as const).map(({ name, label }) => (
+                  <label key={name} className="flex items-center gap-2 bg-slate-900/50 border border-gray-700/40 rounded-lg px-3 py-2 cursor-pointer hover:border-blue-500/40 transition-colors">
+                    <input type="checkbox" {...register(name)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/30 text-blue-500" />
+                    <span className="text-sm text-gray-300">{label}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
@@ -1051,6 +1118,9 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 </FieldWrap>
                 <FieldWrap label="RVSP (mmHg)" hint="RV systolic pressure">
                   <Input type="number" {...register('rvsp')} placeholder="30" />
+                </FieldWrap>
+                <FieldWrap label="TAPSE (mm)" hint="<17 mm = RV dysfunction">
+                  <Input type="number" step="0.1" {...register('tapse')} placeholder="20" />
                 </FieldWrap>
                 <FieldWrap label="LA Strain (%)">
                   <Input type="number" step="0.1" {...register('laStrain')} placeholder="18" />
