@@ -1551,6 +1551,18 @@ MOCK_VISITS_COHORT.forEach(v => {
   } as any
 })
 
+function cleanUndefined(obj: any): any {
+  if (obj === null || typeof obj !== 'object') return obj
+  const res = Array.isArray(obj) ? [] : {} as any
+  Object.keys(obj).forEach(key => {
+    const val = obj[key]
+    if (val !== undefined) {
+      res[key] = cleanUndefined(val)
+    }
+  })
+  return res
+}
+
 export async function seedDemoData(): Promise<void> {
   const isDemoMode = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith('mock') || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'undefined'
   if (isDemoMode) {
@@ -1569,22 +1581,23 @@ export async function seedDemoData(): Promise<void> {
   // Set patient documents
   Object.entries(MOCK_PATIENTS_COHORT).forEach(([id, data]) => {
     const ref = doc(db, 'patients', id)
-    batch.set(ref, {
+    batch.set(ref, cleanUndefined({
       ...data,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
-    })
+    }))
   })
 
   // Add visits in subcollection for each patient
   MOCK_VISITS_COHORT.forEach(({ patientId, visitId, data }) => {
     const ref = doc(db, 'patients', patientId, 'visits', visitId)
-    batch.set(ref, {
+    batch.set(ref, cleanUndefined({
       ...data,
       createdAt: serverTimestamp()
-    })
+    }))
   })
 
   // Commit writes
   await batch.commit()
 }
+

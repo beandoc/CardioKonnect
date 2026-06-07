@@ -19,9 +19,6 @@ if (fs.existsSync(envPath)) {
   })
 }
 
-// 2. Import the seeder function
-import { seedDemoData } from '../lib/seeder'
-
 // 3. Run the seeder
 async function run() {
   console.log('Starting Firestore seeding...')
@@ -29,6 +26,7 @@ async function run() {
   console.log('API Key configured:', !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY)
   
   try {
+    const { seedDemoData } = await import('../lib/seeder')
     await seedDemoData()
     console.log('Successfully seeded database with 150 patients and longitudinal visits!')
     process.exit(0)
@@ -39,3 +37,4 @@ async function run() {
 }
 
 run()
+
