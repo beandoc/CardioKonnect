@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -129,6 +129,7 @@ export default function PatientDetailPage() {
           bpSystolic: [{ date: '2026-06-02', value: 128, visitId: `v-${id}` }],
           heartRate: [{ date: '2026-06-02', value: 74, visitId: `v-${id}` }],
           sixMWT: [{ date: '2026-06-02', value: 380, visitId: `v-${id}` }],
+          kccq: [{ date: '2026-06-02', value: 78, visitId: `v-${id}` }],
         }
       }
     }
@@ -272,6 +273,33 @@ export default function PatientDetailPage() {
       toast.error('Failed to delete patient. Please check database configuration/security rules.', { id: toastId })
     }
   }
+
+  // Analyze KCCQ drops >10 points (clinically meaningful change)
+  const kccqDropAlert = useMemo(() => {
+    if (visits.length < 2) return null
+    const kccqVisits = visits
+      .filter(v => v.kccq?.overallSummaryScore !== undefined && v.kccq?.overallSummaryScore !== null)
+      .sort((a, b) => new Date(a.visitDate).getTime() - new Date(b.visitDate).getTime())
+
+    if (kccqVisits.length < 2) return null
+
+    // Look for latest drop
+    for (let i = kccqVisits.length - 1; i >= 1; i--) {
+      const prev = kccqVisits[i - 1].kccq!.overallSummaryScore!
+      const curr = kccqVisits[i].kccq!.overallSummaryScore!
+      const diff = prev - curr
+      if (diff > 10) {
+        return {
+          dropPoints: diff,
+          prevScore: prev,
+          currScore: curr,
+          prevDate: kccqVisits[i - 1].visitDate,
+          currDate: kccqVisits[i].visitDate,
+        }
+      }
+    }
+    return null
+  }, [visits])
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -692,97 +720,127 @@ export default function PatientDetailPage() {
 
       {/* Trends tab */}
       {activeTab === 'trends' && trends && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.lvef}
-                label="LVEF"
-                unit="%"
-                color="#3b82f6"
-                referenceLines={[{ value: 40, label: 'HFrEF threshold', color: '#ef4444' }]}
-              />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.ntProBNP}
-                label="NT-proBNP"
-                unit="pg/mL"
-                color="#ef4444"
-                referenceLines={[{ value: 2000, label: 'High risk', color: '#dc2626' }]}
-              />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.egfr}
-                label="eGFR"
-                unit="ml/min/1.73m²"
-                color="#10b981"
-                referenceLines={[{ value: 45, label: 'CKD 3b', color: '#f59e0b' }]}
-              />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.weight}
-                label="Weight"
-                unit="kg"
-                color="#8b5cf6"
-              />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.bpSystolic}
-                label="Systolic BP"
-                unit="mmHg"
-                color="#f59e0b"
-                referenceLines={[{ value: 130, label: 'Target', color: '#10b981' }]}
-              />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.sixMWT}
-                label="6-Minute Walk Test"
-                unit="metres"
-                color="#06b6d4"
-              />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.heartRate}
-                label="Heart Rate"
-                unit="bpm"
-                color="#f97316"
-                referenceLines={[
-                  { value: 70, label: 'Target HR', color: '#10b981' },
-                  { value: 100, label: 'Tachycardia', color: '#ef4444' },
-                ]}
-              />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <MetricTrendChart
-                data={trends.nyha}
-                label="NYHA Class (1–4)"
-                unit=""
-                color="#8b5cf6"
-                yDomain={[1, 4]}
-                fillArea={false}
-              />
-            </CardBody>
-          </Card>
+        <div className="space-y-6">
+          {kccqDropAlert && (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex gap-3 items-start text-xs text-rose-300">
+              <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5 text-rose-400 animate-pulse" />
+              <div>
+                <p className="font-bold">Clinically Meaningful QoL Decline</p>
+                <p className="text-gray-400 mt-1">
+                  KCCQ Overall Summary Score dropped by <strong>{kccqDropAlert.dropPoints} points</strong> (from {kccqDropAlert.prevScore} to {kccqDropAlert.currScore}) on <strong>{formatDate(kccqDropAlert.currDate)}</strong> compared to the previous visit on <strong>{formatDate(kccqDropAlert.prevDate)}</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.lvef}
+                  label="LVEF"
+                  unit="%"
+                  color="#3b82f6"
+                  referenceLines={[{ value: 40, label: 'HFrEF threshold', color: '#ef4444' }]}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.ntProBNP}
+                  label="NT-proBNP"
+                  unit="pg/mL"
+                  color="#ef4444"
+                  referenceLines={[{ value: 2000, label: 'High risk', color: '#dc2626' }]}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.egfr}
+                  label="eGFR"
+                  unit="ml/min/1.73m²"
+                  color="#10b981"
+                  referenceLines={[{ value: 45, label: 'CKD 3b', color: '#f59e0b' }]}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.weight}
+                  label="Weight"
+                  unit="kg"
+                  color="#8b5cf6"
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.bpSystolic}
+                  label="Systolic BP"
+                  unit="mmHg"
+                  color="#f59e0b"
+                  referenceLines={[{ value: 130, label: 'Target', color: '#10b981' }]}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.sixMWT}
+                  label="6-Minute Walk Test"
+                  unit="metres"
+                  color="#06b6d4"
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.heartRate}
+                  label="Heart Rate"
+                  unit="bpm"
+                  color="#f97316"
+                  referenceLines={[
+                    { value: 70, label: 'Target HR', color: '#10b981' },
+                    { value: 100, label: 'Tachycardia', color: '#ef4444' },
+                  ]}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.nyha}
+                  label="NYHA Class (1–4)"
+                  unit=""
+                  color="#8b5cf6"
+                  yDomain={[1, 4]}
+                  fillArea={false}
+                />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody>
+                <MetricTrendChart
+                  data={trends.kccq || []}
+                  label="KCCQ Overall Summary Score"
+                  unit=""
+                  color="#f59e0b"
+                  yDomain={[0, 100]}
+                  referenceLines={[
+                    { value: 75, label: 'Good/Excellent QoL', color: '#10b981' },
+                    { value: 50, label: 'Fair/Good QoL', color: '#f59e0b' },
+                    { value: 25, label: 'Very Poor QoL', color: '#ef4444' },
+                  ]}
+                />
+              </CardBody>
+            </Card>
+          </div>
         </div>
       )}
 

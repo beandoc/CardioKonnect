@@ -558,6 +558,7 @@ export async function getPatientTrends(patientId: string): Promise<PatientTrends
     bpSystolic:  sorted.map(v => tp(v, 'bpSystolic')),
     heartRate:   sorted.map(v => tp(v, 'heartRate')),
     sixMWT:      sorted.map(v => tp(v, 'sixMWT')),
+    kccq:        sorted.map(v => ({ date: v.visitDate, value: v.kccq?.overallSummaryScore ?? null, visitId: v.id })),
   }
 }
 

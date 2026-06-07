@@ -748,6 +748,7 @@ export interface PatientTrends {
   bpSystolic: TrendPoint[]
   heartRate: TrendPoint[]
   sixMWT: TrendPoint[]
+  kccq?: TrendPoint[]
 }
 
 // ─── Registry Fields Configuration ───────────────────────────────────────────
