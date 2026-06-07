@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { Users, TrendingUp, CheckCircle, ArrowRight, Clock, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
-import { getPatients } from '@/lib/firestore'
+import { getPatients, getVisits } from '@/lib/firestore'
+
 
 
 interface RegistryCard {
@@ -227,6 +228,12 @@ export default function RegistryHomePage() {
   const [registries, setRegistries] = useState<RegistryCard[]>(REGISTRIES)
   const [loading, setLoading] = useState(true)
 
+  function safeTime(dateStr: string | undefined): number {
+    if (!dateStr) return 0
+    const t = new Date(dateStr).getTime()
+    return isNaN(t) ? 0 : t
+  }
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -242,28 +249,68 @@ export default function RegistryHomePage() {
           return allPatients.filter(p => p.registryId === id)
         }
 
+        const hfPatients = getPatientsForRegistry('hf')
+        
+        // Fetch visits for HF patients to calculate medications, labs, and QoL completeness
+        const visitsPromises = hfPatients.map(async (p) => {
+          try {
+            return await getVisits(p.id)
+          } catch (e) {
+            console.warn(`Failed to fetch visits for patient ${p.id}`, e)
+            return []
+          }
+        })
+        const visitsResults = await Promise.all(visitsPromises)
+        const hfVisits = visitsResults.flat()
+
+        // 6 clinical category definitions matching the detail page
+        const hfCategories = [
+          { name: 'Demographics', fields: ['firstName', 'lastName', 'dob', 'sex', 'mrn', 'contact', 'address', 'indianCitizen', 'studyConsented', 'abhaId', 'occupation', 'addressHouse', 'addressStreet', 'addressPost', 'addressDistrict', 'addressState', 'addressPin', 'secondaryContact', 'caregiverContact'] },
+          { name: 'Vitals & Exam', fields: ['bpSystolic', 'bpDiastolic', 'heartRate', 'weight', 'height', 'o2Sat', 'oedema'] },
+          { name: 'Echo / Imaging', fields: ['lvef', 'echoDate', 'lvdd', 'lvsd', 'eEPrime', 'ddGrade', 'rvsp', 'laStrain', 'rvFreeWallStrain', 'lvMassIndex', 'relativeWallThickness'] },
+          { name: 'Laboratory', fields: ['ntProBNP', 'bnp', 'egfr', 'creatinine', 'potassium', 'sodium', 'hb', 'tft', 'hba1c', 'ferritin', 'transferrinSat', 'uricAcid', 'ldl', 'triglycerides', 'peakTropT', 'peakTropI', 'serumUrea', 'bun'] },
+          { name: 'Medications', fields: ['diuretic', 'raasi', 'betaBlocker', 'digoxin', 'sglt2i', 'ivabradine', 'mra', 'aspirin', 'statin', 'noac', 'vki', 'ivIron'] },
+          { name: 'QoL / Functional', fields: ['symptomTrajectory', 'eq5d', 'sixMWT', 'gripRight', 'gripLeft', 'education', 'kccq'] }
+        ]
+
+        const categoryAverages: Record<string, number> = {}
+        hfCategories.forEach(cat => {
+          let totalScoreForCat = 0
+          hfPatients.forEach(p => {
+            const pVisits = hfVisits.filter(v => v.patientId === p.id)
+            const latest = pVisits.length ? pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0]) : null
+            
+            let filled = 0
+            cat.fields.forEach(f => {
+              if (f in p) {
+                const val = (p as any)[f]
+                if (val !== undefined && val !== null && val !== '') filled++
+              } else if (latest && f in latest) {
+                const val = (latest as any)[f]
+                if (val !== undefined && val !== null && val !== '') {
+                  if (typeof val === 'object') {
+                    if (val.prescribed !== undefined && val.prescribed !== '') filled++
+                    else if (Object.keys(val).length > 0) filled++
+                  } else {
+                    filled++
+                  }
+                }
+              }
+            })
+            totalScoreForCat += Math.round((filled / cat.fields.length) * 100)
+          })
+          categoryAverages[cat.name] = hfPatients.length ? Math.round(totalScoreForCat / hfPatients.length) : 0
+        })
+
         // Set the state dynamically
         setRegistries(prev => prev.map(r => {
           const regPatients = getPatientsForRegistry(r.id)
           const newThisMonth = regPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
 
-          // Calculate demographics completeness
-          const demographicFields = ['firstName', 'lastName', 'dob', 'sex', 'mrn', 'contact', 'address', 'indianCitizen', 'studyConsented']
-          let totalDemographicsScore = 0
-          regPatients.forEach(p => {
-            let filled = 0
-            demographicFields.forEach(f => {
-              const val = (p as any)[f]
-              if (val !== undefined && val !== null && val !== '') filled++
-            })
-            totalDemographicsScore += Math.round((filled / demographicFields.length) * 100)
-          })
-          const avgDemographics = regPatients.length ? Math.round(totalDemographicsScore / regPatients.length) : 0
-
           // Calculate updated categories completeness
           const updatedCategories = r.categories.map(cat => {
-            if (cat.name === 'Demographics') {
-              return { ...cat, pct: avgDemographics }
+            if (r.id === 'hf') {
+              return { ...cat, pct: categoryAverages[cat.name] || 0 }
             }
             return { ...cat, pct: regPatients.length ? cat.pct : 0 }
           })
@@ -312,6 +359,7 @@ export default function RegistryHomePage() {
   const avgCompletion = Math.round(registries.reduce((s, r) => s + r.completion, 0) / registries.length)
   const activeCount   = registries.filter(r => r.status === 'Active' && r.patients > 0).length
   const newThisMonth  = registries.reduce((s, r) => s + r.newThisMonth, 0)
+
 
   if (loading) {
     return (

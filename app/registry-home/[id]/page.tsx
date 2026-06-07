@@ -799,6 +799,34 @@ export default function RegistryDetailPage() {
     })
     const hospRate = hasHospInfoCount ? Math.round((hospCount / hasHospInfoCount) * 100) : 0
 
+    // KCCQ Good/Excellent QoL rate (KCCQ Overall Summary Score >= 75)
+    let goodQolCount = 0
+    let hasKccqCount = 0
+    const kccqDistribution = { Poor: 0, FairGood: 0, Excellent: 0 }
+    hfPatients.forEach(p => {
+      const pVisits = hfVisits.filter(v => v.patientId === p.id)
+      if (pVisits.length === 0) return
+      const latest = pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0])
+      if (latest.kccq?.overallSummaryScore !== undefined && latest.kccq?.overallSummaryScore !== null) {
+        const score = latest.kccq.overallSummaryScore
+        hasKccqCount++
+        if (score >= 75) {
+          goodQolCount++
+          kccqDistribution.Excellent++
+        } else if (score >= 50) {
+          kccqDistribution.FairGood++
+        } else {
+          kccqDistribution.Poor++
+        }
+      }
+    })
+    const goodQolRate = hasKccqCount ? Math.round((goodQolCount / hasKccqCount) * 100) : 0
+    const kccqChartData = [
+      { name: 'Poor QoL (< 50)', value: kccqDistribution.Poor },
+      { name: 'Fair/Good QoL (50–74)', value: kccqDistribution.FairGood },
+      { name: 'Excellent QoL (≥ 75)', value: kccqDistribution.Excellent },
+    ].filter(x => x.value > 0)
+
     // Phenotype Distribution
     const phenotypeCounts = { HFrEF: 0, HFmrEF: 0, HFpEF: 0 }
     hfPatients.forEach(p => {
@@ -908,7 +936,7 @@ export default function RegistryDetailPage() {
       { name: 'Echo / Imaging', fields: ['lvef', 'echoDate', 'lvdd', 'lvsd', 'eEPrime', 'ddGrade', 'rvsp', 'laStrain', 'rvFreeWallStrain', 'lvMassIndex', 'relativeWallThickness'] },
       { name: 'Laboratory', fields: ['ntProBNP', 'bnp', 'egfr', 'creatinine', 'potassium', 'sodium', 'hb', 'tft', 'hba1c', 'ferritin', 'transferrinSat', 'uricAcid', 'ldl', 'triglycerides', 'peakTropT', 'peakTropI', 'serumUrea', 'bun'] },
       { name: 'Medications', fields: ['diuretic', 'raasi', 'betaBlocker', 'digoxin', 'sglt2i', 'ivabradine', 'mra', 'aspirin', 'statin', 'noac', 'vki', 'ivIron'] },
-      { name: 'QoL / Functional', fields: ['symptomTrajectory', 'eq5d', 'sixMWT', 'gripRight', 'gripLeft', 'education'] }
+      { name: 'QoL / Functional', fields: ['symptomTrajectory', 'eq5d', 'sixMWT', 'gripRight', 'gripLeft', 'education', 'kccq'] }
     ]
 
     const categoryAverages: Record<string, number> = {}
@@ -966,6 +994,7 @@ export default function RegistryDetailPage() {
         { label: 'GDMT Rate', value: `${gdmtRate}%`, sub: 'on 3+ core drugs' },
         { label: 'NYHA III–IV', value: `${nyhaRate}%`, sub: 'severe/mod symptoms' },
         { label: 'HF Hospitalisation', value: `${hospRate}%`, sub: 'history of admissions' },
+        { label: 'Good/Excellent QoL', value: `${goodQolRate}%`, sub: 'KCCQ overall score ≥ 75' },
       ],
       completionByCategory,
       enrollmentTrend,
@@ -997,6 +1026,11 @@ export default function RegistryDetailPage() {
           type: 'bar-h' as const,
           color: '#34d399',
           data: symptomsSignsData,
+        },
+        {
+          title: 'KCCQ Quality of Life Status',
+          type: 'pie' as const,
+          data: kccqChartData.length ? kccqChartData : [{ name: 'No QoL Data', value: 1 }],
         }
       ]
     }
@@ -1066,7 +1100,7 @@ export default function RegistryDetailPage() {
         </div>
 
         {/* KPI row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-white/[0.06]">
+        <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-white/[0.06]">
           {reg.kpis.map(kpi => (
             <div key={kpi.label} className="px-5 py-4">
               <p className="text-2xl font-bold text-white">{kpi.value}</p>
