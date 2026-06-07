@@ -224,7 +224,7 @@ export async function getPatients(): Promise<Patient[]> {
     return getLocalPatients().sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
-  const snap = await getDocs(query(collection(db, 'patients'), orderBy('createdAt', 'desc'), limit(100)))
+  const snap = await getDocs(query(collection(db, 'patients'), orderBy('createdAt', 'desc'), limit(1000)))
   return snap.docs.map(d => docToPatient(d.id, d.data()))
 }
 

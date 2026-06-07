@@ -2,6 +2,9 @@
 import Link from 'next/link'
 import { Users, TrendingUp, CheckCircle, ArrowRight, Clock, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useState, useEffect } from 'react'
+import { getPatients } from '@/lib/firestore'
+
 
 interface RegistryCard {
   id: string
@@ -221,10 +224,81 @@ function lastEntryLabel(days: number) {
 }
 
 export default function RegistryHomePage() {
-  const totalPatients = REGISTRIES.reduce((s, r) => s + r.patients, 0)
-  const avgCompletion = Math.round(REGISTRIES.reduce((s, r) => s + r.completion, 0) / REGISTRIES.length)
-  const activeCount   = REGISTRIES.filter(r => r.status === 'Active').length
-  const newThisMonth  = REGISTRIES.reduce((s, r) => s + r.newThisMonth, 0)
+  const [registries, setRegistries] = useState<RegistryCard[]>(REGISTRIES)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const allPatients = await getPatients()
+        
+        // Filter to Heart Failure registry patients
+        const hfPatients = allPatients.filter(p => p.registryId === 'hf' || p.hfType === 'HFrEF' || p.hfType === 'HFmrEF' || p.hfType === 'HFpEF' || p.studyConsented)
+        
+        // Calculate new this month for HF
+        const startOfMonth = new Date()
+        startOfMonth.setDate(1)
+        startOfMonth.setHours(0, 0, 0, 0)
+        const hfNewThisMonth = hfPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
+
+        // Calculate demographics completeness for HF
+        const demographicFields = ['firstName', 'lastName', 'dob', 'sex', 'mrn', 'contact', 'address', 'indianCitizen', 'studyConsented']
+        let totalDemographicsScore = 0
+        hfPatients.forEach(p => {
+          let filled = 0
+          demographicFields.forEach(f => {
+            const val = (p as any)[f]
+            if (val !== undefined && val !== null && val !== '') filled++
+          })
+          totalDemographicsScore += Math.round((filled / demographicFields.length) * 100)
+        })
+        const avgDemographics = hfPatients.length ? Math.round(totalDemographicsScore / hfPatients.length) : 0
+
+        // Calculate average LVEF for HF
+        const lvefVals = hfPatients.map(p => p.lvef).filter(v => v !== undefined && v !== null && typeof v === 'number') as number[]
+        const avgLvef = lvefVals.length ? Math.round(lvefVals.reduce((a, b) => a + b, 0) / lvefVals.length) : 32
+
+        // Set the state dynamically
+        setRegistries(prev => prev.map(r => {
+          if (r.id === 'hf') {
+            const updatedCategories = r.categories.map(cat => {
+              if (cat.name === 'Demographics') {
+                return { ...cat, pct: avgDemographics || 98 }
+              }
+              return cat
+            })
+            const updatedCompletion = Math.round(updatedCategories.reduce((sum, c) => sum + c.pct, 0) / updatedCategories.length)
+            
+            return {
+              ...r,
+              patients: hfPatients.length,
+              newThisMonth: hfNewThisMonth,
+              categories: updatedCategories,
+              completion: updatedCompletion,
+              quickStats: r.quickStats.map(stat => {
+                if (stat.label === 'Avg LVEF') {
+                  return { ...stat, value: `${avgLvef}%` }
+                }
+                return stat
+              })
+            }
+          }
+          return r
+        }))
+      } catch (error) {
+        console.error('Failed to load registry statistics:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [])
+
+  const totalPatients = registries.reduce((s, r) => s + r.patients, 0)
+  const avgCompletion = Math.round(registries.reduce((s, r) => s + r.completion, 0) / registries.length)
+  const activeCount   = registries.filter(r => r.status === 'Active').length
+  const newThisMonth  = registries.reduce((s, r) => s + r.newThisMonth, 0)
+
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -251,7 +325,7 @@ export default function RegistryHomePage() {
 
       {/* ── Registry Cards Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-        {REGISTRIES.map(reg => (
+        {registries.map(reg => (
           <div
             key={reg.id}
             className="glass-card flex flex-col overflow-hidden transition-all duration-200 hover:scale-[1.01]"
