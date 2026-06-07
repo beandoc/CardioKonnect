@@ -231,59 +231,73 @@ export default function RegistryHomePage() {
     async function loadData() {
       try {
         const allPatients = await getPatients()
-        
-        // Filter to Heart Failure registry patients
-        const hfPatients = allPatients.filter(p => p.registryId === 'hf' || p.hfType === 'HFrEF' || p.hfType === 'HFmrEF' || p.hfType === 'HFpEF' || p.studyConsented)
-        
-        // Calculate new this month for HF
         const startOfMonth = new Date()
         startOfMonth.setDate(1)
         startOfMonth.setHours(0, 0, 0, 0)
-        const hfNewThisMonth = hfPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
-
-        // Calculate demographics completeness for HF
-        const demographicFields = ['firstName', 'lastName', 'dob', 'sex', 'mrn', 'contact', 'address', 'indianCitizen', 'studyConsented']
-        let totalDemographicsScore = 0
-        hfPatients.forEach(p => {
-          let filled = 0
-          demographicFields.forEach(f => {
-            const val = (p as any)[f]
-            if (val !== undefined && val !== null && val !== '') filled++
-          })
-          totalDemographicsScore += Math.round((filled / demographicFields.length) * 100)
-        })
-        const avgDemographics = hfPatients.length ? Math.round(totalDemographicsScore / hfPatients.length) : 0
-
-        // Calculate average LVEF for HF
-        const lvefVals = hfPatients.map(p => p.lvef).filter(v => v !== undefined && v !== null && typeof v === 'number') as number[]
-        const avgLvef = lvefVals.length ? Math.round(lvefVals.reduce((a, b) => a + b, 0) / lvefVals.length) : 32
+        
+        const getPatientsForRegistry = (id: string) => {
+          if (id === 'hf') {
+            return allPatients.filter(p => p.registryId === 'hf' || p.hfType === 'HFrEF' || p.hfType === 'HFmrEF' || p.hfType === 'HFpEF' || p.studyConsented)
+          }
+          return allPatients.filter(p => p.registryId === id)
+        }
 
         // Set the state dynamically
         setRegistries(prev => prev.map(r => {
-          if (r.id === 'hf') {
-            const updatedCategories = r.categories.map(cat => {
-              if (cat.name === 'Demographics') {
-                return { ...cat, pct: avgDemographics || 98 }
-              }
-              return cat
+          const regPatients = getPatientsForRegistry(r.id)
+          const newThisMonth = regPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
+
+          // Calculate demographics completeness
+          const demographicFields = ['firstName', 'lastName', 'dob', 'sex', 'mrn', 'contact', 'address', 'indianCitizen', 'studyConsented']
+          let totalDemographicsScore = 0
+          regPatients.forEach(p => {
+            let filled = 0
+            demographicFields.forEach(f => {
+              const val = (p as any)[f]
+              if (val !== undefined && val !== null && val !== '') filled++
             })
-            const updatedCompletion = Math.round(updatedCategories.reduce((sum, c) => sum + c.pct, 0) / updatedCategories.length)
-            
-            return {
-              ...r,
-              patients: hfPatients.length,
-              newThisMonth: hfNewThisMonth,
-              categories: updatedCategories,
-              completion: updatedCompletion,
-              quickStats: r.quickStats.map(stat => {
-                if (stat.label === 'Avg LVEF') {
-                  return { ...stat, value: `${avgLvef}%` }
-                }
-                return stat
-              })
+            totalDemographicsScore += Math.round((filled / demographicFields.length) * 100)
+          })
+          const avgDemographics = regPatients.length ? Math.round(totalDemographicsScore / regPatients.length) : 0
+
+          // Calculate updated categories completeness
+          const updatedCategories = r.categories.map(cat => {
+            if (cat.name === 'Demographics') {
+              return { ...cat, pct: avgDemographics }
             }
+            return { ...cat, pct: regPatients.length ? cat.pct : 0 }
+          })
+          
+          const updatedCompletion = regPatients.length
+            ? Math.round(updatedCategories.reduce((sum, c) => sum + c.pct, 0) / updatedCategories.length)
+            : 0
+
+          // Calculate average LVEF if it is HF registry
+          let quickStats = r.quickStats
+          if (r.id === 'hf') {
+            const lvefVals = regPatients.map(p => p.lvef).filter(v => v !== undefined && v !== null && typeof v === 'number') as number[]
+            const avgLvef = lvefVals.length ? Math.round(lvefVals.reduce((a, b) => a + b, 0) / lvefVals.length) : 32
+            quickStats = r.quickStats.map(stat => {
+              if (stat.label === 'Avg LVEF') {
+                return { ...stat, value: `${avgLvef}%` }
+              }
+              return stat
+            })
+          } else {
+            quickStats = r.quickStats.map(stat => ({
+              ...stat,
+              value: regPatients.length ? stat.value : '—'
+            }))
           }
-          return r
+
+          return {
+            ...r,
+            patients: regPatients.length,
+            newThisMonth: newThisMonth,
+            categories: updatedCategories,
+            completion: updatedCompletion,
+            quickStats: quickStats
+          }
         }))
       } catch (error) {
         console.error('Failed to load registry statistics:', error)
@@ -296,9 +310,17 @@ export default function RegistryHomePage() {
 
   const totalPatients = registries.reduce((s, r) => s + r.patients, 0)
   const avgCompletion = Math.round(registries.reduce((s, r) => s + r.completion, 0) / registries.length)
-  const activeCount   = registries.filter(r => r.status === 'Active').length
+  const activeCount   = registries.filter(r => r.status === 'Active' && r.patients > 0).length
   const newThisMonth  = registries.reduce((s, r) => s + r.newThisMonth, 0)
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3">
+        <Activity className="w-8 h-8 text-blue-500 animate-spin" />
+        <p className="text-sm text-gray-400">Loading registry dashboard...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
