@@ -175,13 +175,17 @@ async function executeTest() {
 }
 
 export async function GET() {
-  // Trigger the test in the background without blocking or awaiting it
-  executeTest().catch((err) => {
-    console.error('Background test execution failed:', err)
-  })
-
-  return NextResponse.json({
-    success: true,
-    message: 'Test started in the background. Check scratch/test-results.json in 30-40 seconds for completion details.'
-  })
+  try {
+    await executeTest()
+    return NextResponse.json({
+      success: true,
+      message: 'Test completed and database cleaned up successfully. Check scratch/test-results.json for details.'
+    })
+  } catch (err: any) {
+    return NextResponse.json({
+      success: false,
+      error: err.message || err
+    })
+  }
 }
+

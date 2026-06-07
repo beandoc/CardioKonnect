@@ -5,7 +5,7 @@ import { FlaskConical, Calculator, Heart, Info, ArrowRight, ShieldCheck, Activit
 import Button from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
-import { calculateMAGGIC, calculateH2FPEF, calculateCHARM } from '@/lib/riskScores'
+import { calculateMAGGIC, calculateH2FPEF, calculateHFAPEFF, calculateCHARM, calculateCHADSVASc, calculateHASBLED } from '@/lib/riskScores'
 import { getPatient, getVisits, updateVisit } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import { toast } from 'sonner'
@@ -17,7 +17,7 @@ function RiskCalculatorContent() {
   const patientId = searchParams.get('patientId')
   const visitId = searchParams.get('visitId')
 
-  const [activeCalculator, setActiveCalculator] = useState<'maggic' | 'h2fpef' | 'charm'>('maggic')
+  const [activeCalculator, setActiveCalculator] = useState<'maggic' | 'h2fpef' | 'hfapeff' | 'charm' | 'chads' | 'hasbled'>('maggic')
   const [crUnit, setCrUnit] = useState<'mg/dL' | 'umol/L'>('mg/dL')
 
   const [connectedPatient, setConnectedPatient] = useState<Patient | null>(null)
@@ -46,6 +46,16 @@ function RiskCalculatorContent() {
   const [h2Age, setH2Age] = useState(65)
   const [h2EEPrime, setH2EEPrime] = useState(11)
 
+  // HFA-PEFF inputs state
+  const [hfaSeptalEPrime, setHfaSeptalEPrime] = useState(8)
+  const [hfaLateralEPrime, setHfaLateralEPrime] = useState(11)
+  const [hfaGls, setHfaGls] = useState(-18)
+  const [hfaLaVolumeIndex, setHfaLaVolumeIndex] = useState(32)
+  const [hfaLvMassIndex, setHfaLvMassIndex] = useState(110)
+  const [hfaRelativeWallThickness, setHfaRelativeWallThickness] = useState(0.38)
+  const [hfaNtProBNP, setHfaNtProBNP] = useState(300)
+  const [hfaBNP, setHfaBNP] = useState(100)
+
   // CHARM inputs state
   const [charmAge, setCharmAge] = useState(65)
   const [charmNyha, setCharmNyha] = useState<'I' | 'II' | 'III' | 'IV'>('III')
@@ -55,6 +65,26 @@ function RiskCalculatorContent() {
   const [charmDiabetes, setCharmDiabetes] = useState(true)
   const [charmCopd, setCharmCopd] = useState(false)
   const [charmSmoker, setCharmSmoker] = useState(true)
+
+  // CHA2DS2-VASc inputs state
+  const [chadsAge, setChadsAge] = useState(65)
+  const [chadsSex, setChadsSex] = useState<'Male' | 'Female'>('Male')
+  const [chadsCHF, setChadsCHF] = useState(true)
+  const [chadsHTN, setChadsHTN] = useState(true)
+  const [chadsDiabetes, setChadsDiabetes] = useState(true)
+  const [chadsStroke, setChadsStroke] = useState(false)
+  const [chadsVascular, setChadsVascular] = useState(false)
+
+  // HAS-BLED inputs state
+  const [hasbledAge, setHasbledAge] = useState(65)
+  const [hasbledHTN, setHasbledHTN] = useState(false)
+  const [hasbledRenal, setHasbledRenal] = useState(false)
+  const [hasbledLiver, setHasbledLiver] = useState(false)
+  const [hasbledStroke, setHasbledStroke] = useState(false)
+  const [hasbledBleeding, setHasbledBleeding] = useState(false)
+  const [hasbledLabileINR, setHasbledLabileINR] = useState(false)
+  const [hasbledDrugs, setHasbledDrugs] = useState(false)
+  const [hasbledAlcohol, setHasbledAlcohol] = useState(false)
 
   const [saving, setSaving] = useState(false)
 
@@ -105,6 +135,16 @@ function RiskCalculatorContent() {
             setH2Age(age)
             if (vt.eEPrime != null) setH2EEPrime(vt.eEPrime)
 
+            // Auto-populate HFA-PEFF
+            if (vt.septalEPrime != null) setHfaSeptalEPrime(vt.septalEPrime)
+            if (vt.lateralEPrime != null) setHfaLateralEPrime(vt.lateralEPrime)
+            if (vt.gls != null) setHfaGls(vt.gls)
+            if (vt.laVolumeIndex != null) setHfaLaVolumeIndex(vt.laVolumeIndex)
+            if (vt.lvMassIndex != null) setHfaLvMassIndex(vt.lvMassIndex)
+            if (vt.relativeWallThickness != null) setHfaRelativeWallThickness(vt.relativeWallThickness)
+            if (vt.ntProBNP != null) setHfaNtProBNP(vt.ntProBNP)
+            if (vt.bnp != null) setHfaBNP(vt.bnp)
+
             // Auto-populate CHARM
             setCharmAge(age)
             if (vt.nyha && ['I', 'II', 'III', 'IV'].includes(vt.nyha)) setCharmNyha(vt.nyha as any)
@@ -112,6 +152,36 @@ function RiskCalculatorContent() {
             if (vt.creatinine != null) setCharmCr(vt.creatinine)
             if (vt.sodium != null) setCharmSodium(vt.sodium)
             setCharmDiabetes(hasDiabetes)
+
+            // Auto-populate CHA2DS2-VASc
+            setChadsAge(age)
+            setChadsSex(pt.sex === 'Female' ? 'Female' : 'Male')
+            setChadsCHF(true) // Defaults to true in heart failure context
+            const ptComorbidities = Array.isArray(pt.comorbidities) ? pt.comorbidities.join(' ') : (pt.comorbidities ?? '')
+            const hasHTN = ptComorbidities.toLowerCase().includes('hypertension') || ptComorbidities.toLowerCase().includes('htn') || (vt.bpSystolic != null && vt.bpSystolic > 140) || (vt.bpDiastolic != null && vt.bpDiastolic > 90) || false
+            setChadsHTN(hasHTN)
+            setChadsDiabetes(hasDiabetes)
+            const hasStroke = ptComorbidities.toLowerCase().includes('stroke') || ptComorbidities.toLowerCase().includes('cva') || ptComorbidities.toLowerCase().includes('tia') || !!vt.eventStroke || false
+            setChadsStroke(hasStroke)
+            const hasVascular = ptComorbidities.toLowerCase().includes('vascular') || ptComorbidities.toLowerCase().includes('mi') || ptComorbidities.toLowerCase().includes('cad') || ptComorbidities.toLowerCase().includes('myocardial') || !!vt.eventMI || false
+            setChadsVascular(hasVascular)
+
+            // Auto-populate HAS-BLED
+            setHasbledAge(age)
+            setHasbledHTN(vt.bpSystolic != null && vt.bpSystolic > 160)
+            const abnormalRenal = ptComorbidities.toLowerCase().includes('dialysis') || ptComorbidities.toLowerCase().includes('renal') || ptComorbidities.toLowerCase().includes('transplant') || (vt.creatinine != null && vt.creatinine > 2.26) || false
+            setHasbledRenal(abnormalRenal)
+            const abnormalLiver = ptComorbidities.toLowerCase().includes('cirrhosis') || ptComorbidities.toLowerCase().includes('liver') || ptComorbidities.toLowerCase().includes('hepatic') || false
+            setHasbledLiver(abnormalLiver)
+            setHasbledStroke(hasStroke)
+            const hasBleeding = ptComorbidities.toLowerCase().includes('bleeding') || ptComorbidities.toLowerCase().includes('hemorrhage') || ptComorbidities.toLowerCase().includes('anaemia') || ptComorbidities.toLowerCase().includes('anemia') || (vt.hb != null && vt.hb < 11) || false
+            setHasbledBleeding(hasBleeding)
+            const labileINR = ptComorbidities.toLowerCase().includes('labile') || ptComorbidities.toLowerCase().includes('inr') || false
+            setHasbledLabileINR(labileINR)
+            const usesDrugs = vt.aspirin?.prescribed === 'Yes' || ptComorbidities.toLowerCase().includes('nsaid') || ptComorbidities.toLowerCase().includes('aspirin') || false
+            setHasbledDrugs(usesDrugs)
+            const alcoholExcess = ptComorbidities.toLowerCase().includes('alcohol') || false
+            setHasbledAlcohol(alcoholExcess)
 
             toast.success(`Loaded clinical values for ${pt.firstName} ${pt.lastName}`)
           }
@@ -167,6 +237,24 @@ function RiskCalculatorContent() {
     })
   }, [h2Bmi, h2Meds, h2Af, h2Pap, h2Age, h2EEPrime])
 
+  const hfapeffResult = useMemo(() => {
+    return calculateHFAPEFF({
+      age: h2Age,
+      sex: maggicSex,
+      rhythm: connectedVisit?.rhythm || (h2Af ? 'AF' : ''),
+      eEPrime: h2EEPrime,
+      septalEPrime: hfaSeptalEPrime,
+      lateralEPrime: hfaLateralEPrime,
+      rvsp: h2Pap,
+      gls: hfaGls,
+      laVolumeIndex: hfaLaVolumeIndex,
+      lvMassIndex: hfaLvMassIndex,
+      relativeWallThickness: hfaRelativeWallThickness,
+      ntProBNP: hfaNtProBNP,
+      bnp: hfaBNP
+    })
+  }, [h2Age, maggicSex, connectedVisit, h2Af, h2EEPrime, hfaSeptalEPrime, hfaLateralEPrime, h2Pap, hfaGls, hfaLaVolumeIndex, hfaLvMassIndex, hfaRelativeWallThickness, hfaNtProBNP, hfaBNP])
+
   const charmResult = useMemo(() => {
     const crMgDl = crUnit === 'umol/L' ? charmCr / 88.4 : charmCr;
     return calculateCHARM({
@@ -181,6 +269,32 @@ function RiskCalculatorContent() {
     })
   }, [charmAge, charmNyha, charmLvef, charmCr, crUnit, charmSodium, charmDiabetes, charmCopd, charmSmoker])
 
+  const chadsResult = useMemo(() => {
+    return calculateCHADSVASc({
+      congestiveHF: chadsCHF,
+      hypertension: chadsHTN,
+      age: chadsAge,
+      diabetes: chadsDiabetes,
+      strokeHistory: chadsStroke,
+      vascularDisease: chadsVascular,
+      sex: chadsSex
+    })
+  }, [chadsCHF, chadsHTN, chadsAge, chadsDiabetes, chadsStroke, chadsVascular, chadsSex])
+
+  const hasbledResult = useMemo(() => {
+    return calculateHASBLED({
+      hypertension: hasbledHTN,
+      abnormalRenal: hasbledRenal,
+      abnormalLiver: hasbledLiver,
+      strokeHistory: hasbledStroke,
+      bleedingHistory: hasbledBleeding,
+      labileINR: hasbledLabileINR,
+      age: hasbledAge,
+      drugs: hasbledDrugs,
+      alcohol: hasbledAlcohol
+    })
+  }, [hasbledHTN, hasbledRenal, hasbledLiver, hasbledStroke, hasbledBleeding, hasbledLabileINR, hasbledAge, hasbledDrugs, hasbledAlcohol])
+
   // Save prognoses to Visit
   const handleSaveToVisit = async () => {
     if (!patientId || !visitId) return
@@ -192,7 +306,10 @@ function RiskCalculatorContent() {
         maggicThreeYearMortality: maggicResult.threeYearMortality,
         h2fpefScore: h2fpefResult.score,
         h2fpefProbability: h2fpefResult.probability,
+        hfapeffScore: hfapeffResult.score,
         charmScore: charmResult.score,
+        chadsvascScore: chadsResult.score,
+        hasbledScore: hasbledResult.score,
       })
       toast.success('Successfully saved prognoses to visit record')
       router.push(`/patients/${patientId}?tab=overview`)
@@ -254,12 +371,36 @@ function RiskCalculatorContent() {
           H2FPEF Diagnostic Score
         </button>
         <button
+          onClick={() => setActiveCalculator('hfapeff')}
+          className={cn("text-xs font-semibold pb-2 border-b-2 px-1 transition-all",
+            activeCalculator === 'hfapeff' ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-gray-200"
+          )}
+        >
+          HFA-PEFF Diagnostic Score
+        </button>
+        <button
           onClick={() => setActiveCalculator('charm')}
           className={cn("text-xs font-semibold pb-2 border-b-2 px-1 transition-all",
             activeCalculator === 'charm' ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-gray-200"
           )}
         >
           CHARM CV Event Rate
+        </button>
+        <button
+          onClick={() => setActiveCalculator('chads')}
+          className={cn("text-xs font-semibold pb-2 border-b-2 px-1 transition-all",
+            activeCalculator === 'chads' ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-gray-200"
+          )}
+        >
+          CHA₂DS₂-VASc Score
+        </button>
+        <button
+          onClick={() => setActiveCalculator('hasbled')}
+          className={cn("text-xs font-semibold pb-2 border-b-2 px-1 transition-all",
+            activeCalculator === 'hasbled' ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-gray-200"
+          )}
+        >
+          HAS-BLED Score
         </button>
       </div>
 
@@ -383,6 +524,70 @@ function RiskCalculatorContent() {
               </div>
             )}
 
+            {/* HFA-PEFF Parameters */}
+            {activeCalculator === 'hfapeff' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="form-label text-gray-400">Age (years)</label>
+                  <input type="number" min={18} max={120} className="form-input bg-gray-900 border-blue-500/10 text-white" value={h2Age} onChange={e => setH2Age(parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Sex</label>
+                  <select className="form-select bg-gray-900 border-blue-500/10 text-white" value={maggicSex} onChange={e => setMaggicSex(e.target.value as any)}>
+                    <option>Male</option>
+                    <option>Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Atrial Fibrillation Status</label>
+                  <select className="form-select bg-gray-900 border-blue-500/10 text-white" value={h2Af ? 'Yes' : 'No'} onChange={e => setH2Af(e.target.value === 'Yes')}>
+                    <option>Yes</option>
+                    <option>No</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Average Echo E/e' Ratio</label>
+                  <input type="number" min={1} max={40} step="0.1" className="form-input bg-gray-900 border-blue-500/10 text-white" value={h2EEPrime} onChange={e => setH2EEPrime(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Septal E' Velocity (cm/s)</label>
+                  <input type="number" min={1} max={25} step="0.1" className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaSeptalEPrime} onChange={e => setHfaSeptalEPrime(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Lateral E' Velocity (cm/s)</label>
+                  <input type="number" min={1} max={25} step="0.1" className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaLateralEPrime} onChange={e => setHfaLateralEPrime(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Pulmonary Arterial Pressure (RVSP, mmHg)</label>
+                  <input type="number" min={10} max={120} className="form-input bg-gray-900 border-blue-500/10 text-white" value={h2Pap} onChange={e => setH2Pap(parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Global Longitudinal Strain (GLS, %)</label>
+                  <input type="number" min={-30} max={0} step="0.1" className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaGls} onChange={e => setHfaGls(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">LA Volume Index (LAVI, ml/m²)</label>
+                  <input type="number" min={10} max={80} step="0.1" className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaLaVolumeIndex} onChange={e => setHfaLaVolumeIndex(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">LV Mass Index (LVMI, g/m²)</label>
+                  <input type="number" min={30} max={250} step="0.1" className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaLvMassIndex} onChange={e => setHfaLvMassIndex(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Relative Wall Thickness (RWT)</label>
+                  <input type="number" min={0.1} max={0.8} step="0.01" className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaRelativeWallThickness} onChange={e => setHfaRelativeWallThickness(parseFloat(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">NT-proBNP (pg/mL)</label>
+                  <input type="number" min={0} max={35000} className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaNtProBNP} onChange={e => setHfaNtProBNP(parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">BNP (pg/mL)</label>
+                  <input type="number" min={0} max={5000} className="form-input bg-gray-900 border-blue-500/10 text-white" value={hfaBNP} onChange={e => setHfaBNP(parseInt(e.target.value) || 0)} />
+                </div>
+              </div>
+            )}
+
             {/* CHARM Parameters */}
             {activeCalculator === 'charm' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -429,6 +634,89 @@ function RiskCalculatorContent() {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={charmCopd} onChange={e => setCharmCopd(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
                     <span>COPD</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* CHA2DS2-VASc Parameters */}
+            {activeCalculator === 'chads' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="form-label text-gray-400">Age (years)</label>
+                  <input type="number" min={18} max={120} className="form-input bg-gray-900 border-blue-500/10 text-white" value={chadsAge} onChange={e => setChadsAge(parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className="form-label text-gray-400">Sex Category</label>
+                  <select className="form-select bg-gray-900 border-blue-500/10 text-white" value={chadsSex} onChange={e => setChadsSex(e.target.value as any)}>
+                    <option>Male</option>
+                    <option>Female</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2 pt-2 space-y-2 text-white">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={chadsCHF} onChange={e => setChadsCHF(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Congestive Heart Failure / LV Dysfunction (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={chadsHTN} onChange={e => setChadsHTN(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Hypertension (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={chadsDiabetes} onChange={e => setChadsDiabetes(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Diabetes Mellitus (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={chadsStroke} onChange={e => setChadsStroke(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Stroke / TIA / Thromboembolism history (+2)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={chadsVascular} onChange={e => setChadsVascular(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Vascular Disease (prior MI, PAD, aortic plaque) (+1)</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* HAS-BLED Parameters */}
+            {activeCalculator === 'hasbled' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="form-label text-gray-400">Age (years)</label>
+                  <input type="number" min={18} max={120} className="form-input bg-gray-900 border-blue-500/10 text-white" value={hasbledAge} onChange={e => setHasbledAge(parseInt(e.target.value) || 0)} />
+                </div>
+                <div className="md:col-span-2 pt-2 space-y-2 text-white">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledHTN} onChange={e => setHasbledHTN(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Hypertension (SBP &gt; 160 mmHg) (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledRenal} onChange={e => setHasbledRenal(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Abnormal Renal Function (Cr &gt; 2.26 mg/dL, dialysis, transplant) (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledLiver} onChange={e => setHasbledLiver(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Abnormal Liver Function (cirrhosis, LFTs &gt; 3x normal) (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledStroke} onChange={e => setHasbledStroke(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Stroke / TIA History (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledBleeding} onChange={e => setHasbledBleeding(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Prior Major Bleed or Bleeding Predisposition/Anemia (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledLabileINR} onChange={e => setHasbledLabileINR(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Labile INRs / Unstable Time in Therapeutic Range &lt; 60% (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledDrugs} onChange={e => setHasbledDrugs(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Antiplatelet drug use (e.g. Aspirin) or NSAIDs (+1)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={hasbledAlcohol} onChange={e => setHasbledAlcohol(e.target.checked)} className="w-4 h-4 rounded bg-gray-900 border-blue-500/10" />
+                    <span>Excess Alcohol consumption (&ge; 8 drinks/week) (+1)</span>
                   </label>
                 </div>
               </div>
@@ -533,6 +821,54 @@ function RiskCalculatorContent() {
               </div>
             )}
 
+            {/* HFA-PEFF Render Result */}
+            {activeCalculator === 'hfapeff' && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="flex justify-between items-center bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
+                  <div>
+                    <p className="text-[10px] uppercase text-gray-400">HFA-PEFF Point Score</p>
+                    <p className="text-3xl font-extrabold text-white mt-1">{hfapeffResult.score} <span className="text-sm font-normal text-gray-400">/ 6</span></p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase text-gray-400">Probability Group</p>
+                    <span className={cn(
+                      "badge mt-1 text-[11px]",
+                      hfapeffResult.score >= 5 ? 'badge-red' : hfapeffResult.score >= 2 ? 'badge-amber' : 'badge-green'
+                    )}>
+                      {hfapeffResult.score >= 5 ? 'High Probability' : hfapeffResult.score >= 2 ? 'Intermediate' : 'Low Probability'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 bg-slate-900/30 p-4 rounded-xl border border-blue-500/10 text-xs text-gray-300 space-y-2">
+                  <p className="font-semibold text-white uppercase tracking-wider text-[10px] mb-2 border-b border-gray-800 pb-1">Domain Points Breakdown</p>
+                  <div className="flex justify-between py-0.5">
+                    <span>Functional Domain (E/e', e', GLS, RVSP)</span>
+                    <span className="font-bold text-white">{hfapeffResult.functionalPoints} / 2 pts</span>
+                  </div>
+                  <div className="flex justify-between py-0.5">
+                    <span>Morphological Domain (LAVI, LVMI, RWT)</span>
+                    <span className="font-bold text-white">{hfapeffResult.morphologicalPoints} / 2 pts</span>
+                  </div>
+                  <div className="flex justify-between py-0.5">
+                    <span>Biomarker Domain (NT-proBNP / BNP)</span>
+                    <span className="font-bold text-white">{hfapeffResult.biomarkerPoints} / 2 pts</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-white">Diagnostic Probability Gauge</p>
+                  <div className="progress-track">
+                    <div className="progress-fill bg-gradient-to-r from-blue-500 to-violet-500" style={{ width: `${(hfapeffResult.score / 6) * 100}%` }} />
+                  </div>
+                </div>
+
+                <div className="alert-strip info text-xs mt-3 leading-relaxed bg-blue-500/10 border-blue-500/20 text-blue-300">
+                  {hfapeffResult.interpretation}
+                </div>
+              </div>
+            )}
+
             {/* CHARM Render Result */}
             {activeCalculator === 'charm' && (
               <div className="space-y-5">
@@ -563,6 +899,73 @@ function RiskCalculatorContent() {
                   <div className="progress-track">
                     <div className="progress-fill bg-rose-500" style={{ width: `${charmResult.estimatedOneYearEventRate * 100}%` }} />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* CHA2DS2-VASc Render Result */}
+            {activeCalculator === 'chads' && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="flex justify-between items-center bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
+                  <div>
+                    <p className="text-[10px] uppercase text-gray-400">CHA₂DS₂-VASc Score</p>
+                    <p className="text-3xl font-extrabold text-white mt-1">{chadsResult.score} <span className="text-sm font-normal text-gray-400">/ 9</span></p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase text-gray-400">Risk Category</p>
+                    <span className={cn(
+                      "badge mt-1 text-[11px]",
+                      chadsResult.riskCategory === 'Low' && 'badge-green',
+                      chadsResult.riskCategory === 'Moderate' && 'badge-amber',
+                      chadsResult.riskCategory === 'High' && 'badge-red'
+                    )}>
+                      {chadsResult.riskCategory} Risk
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-white">Score Point Gauge</p>
+                  <div className="progress-track">
+                    <div className="progress-fill bg-gradient-to-r from-blue-500 to-rose-500" style={{ width: `${(chadsResult.score / 9) * 100}%` }} />
+                  </div>
+                </div>
+
+                <div className="alert-strip info text-xs mt-3 leading-relaxed bg-blue-500/10 border-blue-500/20 text-blue-300">
+                  {chadsResult.recommendation}
+                </div>
+              </div>
+            )}
+
+            {/* HAS-BLED Render Result */}
+            {activeCalculator === 'hasbled' && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="flex justify-between items-center bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
+                  <div>
+                    <p className="text-[10px] uppercase text-gray-400">HAS-BLED Point Score</p>
+                    <p className="text-3xl font-extrabold text-white mt-1">{hasbledResult.score} <span className="text-sm font-normal text-gray-400">/ 9</span></p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase text-gray-400">Bleeding Risk</p>
+                    <span className={cn(
+                      "badge mt-1 text-[11px]",
+                      hasbledResult.riskCategory === 'Low-Moderate' && 'badge-green',
+                      hasbledResult.riskCategory === 'High' && 'badge-red'
+                    )}>
+                      {hasbledResult.riskCategory} Risk
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-white">Bleeding Risk Gauge</p>
+                  <div className="progress-track">
+                    <div className="progress-fill bg-gradient-to-r from-emerald-500 to-rose-500" style={{ width: `${(hasbledResult.score / 9) * 100}%` }} />
+                  </div>
+                </div>
+
+                <div className="alert-strip info text-xs mt-3 leading-relaxed bg-blue-500/10 border-blue-500/20 text-blue-300">
+                  {hasbledResult.recommendation}
                 </div>
               </div>
             )}

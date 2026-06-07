@@ -44,7 +44,14 @@ export interface Patient {
   studyConsented?: boolean
   hfConfirmationDate?: string
   educationYears?: number
-  aadhaarNo?: string
+  abhaId?: string
+  occupation?: string
+  indexEtiology?: string[]
+  indexEtiologyOther?: string
+  familyHistoryPrematureCVD?: boolean
+  familyHistorySuddenDeath?: boolean
+  familyHistoryCardiomyopathy?: boolean
+  familyHistoryGeneticHeart?: boolean
   addressHouse?: string
   addressStreet?: string
   addressPost?: string
@@ -54,6 +61,21 @@ export interface Patient {
   secondaryContact?: string
   caregiverContact?: string
   caregiverSecondaryContact?: string
+
+  // eConsent Version Tracking
+  consentVersion?: string
+  consentDate?: string
+  consentWitness?: string
+  consentWithdrawalDate?: string
+  consentWithdrawalReason?: string
+  reConsentNeeded?: boolean
+  reConsentDate?: string
+
+  // GCP Exclusions
+  exclusionReviewed?: boolean
+  excludeActiveTrial?: boolean
+  excludeTerminalIllness?: boolean
+  excludeNonCompliance?: boolean
 
   // Mortality / vital status
   vitalStatus?: 'Alive' | 'Dead'
@@ -86,6 +108,7 @@ export interface Visit {
   bpSystolic?: number
   bpDiastolic?: number
   heartRate?: number   // bpm
+  respiratoryRate?: number
 
   // Clinical assessment
   nyha?: 'I' | 'II' | 'III' | 'IV'
@@ -126,6 +149,27 @@ export interface Visit {
   uricAcid?: number    // mg/dL
   ldl?: number         // mg/dL
   triglycerides?: number // mg/dL
+  hdl?: number         // mg/dL — HDL cholesterol
+  totalCholesterol?: number // mg/dL — Total cholesterol
+  alt?: number         // U/L — ALT (SGPT)
+  ast?: number         // U/L — AST (SGOT)
+  bilirubin?: number   // mg/dL — Total bilirubin
+  albumin?: number     // g/dL — Albumin
+  magnesium?: number   // mg/dL — Magnesium
+  wbc?: number         // cells/µL — White Blood Cell count
+  platelets?: number   // 10³/µL — Platelet count
+  inr?: number         // INR
+  pt?: number          // seconds — Prothrombin Time
+  alp?: number         // U/L — Alkaline Phosphatase
+  ggt?: number         // U/L — Gamma-Glutamyl Transferase
+  totalProtein?: number // g/dL — Total Protein
+  directBilirubin?: number // mg/dL — Direct Bilirubin
+  aptt?: number        // seconds — activated Partial Thromboplastin Time
+  hct?: number         // % — Hematocrit
+  mcv?: number         // fL — Mean Corpuscular Volume
+  nonHdl?: number      // mg/dL — Non-HDL Cholesterol
+  apoB?: number        // mg/dL — Apolipoprotein B
+  lpA?: number         // mg/dL — Lipoprotein(a)
 
   // ── ECG ─────────────────────────────────────────────────────────────────────
   qrsDuration?: number // ms
@@ -140,6 +184,8 @@ export interface Visit {
   sglt2i: MedEntry
   ivabradine: MedEntry
   mra: MedEntry        // Mineralocorticoid receptor antagonist
+  vericiguat?: MedEntry
+  tafamidis?: MedEntry
 
   // ── Medications — Dyslipidemia ───────────────────────────────────────────────
   aspirin: { prescribed: Prescribed; dose?: string }
@@ -227,11 +273,20 @@ export interface Visit {
   laVolumeIndex?: number   // LA Volume Index (ml/m²) — >34 = dilated LA
   ivcDiameter?: number     // IVC diameter (mm)
   ivcCollapsibility?: number // IVC collapsibility (%)
+  pericardialEffusion?: 'None' | 'Trivial' | 'Small' | 'Moderate' | 'Large' | '' // Pericardial effusion grade
+  tamponadeFeatures?: boolean // tamponade features present
+  lvThrombus?: boolean // LV thrombus present
+  lvThrombusLocation?: string // LV thrombus location
+  lvotGradientResting?: number // LVOT gradient resting (mmHg)
+  lvotGradientProvoked?: number // LVOT gradient provoked (mmHg)
+  septalEPrime?: number // Septal E' velocity (cm/s)
+  lateralEPrime?: number // Lateral E' velocity (cm/s)
   laPressureEstimate?: number // Estimated LA pressure (mmHg)
   mrGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
   arGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
   asGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
   msGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
+  trGrade?: 'None' | 'Mild' | 'Moderate' | 'Severe' | ''
   valvularHemodynamics?: {
     asAVA?: number
     asMeanGradient?: number
@@ -564,6 +619,10 @@ export interface Visit {
   charmScore?: number
   h2fpefScore?: number
   h2fpefProbability?: number
+  hfapeffScore?: number
+  hfapeffProbability?: number
+  chadsvascScore?: number
+  hasbledScore?: number
   shfmOneYearSurvival?: number
 
   // Quality of Life - EQ-5D-5L
@@ -768,7 +827,7 @@ export const BUILT_IN_FIELDS: RegistryField[] = [
   { id: '54', srNo: 54, fieldName: 'studyConsented', displayLabel: 'Consented for Study',   dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '55', srNo: 55, fieldName: 'hfConfirmationDate', displayLabel: 'HF Confirmation Date', dataType: 'Date',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '56', srNo: 56, fieldName: 'educationYears', displayLabel: 'Years of Education',    dataType: 'Number',      mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
-  { id: '57', srNo: 57, fieldName: 'aadhaarNo',      displayLabel: 'Aadhaar Card No',       dataType: 'Text',        mandatory: false, pii: true,  active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '57', srNo: 57, fieldName: 'abhaId',         displayLabel: 'ABHA ID',               dataType: 'Text',        mandatory: false, pii: true,  active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '58', srNo: 58, fieldName: 'addressHouse',   displayLabel: 'House/Flat No',         dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '59', srNo: 59, fieldName: 'addressStreet',  displayLabel: 'Street/Locality',       dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '60', srNo: 60, fieldName: 'addressPost',    displayLabel: 'Post Office',           dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
@@ -805,5 +864,11 @@ export const BUILT_IN_FIELDS: RegistryField[] = [
   { id: '91', srNo: 91, fieldName: 'dischargeOutcome', displayLabel: 'Discharge Outcome',    dataType: 'Dropdown',    mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '92', srNo: 92, fieldName: 'causeOfDeath',    displayLabel: 'Cause of Death',        dataType: 'Dropdown',    mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '93', srNo: 93, fieldName: 'lastHospDate',    displayLabel: 'Last HF Admission Date', dataType: 'Date',      mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '94', srNo: 94, fieldName: 'occupation',                 displayLabel: 'Occupation',                      dataType: 'Text',        mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '95', srNo: 95, fieldName: 'indexEtiology',              displayLabel: 'Index Diagnosis Etiology',        dataType: 'Multi-Select', mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '96', srNo: 96, fieldName: 'familyHistoryPrematureCVD',  displayLabel: 'Family history of premature CV disease', dataType: 'Boolean',     mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '97', srNo: 97, fieldName: 'familyHistorySuddenDeath',   displayLabel: 'Family history of sudden cardiac death', dataType: 'Boolean',  mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '98', srNo: 98, fieldName: 'familyHistoryCardiomyopathy', displayLabel: 'Family history of cardiomyopathy', dataType: 'Boolean',       mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  { id: '99', srNo: 99, fieldName: 'familyHistoryGeneticHeart',  displayLabel: 'Family history of genetic heart disease', dataType: 'Boolean',  mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
 ]
 

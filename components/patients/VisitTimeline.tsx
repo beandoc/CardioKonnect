@@ -66,6 +66,7 @@ function VisitCard({ visit, onDelete }: { visit: Visit; onDelete?: (id: string) 
             <Stat label="Potassium" value={visit.potassium} unit="mmol/L" />
             <Stat label="6MWT" value={visit.sixMWT} unit="m" />
             <Stat label="HR" value={visit.heartRate} unit="bpm" />
+            <Stat label="Resp Rate" value={visit.respiratoryRate} unit="breaths/min" />
             <Stat label="Weight" value={visit.weight} unit="kg" />
             <Stat label="Hb" value={visit.hb} unit="g/dL" />
             <Stat label="HbA1c" value={visit.hba1c} unit="%" />
@@ -96,26 +97,28 @@ function VisitCard({ visit, onDelete }: { visit: Visit; onDelete?: (id: string) 
           )}
 
           {/* Valvular Hemodynamics */}
-          {(visit.valvularHemodynamics && Object.values(visit.valvularHemodynamics).some(v => v != null)) && (
+          {((visit.valvularHemodynamics && Object.values(visit.valvularHemodynamics).some(v => v != null)) || visit.asGrade || visit.msGrade || visit.mrGrade || visit.arGrade || visit.trGrade) && (
             <div className="mt-3 pt-3 border-t border-gray-100">
               <p className="text-xs font-semibold text-gray-500 mb-2">Valvular Hemodynamics</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 {visit.asGrade && <div><span className="text-gray-400">AS Grade:</span> <span className="font-semibold text-gray-700">{visit.asGrade}</span></div>}
-                {visit.valvularHemodynamics.asAVA && <div><span className="text-gray-400">AVA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asAVA} cm²</span></div>}
-                {visit.valvularHemodynamics.asMeanGradient && <div><span className="text-gray-400">AS Mean Grad:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asMeanGradient} mmHg</span></div>}
-                {visit.valvularHemodynamics.asVmax && <div><span className="text-gray-400">AS Vmax:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asVmax} m/s</span></div>}
+                {visit.valvularHemodynamics?.asAVA && <div><span className="text-gray-400">AVA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asAVA} cm²</span></div>}
+                {visit.valvularHemodynamics?.asMeanGradient && <div><span className="text-gray-400">AS Mean Grad:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asMeanGradient} mmHg</span></div>}
+                {visit.valvularHemodynamics?.asVmax && <div><span className="text-gray-400">AS Vmax:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.asVmax} m/s</span></div>}
                 
                 {visit.msGrade && <div><span className="text-gray-400">MS Grade:</span> <span className="font-semibold text-gray-700">{visit.msGrade}</span></div>}
-                {visit.valvularHemodynamics.msMVA && <div><span className="text-gray-400">MVA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.msMVA} cm²</span></div>}
-                {visit.valvularHemodynamics.msMeanGradient && <div><span className="text-gray-400">MS Mean Grad:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.msMeanGradient} mmHg</span></div>}
+                {visit.valvularHemodynamics?.msMVA && <div><span className="text-gray-400">MVA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.msMVA} cm²</span></div>}
+                {visit.valvularHemodynamics?.msMeanGradient && <div><span className="text-gray-400">MS Mean Grad:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.msMeanGradient} mmHg</span></div>}
 
                 {visit.mrGrade && <div><span className="text-gray-400">MR Grade:</span> <span className="font-semibold text-gray-700">{visit.mrGrade}</span></div>}
-                {visit.valvularHemodynamics.mrRegurgitantVolume && <div><span className="text-gray-400">MR Regurg. Vol:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.mrRegurgitantVolume} mL</span></div>}
-                {visit.valvularHemodynamics.mrEROA && <div><span className="text-gray-400">MR EROA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.mrEROA} mm²</span></div>}
+                {visit.valvularHemodynamics?.mrRegurgitantVolume && <div><span className="text-gray-400">MR Regurg. Vol:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.mrRegurgitantVolume} mL</span></div>}
+                {visit.valvularHemodynamics?.mrEROA && <div><span className="text-gray-400">MR EROA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.mrEROA} mm²</span></div>}
 
                 {visit.arGrade && <div><span className="text-gray-400">AR Grade:</span> <span className="font-semibold text-gray-700">{visit.arGrade}</span></div>}
-                {visit.valvularHemodynamics.arRegurgitantVolume && <div><span className="text-gray-400">AR Regurg. Vol:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.arRegurgitantVolume} mL</span></div>}
-                {visit.valvularHemodynamics.arEROA && <div><span className="text-gray-400">AR EROA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.arEROA} mm²</span></div>}
+                {visit.valvularHemodynamics?.arRegurgitantVolume && <div><span className="text-gray-400">AR Regurg. Vol:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.arRegurgitantVolume} mL</span></div>}
+                {visit.valvularHemodynamics?.arEROA && <div><span className="text-gray-400">AR EROA:</span> <span className="font-semibold text-gray-700">{visit.valvularHemodynamics.arEROA} mm²</span></div>}
+
+                {visit.trGrade && <div><span className="text-gray-400">TR Grade:</span> <span className="font-semibold text-gray-700">{visit.trGrade}</span></div>}
               </div>
             </div>
           )}

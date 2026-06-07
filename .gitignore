@@ -6,3 +6,5 @@ out/
 build/
 *.tsbuildinfo
 .DS_Store
+venv/
+

@@ -19,7 +19,7 @@ export default function SeederPage() {
     try {
       await seedDemoData()
       setSeeded(true)
-      toast.success('Database seeded successfully with 9 patients and clinical visits!')
+      toast.success('Database seeded successfully with 150 patients and clinical visits!')
     } catch (e) {
       console.error(e)
       toast.error('Failed to seed database. Check browser console.')
@@ -53,6 +53,12 @@ export default function SeederPage() {
     { name: 'Amitabh Bachchan', mrn: 'HID-000777', location: 'Juhu, Mumbai', phenotype: 'HFrEF', visits: 2 },
     { name: 'Sanjay More', mrn: 'HID-554432', location: 'Dadar, Mumbai', phenotype: 'HFrEF', visits: 2 },
     { name: 'Lata Patwardhan', mrn: 'HID-887766', location: 'Dhantoli, Nagpur', phenotype: 'HFrEF', visits: 2 },
+    { name: 'Rajesh Kumar', mrn: 'HID-674012', location: 'Kothrud, Pune', phenotype: 'HFrEF', visits: 2 },
+    { name: 'Meera Nair', mrn: 'HID-590908', location: 'Powai, Mumbai', phenotype: 'HFpEF', visits: 2 },
+    { name: 'Vikram Singh', mrn: 'HID-811115', location: 'Aundh, Pune', phenotype: 'HFrEF', visits: 2 },
+    { name: 'Kavitha Krishnan', mrn: 'HID-540622', location: 'Dhantoli, Nagpur', phenotype: 'HFmrEF', visits: 2 },
+    { name: 'Devendra Patel', mrn: 'HID-630214', location: 'Dadar, Mumbai', phenotype: 'HFrEF', visits: 2 },
+    { name: 'Sneha Reddy', mrn: 'HID-720728', location: 'Viman Nagar, Pune', phenotype: 'HFpEF', visits: 2 },
   ]
 
   return (
@@ -70,7 +76,7 @@ export default function SeederPage() {
           </div>
         </div>
       </div>
-
+ 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left column: Controls */}
@@ -82,8 +88,9 @@ export default function SeederPage() {
             
             <div className="space-y-3">
               <p className="text-xs text-gray-400">
-                Seeding will reset the mock patients database (IDs 1-9) and inject clean multi-encounter visit timelines, GDMT medications, labs, and vitals.
+                Seeding will reset the mock patients database (IDs 1-150) and inject clean multi-encounter visit timelines, GDMT medications, labs, and vitals.
               </p>
+
               
               <Button 
                 onClick={handleSeed} 
@@ -152,7 +159,7 @@ export default function SeederPage() {
             <div>
               <h3 className="text-sm font-semibold text-white">Cohort Demographic Preview</h3>
               <p className="text-xs text-gray-400 mt-1">
-                The following 9 dummy Maharashtra-region patients will be created, with visit records dated up to today:
+                The following 150 dummy Maharashtra-region patients will be created, with visit records dated up to today (previewing the first 15):
               </p>
             </div>
 

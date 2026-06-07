@@ -14,9 +14,11 @@ import Button from '@/components/ui/Button'
 import VisitTimeline from '@/components/patients/VisitTimeline'
 import MetricTrendChart from '@/components/charts/MetricTrendChart'
 import PatientForm from '@/components/forms/PatientForm'
+import GDMTDashboard from '@/components/patients/GDMTDashboard'
 import type { PatientTrends } from '@/lib/types'
 import { toast } from 'sonner'
 import { PlusCircle, Edit2, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList } from 'lucide-react'
+import MLRiskCard from '@/components/patients/MLRiskCard'
 
 const EVENT_TYPES: EventType[] = [
   'All-cause death', 'CV death', 'HF hospitalisation', 'Urgent HF visit', 'LVAD implant',
@@ -48,7 +50,7 @@ export default function PatientDetailPage() {
   const [saving, setSaving] = useState(false)
   const [addingEvent, setAddingEvent] = useState(false)
   const [savingEvent, setSavingEvent] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends' | 'outcomes'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends' | 'outcomes' | 'gdmt'>('overview')
 
   // Outcome Event Form State
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0])
@@ -59,7 +61,7 @@ export default function PatientDetailPage() {
   const [eventAdjudicator, setEventAdjudicator] = useState('Dr. A. Jayachandra')
 
   useEffect(() => {
-    if (tabParam === 'overview' || tabParam === 'timeline' || tabParam === 'trends' || tabParam === 'outcomes') {
+    if (tabParam === 'overview' || tabParam === 'timeline' || tabParam === 'trends' || tabParam === 'outcomes' || tabParam === 'gdmt') {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -433,6 +435,7 @@ export default function PatientDetailPage() {
       <div className="flex border-b border-blue-500/10 mb-5 gap-4">
         {([
           { id: 'overview', label: 'Overview' },
+          { id: 'gdmt', label: 'GDMT Checklist' },
           { id: 'timeline', label: 'Timeline' },
           { id: 'trends', label: 'Trends' },
           { id: 'outcomes', label: 'Outcome Events' }
@@ -450,23 +453,42 @@ export default function PatientDetailPage() {
       {/* Overview tab */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* AI Risk Card — shown when at least one visit exists */}
+          {visits.length > 0 && (
+            <div className="lg:col-span-2">
+              <MLRiskCard
+                patient={patient}
+                visit={visits.sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0]}
+                allVisits={visits}
+              />
+            </div>
+          )}
           <Card>
             <CardHeader><CardTitle>Demographics</CardTitle></CardHeader>
             <CardBody className="space-y-2 text-sm">
-              {[
+              {([
                 ['Full Name', `${patient.firstName} ${patient.lastName}`],
                 ['HID', patient.mrn ?? '—'],
+                ['ABHA ID', patient.abhaId ?? '—'],
                 ['Date of Birth', formatDate(patient.dob)],
                 ['Age', age ? `${age} years` : '—'],
                 ['Sex', patient.sex],
+                ['Occupation', patient.occupation ?? '—'],
                 ['Registry Enrollment', patient.registryId ? (REGISTRY_MAP[patient.registryId] || patient.registryId) : 'None (Unassigned)'],
                 ['Index Date', patient.indexDate ? formatDate(patient.indexDate) : '—'],
+                patient.registryId === 'hf' ? ['Index Etiology', [...(patient.indexEtiology || []), patient.indexEtiologyOther].filter(Boolean).join(', ') || '—'] : null,
+                ['Family History', [
+                  patient.familyHistoryPrematureCVD && 'Premature CVD',
+                  patient.familyHistorySuddenDeath && 'Sudden Cardiac Death',
+                  patient.familyHistoryCardiomyopathy && 'Cardiomyopathy',
+                  patient.familyHistoryGeneticHeart && 'Genetic Heart Disease'
+                ].filter(Boolean).join(', ') || 'None reported'],
                 ['Consent status', patient.consentStatus ?? 'Pending'],
                 ['Contact', patient.contact ?? '—'],
                 ['Email', patient.email ?? '—'],
                 ['Comorbidities', Array.isArray(patient.comorbidities) ? patient.comorbidities.join(', ') : (patient.comorbidities ?? '—')],
                 ['Allergies', patient.allergies ?? '—'],
-              ].map(([k, v]) => (
+              ].filter(Boolean) as [string, string][]).map(([k, v]) => (
                 <div key={k} className="flex justify-between py-1.5 border-b border-blue-500/5">
                   <span className="text-gray-500">{k}</span>
                   <span className="font-medium text-white text-right max-w-[55%]">{v}</span>
@@ -656,6 +678,11 @@ export default function PatientDetailPage() {
             </Card>
           )}
         </div>
+      )}
+
+      {/* GDMT Checklist tab */}
+      {activeTab === 'gdmt' && (
+        <GDMTDashboard patient={patient} visits={visits} />
       )}
 
       {/* Timeline tab */}

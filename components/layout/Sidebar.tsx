@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, UserPlus, BarChart3, FileText,
   Heart, Database, Settings, FlaskConical, ShieldCheck,
-  Layers, ChevronRight, Activity, Bell, Search, Calendar, UserCheck, TrendingUp, X, LogOut, LayoutGrid, ClipboardList, ShieldAlert
+  Layers, ChevronRight, Activity, Bell, Search, Calendar, UserCheck, TrendingUp, X, LogOut, LayoutGrid, ClipboardList, ShieldAlert,
+  Brain
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -14,9 +15,9 @@ const NAV = [
   {
     section: 'Clinical Workspace',
     items: [
+      { href: '/',            label: 'Dashboard',             icon: LayoutDashboard },
       { href: '/registry-home', label: 'Registry Home',       icon: LayoutGrid },
       { href: '/patients',    label: 'Patients Database',     icon: Users },
-      { href: '/',            label: 'Dashboard',             icon: LayoutDashboard },
       { href: '/appointments', label: 'Appointments & Consents', icon: Calendar },
       { href: '/alerts',      label: 'Clinical Alerts',       icon: Bell },
     ],
@@ -26,6 +27,14 @@ const NAV = [
     items: [
       { href: '/procedures',         label: 'Procedural Audit',   icon: ClipboardList },
       { href: '/complication-audit', label: 'Complication Audit', icon: ShieldAlert },
+    ],
+  },
+  {
+    section: 'AI & Intelligence',
+    items: [
+      { href: '/insights',    label: 'AI Clinical Insights', icon: TrendingUp },
+      { href: '/ai-engine',   label: 'AI Engine',             icon: Brain },
+      { href: '/triage',      label: 'AI Triage Dashboard',   icon: Layers },
     ],
   },
   {

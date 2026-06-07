@@ -857,4 +857,224 @@ export interface ComprehensiveRiskProfile {
   seattle?: SeattleHFMResult
   targetDoses?: TargetDoseResult[]
   kccq?: KCCQDomainScores
+  chads?: CHADSVAScResult
+  hasbled?: HASBLEDResult
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. CHA2DS2-VASc RISK SCORE
+//    Reference: Lip GY et al. Chest. 2010;137(2):263-72. DOI:10.1378/chest.09-1584
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CHADSVAScInput {
+  congestiveHF: boolean
+  hypertension: boolean
+  age: number
+  diabetes: boolean
+  strokeHistory: boolean
+  vascularDisease: boolean
+  sex: SexType
+}
+
+export interface CHADSVAScResult {
+  score: number
+  riskCategory: 'Low' | 'Moderate' | 'High'
+  recommendation: string
+}
+
+export function calculateCHADSVASc(input: CHADSVAScInput): CHADSVAScResult {
+  let score = 0
+  if (input.congestiveHF) score += 1
+  if (input.hypertension) score += 1
+  if (input.age >= 75) score += 2
+  else if (input.age >= 65) score += 1
+  if (input.diabetes) score += 1
+  if (input.strokeHistory) score += 2
+  if (input.vascularDisease) score += 1
+  if (input.sex === 'Female') score += 1
+
+  const isFemale = input.sex === 'Female'
+  // For females, if no other risk factors exist (score = 1), it is still low risk
+  const effectiveScore = isFemale ? score - 1 : score
+
+  let riskCategory: CHADSVAScResult['riskCategory'] = 'Low'
+  let recommendation = ''
+
+  if (effectiveScore === 0) {
+    riskCategory = 'Low'
+    recommendation = 'Low risk. Anticoagulation is not indicated (ESC Class III).'
+  } else if (effectiveScore === 1) {
+    riskCategory = 'Moderate'
+    recommendation = 'Moderate risk. Oral anticoagulation should be considered (ESC Class IIa). NOAC (Non-vitamin K antagonist oral anticoagulant) preferred over VKA.'
+  } else {
+    riskCategory = 'High'
+    recommendation = 'High risk. Oral anticoagulation is indicated (ESC Class I). NOAC preferred over VKA.'
+  }
+
+  return { score, riskCategory, recommendation }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. HAS-BLED BLEEDING RISK SCORE
+//    Reference: Pisters R et al. Chest. 2010;138(5):1093-100. DOI:10.1378/chest.10-0134
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface HASBLEDInput {
+  hypertension: boolean        // Uncontrolled systolic BP > 160 mmHg
+  abnormalRenal: boolean       // Dialysis, transplant, or Cr > 2.26 mg/dL (200 µmol/L)
+  abnormalLiver: boolean       // Cirrhosis or bilirubin > 2x normal + AST/ALT > 3x normal
+  strokeHistory: boolean
+  bleedingHistory: boolean     // Prior major bleed or predisposition (anaemia)
+  labileINR: boolean           // Unstable/high INRs or TTR < 60% (VKA patients)
+  age: number                  // Age > 65 years
+  drugs: boolean               // Antiplatelets (e.g. aspirin) or NSAIDs
+  alcohol: boolean             // Excess alcohol (>= 8 drinks/week)
+}
+
+export interface HASBLEDResult {
+  score: number
+  riskCategory: 'Low-Moderate' | 'High'
+  recommendation: string
+}
+
+export function calculateHASBLED(input: HASBLEDInput): HASBLEDResult {
+  let score = 0
+  if (input.hypertension) score += 1
+  if (input.abnormalRenal) score += 1
+  if (input.abnormalLiver) score += 1
+  if (input.strokeHistory) score += 1
+  if (input.bleedingHistory) score += 1
+  if (input.labileINR) score += 1
+  if (input.age > 65) score += 1
+  if (input.drugs) score += 1
+  if (input.alcohol) score += 1
+
+  const riskCategory = score >= 3 ? 'High' : 'Low-Moderate'
+  const recommendation = score >= 3
+    ? 'High bleeding risk (Score >= 3). Caution and regular clinical review of anticoagulation is indicated. Identify and address correctable bleeding risk factors (e.g., uncontrolled BP, NSAID use, labile INR).'
+    : 'Low to moderate bleeding risk. Standard monitoring of anticoagulation is appropriate.'
+
+  return { score, riskCategory, recommendation }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. HFA-PEFF DIAGNOSTIC ALGORITHM (ESC 2019 HFpEF diagnostic pathway)
+//    Reference: Pieske B et al. Eur Heart J. 2019;40(40):3297-3317
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface HFAPEFFInput {
+  age: number
+  sex: 'Male' | 'Female'
+  rhythm: string
+  eEPrime?: number
+  septalEPrime?: number
+  lateralEPrime?: number
+  rvsp?: number
+  gls?: number
+  laVolumeIndex?: number
+  lvMassIndex?: number
+  relativeWallThickness?: number
+  ntProBNP?: number
+  bnp?: number
+}
+
+export interface HFAPEFFResult {
+  score: number           // 0-6
+  functionalPoints: number
+  morphologicalPoints: number
+  biomarkerPoints: number
+  interpretation: string
+}
+
+export function calculateHFAPEFF(input: HFAPEFFInput): HFAPEFFResult {
+  const isAF = (input.rhythm ?? '').toLowerCase() === 'af' || (input.rhythm ?? '').toLowerCase().includes('atrial fibrillation')
+  const isFemale = input.sex === 'Female'
+
+  // 1. Functional Domain (max 2 points)
+  let functionalPoints = 0
+  
+  // Major Functional criteria (2 points):
+  // Average E/e' ratio >= 15 OR Septal e' < 7 OR Lateral e' < 10 OR RVSP > 35 (surrogate for TR velocity > 2.8 m/s)
+  const hasMajorFunctional = 
+    (input.eEPrime !== undefined && input.eEPrime !== null && input.eEPrime >= 15) ||
+    (input.septalEPrime !== undefined && input.septalEPrime !== null && input.septalEPrime < 7) ||
+    (input.lateralEPrime !== undefined && input.lateralEPrime !== null && input.lateralEPrime < 10) ||
+    (input.rvsp !== undefined && input.rvsp !== null && input.rvsp > 35)
+
+  // Minor Functional criteria (1 point):
+  // Average E/e' 9-14 OR GLS < 16% (Math.abs(gls) < 16)
+  const hasMinorFunctional =
+    (input.eEPrime !== undefined && input.eEPrime !== null && input.eEPrime >= 9 && input.eEPrime < 15) ||
+    (input.gls !== undefined && input.gls !== null && Math.abs(input.gls) < 16)
+
+  if (hasMajorFunctional) {
+    functionalPoints = 2
+  } else if (hasMinorFunctional) {
+    functionalPoints = 1
+  }
+
+  // 2. Morphological Domain (max 2 points)
+  let morphologicalPoints = 0
+  
+  // Major Morphological criteria (2 points):
+  // LAVI > 34 ml/m² (sinus) or > 40 ml/m² (AF)
+  // OR LVMI >= 149 (men) or >= 122 (women) AND RWT > 0.42
+  const hasMajorMorphological =
+    (input.laVolumeIndex !== undefined && input.laVolumeIndex !== null && (isAF ? input.laVolumeIndex > 40 : input.laVolumeIndex > 34)) ||
+    (input.lvMassIndex !== undefined && input.lvMassIndex !== null && input.relativeWallThickness !== undefined && input.relativeWallThickness !== null &&
+      (isFemale ? input.lvMassIndex >= 122 : input.lvMassIndex >= 149) &&
+      input.relativeWallThickness > 0.42)
+
+  // Minor Morphological criteria (1 point):
+  // LAVI 29-34 (sinus) or 34-40 (AF)
+  // OR LVMI > 115 (men) or > 95 (women)
+  // OR RWT > 0.42
+  const hasMinorMorphological =
+    (input.laVolumeIndex !== undefined && input.laVolumeIndex !== null && (isAF ? (input.laVolumeIndex >= 34 && input.laVolumeIndex <= 40) : (input.laVolumeIndex >= 29 && input.laVolumeIndex <= 34))) ||
+    (input.lvMassIndex !== undefined && input.lvMassIndex !== null && (isFemale ? input.lvMassIndex > 95 : input.lvMassIndex > 115)) ||
+    (input.relativeWallThickness !== undefined && input.relativeWallThickness !== null && input.relativeWallThickness > 0.42)
+
+  if (hasMajorMorphological) {
+    morphologicalPoints = 2
+  } else if (hasMinorMorphological) {
+    morphologicalPoints = 1
+  }
+
+  // 3. Biomarker Domain (max 2 points)
+  let biomarkerPoints = 0
+  
+  // Major Biomarker criteria (2 points):
+  // NT-proBNP > 220 (sinus) or > 660 (AF)
+  // OR BNP > 80 (sinus) or > 240 (AF)
+  const hasMajorBiomarker =
+    (input.ntProBNP !== undefined && input.ntProBNP !== null && (isAF ? input.ntProBNP > 660 : input.ntProBNP > 220)) ||
+    (input.bnp !== undefined && input.bnp !== null && (isAF ? input.bnp > 240 : input.bnp > 80))
+
+  // Minor Biomarker criteria (1 point):
+  // NT-proBNP 125-220 (sinus) or 375-660 (AF)
+  // OR BNP 35-80 (sinus) or 105-240 (AF)
+  const hasMinorBiomarker =
+    (input.ntProBNP !== undefined && input.ntProBNP !== null && (isAF ? (input.ntProBNP >= 375 && input.ntProBNP <= 660) : (input.ntProBNP >= 125 && input.ntProBNP <= 220))) ||
+    (input.bnp !== undefined && input.bnp !== null && (isAF ? (input.bnp >= 105 && input.bnp <= 240) : (input.bnp >= 35 && input.bnp <= 80)))
+
+  if (hasMajorBiomarker) {
+    biomarkerPoints = 2
+  } else if (hasMinorBiomarker) {
+    biomarkerPoints = 1
+  }
+
+  const score = functionalPoints + morphologicalPoints + biomarkerPoints
+
+  const interpretation =
+    score >= 5 ? `Score ${score}/6 — High probability of HFpEF (HFA-PEFF diagnostic threshold met). Diagnosis of HFpEF is established.` :
+    score >= 2 ? `Score ${score}/6 — Intermediate probability of HFpEF. Further diagnostic workup (diastolic stress testing or invasive hemodynamics) is recommended.` :
+                 `Score ${score}/6 — Low probability of HFpEF. Diagnosis of HFpEF is unlikely.`
+
+  return {
+    score,
+    functionalPoints,
+    morphologicalPoints,
+    biomarkerPoints,
+    interpretation
+  }
 }

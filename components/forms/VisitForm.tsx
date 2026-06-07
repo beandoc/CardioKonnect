@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -7,7 +7,9 @@ import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
 import { RadioChipGroup, CheckChipGroup } from '@/components/ui/ChipGroup'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
-import type { VisitInput } from '@/lib/types'
+import { getPatient } from '@/lib/firestore'
+import type { VisitInput, Patient } from '@/lib/types'
+import { calculateCHADSVASc, calculateHASBLED } from '@/lib/riskScores'
 import { ChevronRight, ChevronLeft, ShieldAlert, Award, Save } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -60,6 +62,7 @@ const schema = z.object({
   bpSystolic:  z.coerce.number().optional().or(z.literal('')),
   bpDiastolic: z.coerce.number().optional().or(z.literal('')),
   heartRate:   z.coerce.number().optional().or(z.literal('')),
+  respiratoryRate: z.coerce.number().optional().or(z.literal('')),
 
   // Clinical
   nyha:    z.enum(['I', 'II', 'III', 'IV', '']).default(''),
@@ -114,6 +117,21 @@ const schema = z.object({
   rvFreeWallStrain: z.coerce.number().optional().or(z.literal('')),
   lvMassIndex: z.coerce.number().optional().or(z.literal('')),
   relativeWallThickness: z.coerce.number().optional().or(z.literal('')),
+  rvFAC:    z.coerce.number().optional().or(z.literal('')),
+  rvS:      z.coerce.number().optional().or(z.literal('')),
+  eaRatio:  z.coerce.number().optional().or(z.literal('')),
+  decelerationTime: z.coerce.number().optional().or(z.literal('')),
+  laVolumeIndex: z.coerce.number().optional().or(z.literal('')),
+  ivcDiameter: z.coerce.number().optional().or(z.literal('')),
+  ivcCollapsibility: z.coerce.number().optional().or(z.literal('')),
+  pericardialEffusion: z.enum(['None', 'Trivial', 'Small', 'Moderate', 'Large', '']).default(''),
+  tamponadeFeatures: z.boolean().default(false),
+  lvThrombus: z.boolean().default(false),
+  lvThrombusLocation: z.string().optional(),
+  lvotGradientResting: z.coerce.number().optional().or(z.literal('')),
+  lvotGradientProvoked: z.coerce.number().optional().or(z.literal('')),
+  septalEPrime: z.coerce.number().optional().or(z.literal('')),
+  lateralEPrime: z.coerce.number().optional().or(z.literal('')),
   echNotes: z.string().optional(),
 
   // Labs
@@ -134,6 +152,27 @@ const schema = z.object({
   hsCrp:          z.coerce.number().optional().or(z.literal('')),
   il6:            z.coerce.number().optional().or(z.literal('')),
   tnfAlpha:       z.coerce.number().optional().or(z.literal('')),
+  hdl:            z.coerce.number().optional().or(z.literal('')),
+  totalCholesterol: z.coerce.number().optional().or(z.literal('')),
+  alt:            z.coerce.number().optional().or(z.literal('')),
+  ast:            z.coerce.number().optional().or(z.literal('')),
+  bilirubin:      z.coerce.number().optional().or(z.literal('')),
+  albumin:        z.coerce.number().optional().or(z.literal('')),
+  magnesium:      z.coerce.number().optional().or(z.literal('')),
+  wbc:            z.coerce.number().optional().or(z.literal('')),
+  platelets:      z.coerce.number().optional().or(z.literal('')),
+  inr:            z.coerce.number().optional().or(z.literal('')),
+  pt:             z.coerce.number().optional().or(z.literal('')),
+  alp:            z.coerce.number().optional().or(z.literal('')),
+  ggt:            z.coerce.number().optional().or(z.literal('')),
+  totalProtein:   z.coerce.number().optional().or(z.literal('')),
+  directBilirubin: z.coerce.number().optional().or(z.literal('')),
+  aptt:           z.coerce.number().optional().or(z.literal('')),
+  hct:            z.coerce.number().optional().or(z.literal('')),
+  mcv:            z.coerce.number().optional().or(z.literal('')),
+  nonHdl:         z.coerce.number().optional().or(z.literal('')),
+  apoB:           z.coerce.number().optional().or(z.literal('')),
+  lpA:            z.coerce.number().optional().or(z.literal('')),
   
   // HF Registry Labs
   peakTropT: z.coerce.number().optional().or(z.literal('')),
@@ -158,6 +197,8 @@ const schema = z.object({
   sglt2i:      medEntry,
   ivabradine:  medEntry,
   mra:         medEntry,
+  vericiguat:  medEntry,
+  tafamidis:   medEntry,
 
   // Dyslipidemia
   aspirin: prescribedOnly,
@@ -327,6 +368,9 @@ const schema = z.object({
   msGrade: z.string().optional(),
   mrGrade: z.string().optional(),
   arGrade: z.string().optional(),
+  trGrade: z.string().optional(),
+  chadsvascScore: z.coerce.number().optional(),
+  hasbledScore: z.coerce.number().optional(),
 
   // Holter / Wearable
   holterWearable: z.object({
@@ -350,6 +394,10 @@ const schema = z.object({
     anxietyDepression: z.coerce.number().min(1).max(5).optional().or(z.literal('')),
     healthStateScore: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   }).default({}),
+  phq9Score:      z.coerce.number().optional().or(z.literal('')),
+  gad7Score:      z.coerce.number().optional().or(z.literal('')),
+  hadsAnxiety:    z.coerce.number().optional().or(z.literal('')),
+  hadsDepression: z.coerce.number().optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
   if (data.lvef !== undefined && data.lvef !== '') {
     const lvef = Number(data.lvef)
@@ -464,6 +512,21 @@ interface Props {
 export default function VisitForm({ defaultValues, onSubmit, loading, patientId }: Props) {
   const [tab, setTab] = useState(0)
   const [draftSaved, setDraftSaved] = useState(false)
+  const [patient, setPatient] = useState<Patient | null>(null)
+
+  useEffect(() => {
+    async function loadPatient() {
+      if (patientId) {
+        try {
+          const pt = await getPatient(patientId)
+          if (pt) setPatient(pt)
+        } catch (e) {
+          console.error('Failed to load patient in VisitForm:', e)
+        }
+      }
+    }
+    loadPatient()
+  }, [patientId])
 
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -479,6 +542,8 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
       sglt2i: { prescribed: '' },
       ivabradine: { prescribed: '' },
       mra: { prescribed: '' },
+      vericiguat: { prescribed: '' },
+      tafamidis: { prescribed: '' },
       aspirin: { prescribed: '' },
       statin: { prescribed: '' },
       fibrate: { prescribed: '' },
@@ -486,6 +551,8 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
       ivIron: { prescribed: '' },
       noac: { prescribed: '' },
       vki: { prescribed: '' },
+      respiratoryRate: '',
+      trGrade: '',
       etiology: [],
       device: [],
       education: [],
@@ -558,6 +625,46 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
         anxietyDepression: '',
         healthStateScore: ''
       },
+      rvFAC: '',
+      rvS: '',
+      eaRatio: '',
+      decelerationTime: '',
+      laVolumeIndex: '',
+      ivcDiameter: '',
+      ivcCollapsibility: '',
+      pericardialEffusion: '',
+      tamponadeFeatures: false,
+      lvThrombus: false,
+      lvThrombusLocation: '',
+      lvotGradientResting: '',
+      lvotGradientProvoked: '',
+      septalEPrime: '',
+      lateralEPrime: '',
+      hdl: '',
+      totalCholesterol: '',
+      alt: '',
+      ast: '',
+      bilirubin: '',
+      albumin: '',
+      magnesium: '',
+      wbc: '',
+      platelets: '',
+      inr: '',
+      pt: '',
+      alp: '',
+      ggt: '',
+      totalProtein: '',
+      directBilirubin: '',
+      aptt: '',
+      hct: '',
+      mcv: '',
+      nonHdl: '',
+      apoB: '',
+      lpA: '',
+      phq9Score: '',
+      gad7Score: '',
+      hadsAnxiety: '',
+      hadsDepression: '',
       ...(defaultValues as Partial<FormValues>),
     },
   })
@@ -636,9 +743,81 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
     }
   }
 
+  // Anticoagulation Decision Support calculations
+  const rhythm = watch('rhythm')
+  const bpSystolic = watch('bpSystolic')
+  const creatinine = watch('creatinine')
+  const hb = watch('hb')
+  const aspirinPrescribed = watch('aspirin.prescribed')
+
+  const acDecisionSupport = useMemo(() => {
+    // Show decision support if rhythm is AF or Atrial Fibrillation comorbidity is present
+    const hasAFComorbidity = (patient?.comorbidities || []).some(c => 
+      c.toLowerCase() === 'af' || c.toLowerCase().includes('atrial fibrillation')
+    )
+    if (rhythm !== 'AF' && !hasAFComorbidity) return null
+
+    // Determine age, sex, comorbidities from patient demographics
+    const age = patient?.dob ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) : 60
+    const sex = patient?.sex || 'Male'
+    const hasHTN = (patient?.comorbidities || []).some(c => c.toLowerCase() === 'htn' || c.toLowerCase().includes('hypertension'))
+    const hasDM = (patient?.comorbidities || []).some(c => c.toLowerCase() === 'dm' || c.toLowerCase().includes('diabetes'))
+    const hasStroke = (patient?.comorbidities || []).some(c => c.toLowerCase().includes('stroke') || c.toLowerCase().includes('tia'))
+    const hasVascular = (patient?.comorbidities || []).some(c => c.toLowerCase().includes('cad') || c.toLowerCase().includes('mi') || c.toLowerCase().includes('vascular'))
+    const hasBleeding = (patient?.comorbidities || []).some(c => c.toLowerCase().includes('bleed') || c.toLowerCase().includes('anaemia') || c.toLowerCase().includes('anemia'))
+    const hasCKD = (patient?.comorbidities || []).some(c => c.toLowerCase().includes('ckd') || c.toLowerCase().includes('kidney') || c.toLowerCase().includes('renal'))
+    const hasLiver = (patient?.comorbidities || []).some(c => c.toLowerCase().includes('liver') || c.toLowerCase().includes('hepatic'))
+
+    // Visit inputs overrides
+    const currentHTN = hasHTN || (bpSystolic ? Number(bpSystolic) > 160 : false)
+    const currentRenal = hasCKD || (creatinine ? Number(creatinine) > 2.26 : false)
+    const currentBleeding = hasBleeding || (hb ? Number(hb) < 11 : false) // anaemia as bleeding predisposition
+    const currentDrugs = aspirinPrescribed === 'Yes'
+
+    // Compute CHA2DS2-VASc
+    const chadsInput = {
+      congestiveHF: true, // true since they are in HF registry / dashboard
+      hypertension: hasHTN,
+      age,
+      diabetes: hasDM,
+      strokeHistory: hasStroke,
+      vascularDisease: hasVascular,
+      sex: sex === 'Female' ? 'Female' : 'Male' as any
+    }
+    const chadsRes = calculateCHADSVASc(chadsInput)
+
+    // Compute HAS-BLED
+    const hasbledInput = {
+      hypertension: currentHTN,
+      abnormalRenal: currentRenal,
+      abnormalLiver: hasLiver,
+      strokeHistory: hasStroke,
+      bleedingHistory: currentBleeding,
+      labileINR: false, // default
+      age: age,
+      drugs: currentDrugs,
+      alcohol: false // default
+    }
+    const hasbledRes = calculateHASBLED(hasbledInput)
+
+    return {
+      chadsScore: chadsRes.score,
+      chadsRec: chadsRes.recommendation,
+      chadsCategory: chadsRes.riskCategory,
+      hasbledScore: hasbledRes.score,
+      hasbledRec: hasbledRes.recommendation,
+      hasbledCategory: hasbledRes.riskCategory
+    }
+  }, [patient, rhythm, bpSystolic, creatinine, hb, aspirinPrescribed])
+
   const handleFormSubmit = async (data: FormValues) => {
     clearDraft()
-    await onSubmit(data as unknown as VisitInput)
+    const finalData = { ...data } as any
+    if (acDecisionSupport) {
+      finalData.chadsvascScore = acDecisionSupport.chadsScore
+      finalData.hasbledScore = acDecisionSupport.hasbledScore
+    }
+    await onSubmit(finalData as unknown as VisitInput)
   }
 
   // Active Tab Index mapping based on TABS array
@@ -845,7 +1024,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
 
             <div>
               <p className="section-heading">Vitals</p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <FieldWrap label="Systolic BP (mmHg)" disabled={isTelemedicine} error={errors.bpSystolic?.message}>
                   <Input type="number" {...register('bpSystolic')} placeholder="120" disabled={isTelemedicine} error={!!errors.bpSystolic} />
                 </FieldWrap>
@@ -854,6 +1033,9 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 </FieldWrap>
                 <FieldWrap label="Heart Rate (bpm)" disabled={isTelemedicine} error={errors.heartRate?.message}>
                   <Input type="number" {...register('heartRate')} placeholder="72" disabled={isTelemedicine} error={!!errors.heartRate} />
+                </FieldWrap>
+                <FieldWrap label="Respiratory Rate (breaths/min)" error={errors.respiratoryRate?.message}>
+                  <Input type="number" {...register('respiratoryRate')} placeholder="16" error={!!errors.respiratoryRate} />
                 </FieldWrap>
               </div>
             </div>
@@ -1133,12 +1315,77 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                   <Input type="number" step="0.1" {...register('lvMassIndex')} placeholder="95" />
                 </FieldWrap>
                 <FieldWrap label="Relative Wall Thickness">
-                  <Input type="number" step="0.01" {...register('relativeWallThickness')} placeholder="0.4" />
-                </FieldWrap>
-                <FieldWrap label="Echo Notes" className="col-span-3">
-                  <Textarea {...register('echNotes')} placeholder="Wall motion abnormalities, valve findings…" />
-                </FieldWrap>
-              </div>
+                   <Input type="number" step="0.01" {...register('relativeWallThickness')} placeholder="0.4" />
+                 </FieldWrap>
+                 <FieldWrap label="RV Fractional Area Change (FAC, %)" hint="<35% = RV dysfunction">
+                   <Input type="number" step="0.1" {...register('rvFAC')} placeholder="40" />
+                 </FieldWrap>
+                 <FieldWrap label="RV S' TDI Velocity (cm/s)" hint="<9.5 cm/s = RV dysfunction">
+                   <Input type="number" step="0.1" {...register('rvS')} placeholder="10.5" />
+                 </FieldWrap>
+                 <FieldWrap label="E/A Ratio" hint="Diastolic filling ratio">
+                   <Input type="number" step="0.01" {...register('eaRatio')} placeholder="1.2" />
+                 </FieldWrap>
+                 <FieldWrap label="Deceleration Time (ms)" hint="Diastolic deceleration time">
+                   <Input type="number" {...register('decelerationTime')} placeholder="200" />
+                 </FieldWrap>
+                 <FieldWrap label="LA Volume Index (LAVI, ml/m²)" hint="Chronically elevated filling pressure">
+                   <Input type="number" step="0.1" {...register('laVolumeIndex')} placeholder="28" />
+                 </FieldWrap>
+                 <FieldWrap label="IVC Diameter (mm)" hint="Venous congestion assessment">
+                   <Input type="number" step="0.1" {...register('ivcDiameter')} placeholder="18" />
+                 </FieldWrap>
+                 <FieldWrap label="IVC Collapsibility (%)" hint="Respiratory collapse">
+                   <Input type="number" step="0.1" {...register('ivcCollapsibility')} placeholder="50" />
+                 </FieldWrap>
+                 <FieldWrap label="Septal E' Velocity (cm/s)" hint="Mitral annular tissue Doppler">
+                   <Input type="number" step="0.1" {...register('septalEPrime')} placeholder="8" />
+                 </FieldWrap>
+                 <FieldWrap label="Lateral E' Velocity (cm/s)">
+                   <Input type="number" step="0.1" {...register('lateralEPrime')} placeholder="11" />
+                 </FieldWrap>
+                 <FieldWrap label="Echo Notes" className="col-span-3">
+                   <Textarea {...register('echNotes')} placeholder="Wall motion abnormalities, valve findings…" />
+                 </FieldWrap>
+               </div>
+ 
+               <p className="text-sm font-semibold text-white mt-6 mb-3 border-b border-gray-700/50 pb-2">Pericardium, LV Thrombus &amp; LVOT</p>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10 mb-6">
+                 <FieldWrap label="Pericardial Effusion Grade">
+                   <Select {...register('pericardialEffusion')}>
+                     <option value="">None</option>
+                     <option value="Trivial">Trivial</option>
+                     <option value="Small">Small</option>
+                     <option value="Moderate">Moderate</option>
+                     <option value="Large">Large</option>
+                   </Select>
+                 </FieldWrap>
+                 <div className="flex items-center pt-5">
+                   <label className="flex items-center gap-2.5 cursor-pointer">
+                     <input type="checkbox" {...register('tamponadeFeatures')} className="w-4 h-4 rounded text-rose-500 bg-gray-900 border-gray-700" />
+                     <span className="text-sm font-semibold text-white">Cardiac Tamponade Features</span>
+                   </label>
+                 </div>
+                 <div></div>
+ 
+                 <div className="flex items-center pt-5">
+                   <label className="flex items-center gap-2.5 cursor-pointer">
+                     <input type="checkbox" {...register('lvThrombus')} className="w-4 h-4 rounded text-rose-500 bg-gray-900 border-gray-700" />
+                     <span className="text-sm font-semibold text-white">LV Thrombus Present</span>
+                   </label>
+                 </div>
+                 <FieldWrap label="Thrombus Location">
+                   <Input {...register('lvThrombusLocation')} placeholder="e.g. Apex" />
+                 </FieldWrap>
+                 <div></div>
+ 
+                 <FieldWrap label="LVOT Gradient resting (mmHg)">
+                   <Input type="number" {...register('lvotGradientResting')} placeholder="e.g. 15" />
+                 </FieldWrap>
+                 <FieldWrap label="LVOT Gradient provoked (mmHg)">
+                   <Input type="number" {...register('lvotGradientProvoked')} placeholder="e.g. 45" />
+                 </FieldWrap>
+               </div>
 
               <p className="text-sm font-semibold text-white mt-6 mb-3 border-b border-gray-700/50 pb-2">Valvular Hemodynamics & Severity Grades</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1185,10 +1432,10 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                   </FieldWrap>
                 </div>
 
-                {/* Regurgitant Lesions (MR/AR) */}
+                {/* Regurgitant Lesions (MR/AR/TR) */}
                 <div className="space-y-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10">
                   <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Regurgitant Lesions</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <FieldWrap label="MR Grade">
                       <Select {...register('mrGrade')}>
                         <option value="">Select</option>
@@ -1200,6 +1447,15 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                     </FieldWrap>
                     <FieldWrap label="AR Grade">
                       <Select {...register('arGrade')}>
+                        <option value="">Select</option>
+                        <option>None</option>
+                        <option>Mild</option>
+                        <option>Moderate</option>
+                        <option>Severe</option>
+                      </Select>
+                    </FieldWrap>
+                    <FieldWrap label="TR Grade">
+                      <Select {...register('trGrade')}>
                         <option value="">Select</option>
                         <option>None</option>
                         <option>Mild</option>
@@ -1294,7 +1550,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
             </div>
 
             <div>
-              <p className="section-heading">Renal & Electrolytes</p>
+              <p className="section-heading">Renal &amp; Electrolytes</p>
               <div className="grid grid-cols-3 gap-4">
                 <FieldWrap label="eGFR (ml/min/1.73m²)" error={errors.egfr?.message}>
                   <Input type="number" step="0.1" {...register('egfr')} placeholder="60" error={!!errors.egfr} />
@@ -1317,13 +1573,62 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 <FieldWrap label="BUN (mg/dL)" error={errors.bun?.message}>
                   <Input type="number" step="0.1" {...register('bun')} placeholder="e.g. 15" />
                 </FieldWrap>
+                <FieldWrap label="Serum Magnesium (mg/dL)">
+                  <Input type="number" step="0.1" {...register('magnesium')} placeholder="2.0" />
+                </FieldWrap>
               </div>
             </div>
+            
             <div>
-              <p className="section-heading">Haematology & Other</p>
+              <p className="section-heading">Hepatic Panel</p>
+              <div className="grid grid-cols-4 gap-4">
+                <FieldWrap label="ALT (U/L)" error={errors.alt?.message}>
+                  <Input type="number" {...register('alt')} placeholder="e.g. 35" />
+                </FieldWrap>
+                <FieldWrap label="AST (U/L)" error={errors.ast?.message}>
+                  <Input type="number" {...register('ast')} placeholder="e.g. 30" />
+                </FieldWrap>
+                <FieldWrap label="Total Bilirubin (mg/dL)" error={errors.bilirubin?.message}>
+                  <Input type="number" step="0.1" {...register('bilirubin')} placeholder="e.g. 1.0" />
+                </FieldWrap>
+                <FieldWrap label="Serum Albumin (g/dL)" error={errors.albumin?.message}>
+                  <Input type="number" step="0.1" {...register('albumin')} placeholder="e.g. 4.0" />
+                </FieldWrap>
+                <FieldWrap label="ALP (U/L)">
+                  <Input type="number" {...register('alp')} placeholder="e.g. 80" />
+                </FieldWrap>
+                <FieldWrap label="GGT (U/L)">
+                  <Input type="number" {...register('ggt')} placeholder="e.g. 30" />
+                </FieldWrap>
+                <FieldWrap label="Total Protein (g/dL)">
+                  <Input type="number" step="0.1" {...register('totalProtein')} placeholder="e.g. 7.0" />
+                </FieldWrap>
+                <FieldWrap label="Direct Bilirubin (mg/dL)">
+                  <Input type="number" step="0.1" {...register('directBilirubin')} placeholder="e.g. 0.3" />
+                </FieldWrap>
+              </div>
+            </div>
+
+            <div>
+              <p className="section-heading">Haematology &amp; Coagulation</p>
               <div className="grid grid-cols-3 gap-4">
                 <FieldWrap label="Haemoglobin (g/dL)">
                   <Input type="number" step="0.1" {...register('hb')} placeholder="13.5" />
+                </FieldWrap>
+                <FieldWrap label="White Blood Cell (WBC, /µL)">
+                  <Input type="number" {...register('wbc')} placeholder="e.g. 6000" />
+                </FieldWrap>
+                <FieldWrap label="Platelet Count (10³/µL)">
+                  <Input type="number" {...register('platelets')} placeholder="e.g. 250" />
+                </FieldWrap>
+                <FieldWrap label="INR" error={errors.inr?.message}>
+                  <Input type="number" step="0.01" {...register('inr')} placeholder="e.g. 1.0" />
+                </FieldWrap>
+                <FieldWrap label="Prothrombin Time (PT, sec)" error={errors.pt?.message}>
+                  <Input type="number" step="0.1" {...register('pt')} placeholder="e.g. 12" />
+                </FieldWrap>
+                <FieldWrap label="aPTT (sec)">
+                  <Input type="number" step="0.1" {...register('aptt')} placeholder="e.g. 30" />
                 </FieldWrap>
                 <FieldWrap label="Serum Ferritin (µg/L)">
                   <Input type="number" {...register('ferritin')} placeholder="80" />
@@ -1331,17 +1636,44 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 <FieldWrap label="Transferrin Saturation (%)">
                   <Input type="number" {...register('transferrinSat')} placeholder="25" />
                 </FieldWrap>
+                <FieldWrap label="Hct (%)">
+                  <Input type="number" step="0.1" {...register('hct')} placeholder="40" />
+                </FieldWrap>
+                <FieldWrap label="MCV (fL)">
+                  <Input type="number" step="0.1" {...register('mcv')} placeholder="90" />
+                </FieldWrap>
                 <FieldWrap label="TSH (mIU/L)">
                   <Input type="number" step="0.01" {...register('tft')} placeholder="2.5" />
                 </FieldWrap>
                 <FieldWrap label="HbA1c (%)">
                   <Input type="number" step="0.1" {...register('hba1c')} placeholder="7.0" />
                 </FieldWrap>
+              </div>
+            </div>
+
+            <div>
+              <p className="section-heading">Lipid Panel</p>
+              <div className="grid grid-cols-4 gap-4">
+                <FieldWrap label="Total Cholesterol (mg/dL)">
+                  <Input type="number" {...register('totalCholesterol')} placeholder="e.g. 180" />
+                </FieldWrap>
                 <FieldWrap label="LDL Cholesterol (mg/dL)">
                   <Input type="number" {...register('ldl')} placeholder="80" />
                 </FieldWrap>
+                <FieldWrap label="HDL Cholesterol (mg/dL)">
+                  <Input type="number" {...register('hdl')} placeholder="e.g. 45" />
+                </FieldWrap>
                 <FieldWrap label="Triglycerides (mg/dL)">
                   <Input type="number" {...register('triglycerides')} placeholder="150" />
+                </FieldWrap>
+                <FieldWrap label="Non-HDL Cholesterol (mg/dL)">
+                  <Input type="number" {...register('nonHdl')} placeholder="e.g. 135" />
+                </FieldWrap>
+                <FieldWrap label="ApoB (mg/dL)">
+                  <Input type="number" {...register('apoB')} placeholder="e.g. 80" />
+                </FieldWrap>
+                <FieldWrap label="Lp(a) (mg/dL)">
+                  <Input type="number" {...register('lpA')} placeholder="e.g. 20" />
                 </FieldWrap>
               </div>
             </div>
@@ -1413,6 +1745,18 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 doseField="ivIron.dose" reasonField="ivIron.reason"
                 startDateField="ivIron.startDate" stopDateField="ivIron.stopDate" changeReasonField="ivIron.changeReason"
                 control={control} register={register} />
+
+              <MedRow label="Vericiguat (sGC stimulator)" prescribedField="vericiguat.prescribed"
+                typeField="vericiguat.type" typeOptions={['Vericiguat 2.5mg', 'Vericiguat 5mg', 'Vericiguat 10mg']}
+                doseField="vericiguat.dose" reasonField="vericiguat.reason"
+                startDateField="vericiguat.startDate" stopDateField="vericiguat.stopDate" changeReasonField="vericiguat.changeReason"
+                control={control} register={register} />
+
+              <MedRow label="Tafamidis (TTR Amyloidosis)" prescribedField="tafamidis.prescribed"
+                typeField="tafamidis.type" typeOptions={['Tafamidis 20mg', 'Tafamidis 61mg (Vynmax)', 'Tafamidis 80mg']}
+                doseField="tafamidis.dose" reasonField="tafamidis.reason"
+                startDateField="tafamidis.startDate" stopDateField="tafamidis.stopDate" changeReasonField="tafamidis.changeReason"
+                control={control} register={register} />
             </div>
 
             <p className="section-heading font-semibold text-white mt-4">3. Comorbidity & Cardiovascular Therapies</p>
@@ -1455,8 +1799,54 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
               </div>
 
               {/* Anticoagulants */}
-              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4 col-span-1 md:col-span-2">
-                <p className="text-sm font-semibold text-white mb-3">Anticoagulation / Anti-arrhythmic</p>
+              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4 col-span-1 md:col-span-2 space-y-4">
+                <p className="text-sm font-semibold text-white">Anticoagulation / Anti-arrhythmic</p>
+
+                {acDecisionSupport && (
+                  <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 space-y-3">
+                    <div className="flex items-center gap-2 text-blue-400">
+                      <Award className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-xs font-bold uppercase tracking-wider">AF Anticoagulation Decision Support</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-3 bg-gray-900/40 rounded-lg border border-blue-500/5 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-gray-400">CHA₂DS₂-VASc Score</span>
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full font-bold",
+                            acDecisionSupport.chadsCategory === 'High' ? "bg-rose-500/20 text-rose-300 border border-rose-500/30" :
+                            acDecisionSupport.chadsCategory === 'Moderate' ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" :
+                            "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          )}>
+                            {acDecisionSupport.chadsScore} ({acDecisionSupport.chadsCategory})
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-300 mt-1 leading-normal">{acDecisionSupport.chadsRec}</p>
+                      </div>
+
+                      <div className="p-3 bg-gray-900/40 rounded-lg border border-blue-500/5 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-gray-400">HAS-BLED Bleeding Risk</span>
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full font-bold",
+                            acDecisionSupport.hasbledCategory === 'High' ? "bg-rose-500/20 text-rose-300 border border-rose-500/30" :
+                            "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          )}>
+                            {acDecisionSupport.hasbledScore} ({acDecisionSupport.hasbledCategory} Risk)
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-300 mt-1 leading-normal">{acDecisionSupport.hasbledRec}</p>
+                      </div>
+                    </div>
+
+                    <div className="text-[9px] text-gray-500 border-t border-blue-500/10 pt-2 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                      <span>ESC Guidelines: In patients with AF indicated for anticoagulation, NOACs are preferred over VKAs. Avoid dual antiplatelet + anticoagulant therapy unless indicated post-PCI.</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="p-3 bg-gray-900/40 border border-blue-500/5 rounded-lg">
                     <p className="text-xs font-semibold text-gray-400 mb-2">NOAC</p>
@@ -1630,6 +2020,24 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                   onChange={field.onChange}
                 />
               )} />
+            </div>
+
+            <div>
+              <p className="section-heading text-white">Mental Health &amp; Depression/Anxiety Screening</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10 mb-4">
+                <FieldWrap label="PHQ-9 Score (0–27)" hint="Depression screening; >=10 = moderate">
+                  <Input type="number" min={0} max={27} {...register('phq9Score')} placeholder="e.g. 5" />
+                </FieldWrap>
+                <FieldWrap label="GAD-7 Score (0–21)" hint="Anxiety screening; >=10 = moderate">
+                  <Input type="number" min={0} max={21} {...register('gad7Score')} placeholder="e.g. 3" />
+                </FieldWrap>
+                <FieldWrap label="HADS Anxiety Score (0–21)">
+                  <Input type="number" min={0} max={21} {...register('hadsAnxiety')} placeholder="e.g. 6" />
+                </FieldWrap>
+                <FieldWrap label="HADS Depression Score (0–21)">
+                  <Input type="number" min={0} max={21} {...register('hadsDepression')} placeholder="e.g. 4" />
+                </FieldWrap>
+              </div>
             </div>
 
             <div>
