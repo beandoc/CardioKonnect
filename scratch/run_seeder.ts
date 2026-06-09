@@ -26,9 +26,9 @@ async function run() {
   console.log('API Key configured:', !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY)
   
   try {
-    const { seedDemoData } = await import('../lib/seeder')
-    await seedDemoData()
-    console.log('Successfully seeded database with 150 patients and longitudinal visits!')
+    const { seedRealPatientsFromExcel } = await import('../lib/excelSeeder')
+    await seedRealPatientsFromExcel()
+    console.log('Successfully seeded database with clinical records from Excel!')
     process.exit(0)
   } catch (error) {
     console.error('Failed to seed database:', error)

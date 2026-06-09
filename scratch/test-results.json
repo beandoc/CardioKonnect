@@ -1,0 +1,16 @@
+{
+  "success": false,
+  "logs": [
+    "Starting Firebase backend save verification test in background...",
+    "Attempting to add patient: BgFirebaseSave VerificationTest",
+    "Patient created successfully with Firestore ID: p-2r8deqqxj",
+    "Attempting to add visit to patient...",
+    "Visit created successfully with ID: v-jhovzsyrb",
+    "Retrieving patient document back from Firestore to verify schema integration and caching...",
+    "TEST FAILED with error: Failed to retrieve patient from Firestore.",
+    "Attempting emergency cleanup for test patient...",
+    "Emergency cleanup complete."
+  ],
+  "error": "Failed to retrieve patient from Firestore.",
+  "timestamp": "2026-06-09T13:32:20.468Z"
+}
