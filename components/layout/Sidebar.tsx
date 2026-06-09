@@ -40,10 +40,11 @@ const NAV = [
   {
     section: 'Research & Analytics',
     items: [
-      { href: '/analytics',   label: 'Population Analytics', icon: BarChart3 },
-      { href: '/cohort',      label: 'Cohort Builder',       icon: Layers },
-      { href: '/risk',        label: 'Risk Calculators',     icon: FlaskConical },
-      { href: '/reports',     label: 'Reports & Exports',    icon: FileText },
+      { href: '/analytics',        label: 'Population Analytics', icon: BarChart3 },
+      { href: '/research-board',   label: 'Research Board',       icon: FlaskConical },
+      { href: '/cohort',           label: 'Cohort Builder',       icon: Layers },
+      { href: '/risk',             label: 'Risk Calculators',     icon: Activity },
+      { href: '/reports',          label: 'Reports & Exports',    icon: FileText },
     ],
   },
   {

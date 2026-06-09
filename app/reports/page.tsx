@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
 } from 'recharts'
+import { AlertTriangle } from 'lucide-react'
 
 // Left Navigation sections
 const REPORT_SECTIONS = [
@@ -792,6 +793,17 @@ export default function ReportsArchitecturePage() {
         </Button>
       </div>
 
+      {/* Reference-data disclaimer */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 p-3 no-print">
+        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="text-xs">
+          <span className="font-semibold text-amber-300">Reference Architecture — Illustrative Data Only.</span>
+          <span className="text-gray-400 ml-1">
+            Charts and metrics displayed are sample data for report design reference. Each report template must be wired to the live registry query engine to reflect actual enrolled-patient statistics.
+          </span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 no-print">
         
         {/* Left Navigation Sidebar */}
@@ -982,10 +994,15 @@ export default function ReportsArchitecturePage() {
 
               {/* Visualization Chart */}
               <div className="glass-card p-5 border border-slate-800 rounded-xl bg-slate-950/20">
-                <p className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-1.5">
-                  <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
-                  Longitudinal Performance Visualisation ({timeframe})
-                </p>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+                    Longitudinal Performance Visualisation ({timeframe})
+                  </p>
+                  <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 rounded px-2 py-0.5 font-medium flex items-center gap-1">
+                    <AlertTriangle className="w-2.5 h-2.5" /> Reference Data
+                  </span>
+                </div>
 
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">

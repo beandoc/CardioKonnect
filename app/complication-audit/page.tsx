@@ -672,6 +672,15 @@ export default function ComplicationAuditPage() {
   return (
     <div className="space-y-5 animate-fade-in">
 
+      {/* Reference data disclaimer */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 p-3">
+        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+        <p className="text-xs">
+          <span className="font-semibold text-amber-300">Sample / Reference Data — </span>
+          <span className="text-gray-400">All complication records and aggregate statistics shown are illustrative only. This module requires integration with the Cath Lab procedure-entry workflow to display real complication events.</span>
+        </p>
+      </div>
+
       {/* ── Critical header ── */}
       <div className="glass-card overflow-hidden border border-red-500/20">
         <div className="px-6 py-4" style={{ background: 'linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #dc2626 100%)' }}>

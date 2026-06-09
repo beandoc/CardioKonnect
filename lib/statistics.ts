@@ -489,3 +489,249 @@ function logGamma(z: number): number {
   const t = zz + g + 0.5
   return 0.5 * Math.log(2 * Math.PI) + (zz + 0.5) * Math.log(t) - t + Math.log(x)
 }
+
+// ─── Wilson Confidence Interval ───────────────────────────────────────────────
+
+/**
+ * Wilson score confidence interval for a proportion.
+ * Returns [lowerBound, upperBound] as proportions in [0, 1].
+ * Recommended for n < 100 or extreme proportions (near 0 or 1).
+ *
+ * @param k   - Number of successes
+ * @param n   - Total observations
+ * @param z   - z-score for desired confidence level (default 1.96 → 95% CI)
+ */
+export function wilsonCI(k: number, n: number, z = 1.96): [number, number] {
+  if (n === 0) return [0, 1]
+  const p = k / n
+  const z2 = z * z
+  const denom = 1 + z2 / n
+  const centre = (p + z2 / (2 * n)) / denom
+  const halfWidth = (z / denom) * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n))
+  return [Math.max(0, centre - halfWidth), Math.min(1, centre + halfWidth)]
+}
+
+// ─── Standard Normal CDF (Abramowitz & Stegun) ────────────────────────────────
+
+/** P(Z ≤ x) for Z ~ N(0,1). Accuracy ~ 7.5 × 10⁻⁸. */
+function normalCDF(x: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x))
+  const d = 0.3989422820 * Math.exp(-x * x / 2)
+  const poly = t * (0.3193815302 + t * (-0.3565637813 + t * (1.7814779372 + t * (-1.8212559978 + t * 1.3302744290))))
+  const p = 1 - d * poly
+  return x >= 0 ? p : 1 - p
+}
+
+// ─── Chi-Square Test ──────────────────────────────────────────────────────────
+
+export interface ChiSquareResult {
+  chi2: number
+  df: number
+  pValue: number
+  significant: boolean
+}
+
+/**
+ * Pearson chi-square test for a 2-D contingency table.
+ * Each row is a group; each column is a category.
+ * Returns NaN pValue if any expected cell < 5 (use Fisher's exact for small n).
+ *
+ * @param table - 2-D array of observed counts e.g. [[a,b],[c,d]]
+ */
+export function chiSquareTest(table: number[][]): ChiSquareResult {
+  const rows = table.length
+  const cols = table[0].length
+  const rowSums = table.map(r => r.reduce((s, v) => s + v, 0))
+  const colSums = Array.from({ length: cols }, (_, j) => table.reduce((s, r) => s + r[j], 0))
+  const N = rowSums.reduce((s, v) => s + v, 0)
+
+  if (N === 0) return { chi2: NaN, df: (rows - 1) * (cols - 1), pValue: NaN, significant: false }
+
+  let chi2 = 0
+  let smallCells = 0
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      const E = (rowSums[i] * colSums[j]) / N
+      if (E < 5) smallCells++
+      if (E > 0) chi2 += (table[i][j] - E) ** 2 / E
+    }
+  }
+
+  const df = (rows - 1) * (cols - 1)
+  if (df === 0) return { chi2: 0, df: 0, pValue: 1, significant: false }
+
+  // Wilson-Hilferty chi-square → normal approximation (accurate for df ≥ 1)
+  const h = (chi2 / df) ** (1 / 3)
+  const mu = 1 - 2 / (9 * df)
+  const sigma = Math.sqrt(2 / (9 * df))
+  const z = (h - mu) / sigma
+  const pValue = smallCells > 0 ? NaN : (1 - normalCDF(z))
+
+  return { chi2, df, pValue, significant: !isNaN(pValue) && pValue < 0.05 }
+}
+
+// ─── Mann–Whitney U Test ──────────────────────────────────────────────────────
+
+export interface MannWhitneyResult {
+  U: number
+  z: number
+  pValue: number
+  significant: boolean
+  medianA: number | null
+  medianB: number | null
+}
+
+/**
+ * Two-sided Mann–Whitney U test (Wilcoxon rank-sum) using normal approximation
+ * with tie correction. Recommended for skewed distributions (e.g. NT-proBNP).
+ *
+ * @param a - Group A values (nulls/NaN removed automatically)
+ * @param b - Group B values
+ */
+export function mannWhitneyTest(a: number[], b: number[]): MannWhitneyResult {
+  const cleanA = a.filter(v => v != null && !Number.isNaN(v))
+  const cleanB = b.filter(v => v != null && !Number.isNaN(v))
+  const n1 = cleanA.length
+  const n2 = cleanB.length
+
+  const noResult: MannWhitneyResult = {
+    U: NaN, z: NaN, pValue: NaN, significant: false,
+    medianA: median(cleanA), medianB: median(cleanB),
+  }
+  if (n1 < 2 || n2 < 2) return noResult
+
+  // Pool, rank (average ranks for ties)
+  const pooled = [
+    ...cleanA.map(v => ({ v, g: 0 })),
+    ...cleanB.map(v => ({ v, g: 1 })),
+  ].sort((a, b) => a.v - b.v)
+
+  const ranks = new Array(n1 + n2).fill(0)
+  let i = 0
+  while (i < pooled.length) {
+    let j = i
+    while (j < pooled.length - 1 && pooled[j + 1].v === pooled[i].v) j++
+    const avgRank = (i + j) / 2 + 1  // 1-based
+    for (let k = i; k <= j; k++) ranks[k] = avgRank
+    i = j + 1
+  }
+
+  // Sum of ranks for group A
+  let W = 0
+  for (let k = 0; k < pooled.length; k++) {
+    if (pooled[k].g === 0) W += ranks[k]
+  }
+
+  const U = W - n1 * (n1 + 1) / 2
+
+  // Tie correction factor
+  const tieGroups = new Map<number, number>()
+  for (const pt of pooled) tieGroups.set(pt.v, (tieGroups.get(pt.v) ?? 0) + 1)
+  let tieCorrection = 0
+  Array.from(tieGroups.values()).forEach(t => { tieCorrection += t ** 3 - t })
+  const N = n1 + n2
+  const varU = (n1 * n2 / 12) * (N + 1 - tieCorrection / (N * (N - 1)))
+
+  if (varU <= 0) return noResult
+
+  const z = (U - n1 * n2 / 2) / Math.sqrt(varU)
+  const pValue = 2 * (1 - normalCDF(Math.abs(z)))
+
+  return { U, z, pValue, significant: pValue < 0.05, medianA: median(cleanA), medianB: median(cleanB) }
+}
+
+// ─── Spearman Rank Correlation ────────────────────────────────────────────────
+
+/**
+ * Spearman rank correlation coefficient ρ between two paired arrays.
+ * Paired rows where either value is null/NaN are dropped.
+ * Returns NaN if fewer than 3 valid pairs.
+ */
+export function spearmanR(x: number[], y: number[]): number {
+  if (x.length !== y.length) throw new Error('x and y must be equal length')
+
+  const pairs: [number, number][] = []
+  for (let i = 0; i < x.length; i++) {
+    if (x[i] != null && y[i] != null && !Number.isNaN(x[i]) && !Number.isNaN(y[i])) {
+      pairs.push([x[i], y[i]])
+    }
+  }
+  if (pairs.length < 3) return NaN
+
+  const rankArr = (vals: number[]): number[] => {
+    const sorted = [...vals].map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v)
+    const ranks = new Array(vals.length).fill(0)
+    let k = 0
+    while (k < sorted.length) {
+      let j = k
+      while (j < sorted.length - 1 && sorted[j + 1].v === sorted[k].v) j++
+      const avg = (k + j) / 2 + 1
+      for (let m = k; m <= j; m++) ranks[sorted[m].i] = avg
+      k = j + 1
+    }
+    return ranks
+  }
+
+  const xs = pairs.map(p => p[0])
+  const ys = pairs.map(p => p[1])
+  return correlationCoefficient(rankArr(xs), rankArr(ys))
+}
+
+// ─── Paired t-Test ────────────────────────────────────────────────────────────
+
+/**
+ * Paired (one-sample) t-test on the difference before → after.
+ * Tests H₀: mean difference = 0.
+ *
+ * @param before - Pre-intervention values
+ * @param after  - Post-intervention values (same order as before)
+ */
+export function pairedTTest(
+  before: number[],
+  after: number[]
+): { t: number; pValue: number; meanDiff: number | null; significant: boolean } {
+  if (before.length !== after.length) throw new Error('Arrays must be equal length')
+  const diffs = before
+    .map((b, i) => (b != null && after[i] != null && !Number.isNaN(b) && !Number.isNaN(after[i])) ? after[i] - b : null)
+    .filter((d): d is number => d !== null)
+
+  if (diffs.length < 2) return { t: NaN, pValue: NaN, meanDiff: null, significant: false }
+
+  const result = tTest(diffs, new Array(diffs.length).fill(0))
+  return { t: result.t, pValue: result.pValue, meanDiff: mean(diffs), significant: result.significant }
+}
+
+// ─── Histogram Bins ───────────────────────────────────────────────────────────
+
+/**
+ * Generates histogram bins for a numeric array.
+ * Returns array of { bin: string, count: number, lo: number, hi: number }.
+ *
+ * @param data    - Numeric values (nulls ignored)
+ * @param nBins   - Number of bins (default 10)
+ * @param lo      - Override lower bound (default = min(data))
+ * @param hi      - Override upper bound (default = max(data))
+ */
+export function histogram(
+  data: number[],
+  nBins = 10,
+  lo?: number,
+  hi?: number
+): Array<{ bin: string; lo: number; hi: number; count: number }> {
+  const clean = data.filter(v => v != null && !Number.isNaN(v))
+  if (clean.length === 0) return []
+  const lo_ = lo ?? Math.min(...clean)
+  const hi_ = hi ?? Math.max(...clean)
+  if (lo_ === hi_) return [{ bin: `${lo_}`, lo: lo_, hi: hi_, count: clean.length }]
+  const step = (hi_ - lo_) / nBins
+
+  return Array.from({ length: nBins }, (_, i) => {
+    const binLo = lo_ + i * step
+    const binHi = lo_ + (i + 1) * step
+    const count = clean.filter(v => v >= binLo && (i === nBins - 1 ? v <= binHi : v < binHi)).length
+    const label = step >= 10
+      ? `${Math.round(binLo)}–${Math.round(binHi)}`
+      : `${binLo.toFixed(1)}–${binHi.toFixed(1)}`
+    return { bin: label, lo: binLo, hi: binHi, count }
+  })
+}

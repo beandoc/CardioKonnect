@@ -410,6 +410,15 @@ export default function ProceduralAuditPage() {
         </div>
       </div>
 
+      {/* Reference data disclaimer */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 p-3">
+        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+        <p className="text-xs">
+          <span className="font-semibold text-amber-300">Sample / Reference Data — </span>
+          <span className="text-gray-400">All procedure records shown are illustrative only. This module requires integration with the Cath Lab or procedure-entry workflow to display real interventional data.</span>
+        </p>
+      </div>
+
       {/* ── Tab navigation ── */}
       <div className="flex gap-1.5 flex-wrap">
         {CATEGORIES.map(c => (
