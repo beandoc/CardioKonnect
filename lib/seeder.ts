@@ -1485,8 +1485,40 @@ for (let i = 16; i <= 150; i++) {
 // 3. Enrich mock cohorts with the new Heart Failure Registry variables
 Object.keys(MOCK_PATIENTS_COHORT).forEach(id => {
   const p = MOCK_PATIENTS_COHORT[id]
+  
+  // Find latest visit for this patient to get the hfType, nyha, and lvef
+  const patientVisits = MOCK_VISITS_COHORT.filter(v => v.patientId === id)
+  let latestVisit = patientVisits[0]
+  patientVisits.forEach(v => {
+    if (v.data.visitDate && latestVisit?.data.visitDate) {
+      if (new Date(v.data.visitDate).getTime() > new Date(latestVisit.data.visitDate).getTime()) {
+        latestVisit = v
+      }
+    }
+  })
+  
+  // Determine hfType
+  let hfType: 'HFrEF' | 'HFmrEF' | 'HFpEF' = 'HFrEF'
+  if (latestVisit?.data.lvef !== undefined) {
+    const lvef = latestVisit.data.lvef
+    if (lvef <= 40) hfType = 'HFrEF'
+    else if (lvef < 50) hfType = 'HFmrEF'
+    else hfType = 'HFpEF'
+  } else {
+    // Fallback for static ones by MRN/notes context
+    if (id === '2' || id === '6' || id === '11' || id === '15') hfType = 'HFpEF'
+    else if (id === '4' || id === '13') hfType = 'HFmrEF'
+    else hfType = 'HFrEF'
+  }
+
+  const nyha = latestVisit?.data.nyha || 'II'
+  const lvef = latestVisit?.data.lvef
+
   MOCK_PATIENTS_COHORT[id] = {
     ...p,
+    hfType,
+    nyha,
+    lvef,
     registryId: 'hf',
     indianCitizen: true,
     studyConsented: p.status === 'Active',
@@ -1512,11 +1544,19 @@ Object.keys(MOCK_PATIENTS_COHORT).forEach(id => {
   }
 })
 
-
 MOCK_VISITS_COHORT.forEach(v => {
   const isSevere = v.data.nyha === 'III' || v.data.nyha === 'IV'
+  const hfType = v.data.lvef ? (v.data.lvef <= 40 ? 'HFrEF' : (v.data.lvef < 50 ? 'HFmrEF' : 'HFpEF')) : 'HFrEF'
+  
+  // Determine hospHistory based on comorbidities
+  const p = MOCK_PATIENTS_COHORT[v.patientId]
+  const hasCADOrMI = p?.comorbidities?.includes('CAD') || p?.comorbidities?.includes('Prior MI')
+  const hospHistory = hasCADOrMI ? 'Yes' : 'No'
+
   v.data = {
     ...v.data,
+    hfType,
+    hospHistory,
     respiratoryRate: isSevere ? 22 : 16,
     trGrade: isSevere ? 'Moderate' : 'Mild',
     symptomDyspnea: true,
@@ -1547,7 +1587,7 @@ MOCK_VISITS_COHORT.forEach(v => {
     weightDischarge: v.data.weight ? v.data.weight - 2 : undefined,
     dischargeOutcome: 'Discharge',
     causeOfDeath: '',
-    lastHospDate: v.data.hospHistory === 'Yes' ? relativeDateStr(180) : ''
+    lastHospDate: hospHistory === 'Yes' ? relativeDateStr(180) : ''
   } as any
 })
 
@@ -1561,43 +1601,5 @@ function cleanUndefined(obj: any): any {
     }
   })
   return res
-}
-
-export async function seedDemoData(): Promise<void> {
-  const isDemoMode = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith('mock') || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'undefined'
-  if (isDemoMode) {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('cardio_patients')
-      localStorage.removeItem('cardio_visits')
-    }
-    return
-  }
-
-  // Real Firestore seeding
-  await clearAllPatients()
-
-  const batch = writeBatch(db)
-
-  // Set patient documents
-  Object.entries(MOCK_PATIENTS_COHORT).forEach(([id, data]) => {
-    const ref = doc(db, 'patients', id)
-    batch.set(ref, cleanUndefined({
-      ...data,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    }))
-  })
-
-  // Add visits in subcollection for each patient
-  MOCK_VISITS_COHORT.forEach(({ patientId, visitId, data }) => {
-    const ref = doc(db, 'patients', patientId, 'visits', visitId)
-    batch.set(ref, cleanUndefined({
-      ...data,
-      createdAt: serverTimestamp()
-    }))
-  })
-
-  // Commit writes
-  await batch.commit()
 }
 

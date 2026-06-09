@@ -6,7 +6,6 @@ import { Users, Search, PlusCircle, UserX, Activity, Database } from 'lucide-rea
 import Button from '@/components/ui/Button'
 import { cn, formatDate, initials, nyhaBadgeColor, hfTypeBadgeColor, lvefColor } from '@/lib/utils'
 import { getPatients, updatePatient } from '@/lib/firestore'
-import { seedDemoData } from '@/lib/seeder'
 import type { Patient } from '@/lib/types'
 import { toast } from 'sonner'
 

@@ -101,6 +101,10 @@ export interface Patient {
   comorbidOSA?: boolean
   comorbidThyroid?: boolean
   comorbidIronDeficiency?: boolean
+  icdPresence?: boolean
+  crtPresence?: boolean
+  anticoagulation?: string
+  antiarrhythmic?: string
 }
 
 export type PatientInput = Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>

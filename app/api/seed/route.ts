@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
-import { seedDemoData } from '@/lib/seeder'
+import { seedRealPatientsFromExcel } from '@/lib/excelSeeder'
 
 export async function GET() {
   console.log('API seed endpoint triggered...')
   try {
-    await seedDemoData()
+    const result = await seedRealPatientsFromExcel()
     return NextResponse.json({
       success: true,
-      message: 'Database seeded successfully with 150 patients!'
+      message: `Database seeded successfully with ${result.patientsCount} real patient registry records!`,
+      ...result
     })
   } catch (error: any) {
     console.error('Seeding error via API:', error)

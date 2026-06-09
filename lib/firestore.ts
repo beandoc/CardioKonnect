@@ -1,7 +1,7 @@
 import {
   collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
   getDoc, getDocs, query, orderBy, limit, where, collectionGroup,
-  serverTimestamp, Timestamp, writeBatch, arrayUnion,
+  serverTimestamp, Timestamp, writeBatch, arrayUnion, onSnapshot,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import type { Patient, PatientInput, Visit, VisitInput, PopulationStats, PatientTrends, TrendPoint, RegistryField, OutcomeEvent, OutcomeEventInput } from './types'
@@ -10,7 +10,10 @@ import { MOCK_PATIENTS_COHORT, MOCK_VISITS_COHORT } from './seeder'
 
 // ─── Local Storage Fallback for Offline Demo Mode ────────────────────────────
 
-const isDemoMode = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith('mock') || process.env.NEXT_PUBLIC_FIREBASE_API_KEY === 'undefined'
+// Always use localStorage (demo/local mode) — Firestore security rules require
+// Firebase Authentication which is not configured in this deployment. All patient
+// data is stored in localStorage and seeded via the Excel parser API route.
+export const isDemoMode = true
 
 function getLocalPatients(): Patient[] {
   if (typeof window === 'undefined') return []
@@ -36,6 +39,7 @@ function getLocalPatients(): Patient[] {
 function saveLocalPatients(pts: Patient[]) {
   if (typeof window === 'undefined') return
   localStorage.setItem('cardio_patients', JSON.stringify(pts))
+  window.dispatchEvent(new Event('cardio_patients_updated'))
 }
 
 function getLocalVisits(): Visit[] {
@@ -57,6 +61,7 @@ function getLocalVisits(): Visit[] {
 function saveLocalVisits(vts: Visit[]) {
   if (typeof window === 'undefined') return
   localStorage.setItem('cardio_visits', JSON.stringify(vts))
+  window.dispatchEvent(new Event('cardio_visits_updated'))
 }
 
 function getLocalOutcomes(): OutcomeEvent[] {
@@ -408,6 +413,63 @@ export async function getLatestVisit(patientId: string): Promise<Visit | null> {
   return docToVisit(snap.docs[0].id, patientId, snap.docs[0].data())
 }
 
+/**
+ * Efficiently fetch the latest visit for every patient in one pass.
+ * Returns a Map of patientId → latest Visit (or null if no visits).
+ * O(n) vs. O(n²) from calling getLatestVisit per patient.
+ */
+export async function getAllLatestVisits(): Promise<Map<string, Visit>> {
+  const map = new Map<string, Visit>()
+  if (isDemoMode) {
+    const allVisits = getLocalVisits()
+    for (const v of allVisits) {
+      const existing = map.get(v.patientId)
+      if (!existing || new Date(v.visitDate).getTime() > new Date(existing.visitDate).getTime()) {
+        map.set(v.patientId, v)
+      }
+    }
+    return map
+  }
+
+  // Firestore mode
+  try {
+    const snap = await getDocs(collectionGroup(db, 'visits'))
+    for (const d of snap.docs) {
+      const patientId = d.ref.parent.parent?.id || ''
+      if (!patientId) continue
+      const v = docToVisit(d.id, patientId, d.data())
+      const existing = map.get(patientId)
+      if (!existing || new Date(v.visitDate).getTime() > new Date(existing.visitDate).getTime()) {
+        map.set(patientId, v)
+      }
+    }
+  } catch (e) {
+    console.warn('getAllLatestVisits: Firestore query failed, falling back to empty map', e)
+  }
+  return map
+}
+
+/**
+ * Return ALL visits from localStorage in one pass (O(1) read).
+ * Use this instead of calling getVisits(patientId) per patient.
+ */
+export async function getAllVisits(): Promise<Visit[]> {
+  if (isDemoMode) {
+    return getLocalVisits()
+  }
+  // Firestore mode — collectionGroup query
+  try {
+    const snap = await getDocs(collectionGroup(db, 'visits'))
+    return snap.docs.map(d => {
+      const patientId = d.ref.parent.parent?.id || ''
+      return docToVisit(d.id, patientId, d.data())
+    })
+  } catch (e) {
+    console.warn('getAllVisits: Firestore query failed', e)
+    return []
+  }
+}
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 export async function getPopulationStats(): Promise<PopulationStats> {
@@ -684,6 +746,81 @@ export async function deleteOutcomeEvent(patientId: string, eventId: string): Pr
   }
 
   await deleteDoc(doc(db, 'patients', patientId, 'outcomes', eventId))
+}
+
+export function subscribePatients(onUpdate: (patients: Patient[]) => void): () => void {
+  if (isDemoMode) {
+    onUpdate(getLocalPatients().sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
+
+    const handleLocalUpdate = () => {
+      onUpdate(getLocalPatients().sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
+    }
+
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === 'cardio_patients') {
+        handleLocalUpdate()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cardio_patients_updated', handleLocalUpdate)
+      window.addEventListener('storage', handleStorageUpdate)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('cardio_patients_updated', handleLocalUpdate)
+        window.removeEventListener('storage', handleStorageUpdate)
+      }
+    }
+  }
+
+  const q = query(collection(db, 'patients'), orderBy('createdAt', 'desc'), limit(1000))
+  return onSnapshot(q, (snap) => {
+    const pts = snap.docs.map(d => docToPatient(d.id, d.data()))
+    onUpdate(pts)
+  }, (err) => {
+    console.error('subscribePatients error:', err)
+  })
+}
+
+export function subscribeVisits(onUpdate: (visits: Visit[]) => void): () => void {
+  if (isDemoMode) {
+    onUpdate(getLocalVisits())
+
+    const handleLocalUpdate = () => {
+      onUpdate(getLocalVisits())
+    }
+
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === 'cardio_visits') {
+        handleLocalUpdate()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cardio_visits_updated', handleLocalUpdate)
+      window.addEventListener('storage', handleStorageUpdate)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('cardio_visits_updated', handleLocalUpdate)
+        window.removeEventListener('storage', handleStorageUpdate)
+      }
+    }
+  }
+
+  const q = collectionGroup(db, 'visits')
+  return onSnapshot(q, (snap) => {
+    const visits = snap.docs.map(d => {
+      const patientId = d.ref.parent.parent?.id || ''
+      return docToVisit(d.id, patientId, d.data())
+    })
+    onUpdate(visits)
+  }, (err) => {
+    console.error('subscribeVisits error:', err)
+  })
 }
 
 

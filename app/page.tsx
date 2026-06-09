@@ -2,10 +2,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { getPatients, getLatestVisit } from '@/lib/firestore'
+import { getPatients, getAllLatestVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import { getAge, formatDate, initials, lvefColor, hfTypeBadgeColor, nyhaBadgeColor, cn } from '@/lib/utils'
-import { seedDemoData } from '@/lib/seeder'
 import { toast } from 'sonner'
 import {
   Users, Heart, Activity, Hospital, PlusCircle, TrendingUp,
@@ -106,11 +105,14 @@ export default function DashboardPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const pts = await getPatients()
-      const withVisits = await Promise.all(pts.map(async p => ({
+      const [pts, latestVisitMap] = await Promise.all([
+        getPatients(),
+        getAllLatestVisits(),
+      ])
+      const withVisits: PatientRow[] = pts.map(p => ({
         patient: p,
-        latest: await getLatestVisit(p.id),
-      })))
+        latest: latestVisitMap.get(p.id) || null,
+      }))
       setRows(withVisits)
     } catch (e) {
       console.error(e)

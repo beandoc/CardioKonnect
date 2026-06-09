@@ -281,6 +281,23 @@ const VISIT_COLUMN_MAP: Array<{ label: string; extractor: (v: Visit) => unknown 
   { label: 'VKI Prescribed', extractor: v => v.vki?.prescribed ?? '' },
   { label: 'VKI Type', extractor: v => v.vki?.type ?? '' },
   { label: 'VKI Dose', extractor: v => v.vki?.dose ?? '' },
+  {
+    label: 'Anticoagulant Therapy',
+    extractor: v => {
+      if (v.anticoagulation) return v.anticoagulation;
+      const parts: string[] = [];
+      if (v.noac?.prescribed === 'Yes') {
+        parts.push(v.noac.type ? `${v.noac.type}${v.noac.dose ? ' (' + v.noac.dose + ')' : ''}` : 'NOAC');
+      }
+      if (v.vki?.prescribed === 'Yes') {
+        parts.push(v.vki.type ? `${v.vki.type}${v.vki.dose ? ' (' + v.vki.dose + ')' : ''}` : 'VKI');
+      }
+      if (parts.length > 0) return parts.join(', ');
+      if (v.noac?.prescribed === 'No' && v.vki?.prescribed === 'No') return 'No';
+      return '';
+    }
+  },
+  { label: 'Antiarrhythmic Therapy', extractor: v => v.antiarrhythmic ?? '' },
   { label: 'Antiarrhythmic Reason', extractor: v => v.antiarrhythmicReason ?? '' },
   // Devices
   { label: 'Devices', extractor: v => (v.device ?? []).join('; ') },
@@ -834,6 +851,9 @@ export const FIELD_MAP: Record<string, string> = {
   'Birth Date': 'dob',
   'Gender': 'sex',
   'Sex': 'sex',
+  'Phone': 'contact',
+  'PHONE': 'contact',
+  'Telephone': 'contact',
 
   // Visit basics
   'Visit Date': 'visitDate',
@@ -960,6 +980,10 @@ export const FIELD_MAP: Record<string, string> = {
   'QTc': 'qtcInterval',
   'QTc Interval': 'qtcInterval',
   'Corrected QT': 'qtcInterval',
+  'Anticoagulant Therapy': 'anticoagulation',
+  'Anticoagulation': 'anticoagulation',
+  'Antiarrhythmic Therapy': 'antiarrhythmic',
+  'Antiarrhythmic': 'antiarrhythmic',
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
