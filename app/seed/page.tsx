@@ -73,19 +73,6 @@ export default function SeederPage() {
     }
   }
 
-  const patientsList = [
-    { name: 'LAKHAN SINGH',    mrn: 'MRN-1001', location: 'KASOLI',  phenotype: 'HFrEF', visits: 2, status: 'Completed (with 3m follow-up)' },
-    { name: 'WANNI DEVI',      mrn: 'MRN-1002', location: 'MAONDA',  phenotype: 'HFrEF', visits: 1, status: 'Inpatient stay only' },
-    { name: 'PARA DEVI',       mrn: 'MRN-1003', location: 'JASRASAR',phenotype: 'HFrEF', visits: 1, status: 'Inpatient stay only' },
-    { name: 'ALAM ALI KHAN',   mrn: 'MRN-1004', location: 'NAGAUR',  phenotype: 'HFrEF', visits: 2, status: 'Completed (with 3m follow-up)' },
-    { name: 'JHARAM KURI',     mrn: 'MRN-1005', location: 'SIKAR',   phenotype: 'HFrEF', visits: 2, status: 'Completed (with 3m follow-up)' },
-    { name: 'ROSHAN ALI GORI', mrn: 'MRN-1006', location: 'SIKAR',   phenotype: 'HFrEF', visits: 1, status: 'Inpatient stay only' },
-    { name: 'CHAND KANWAR',    mrn: 'MRN-1007', location: 'JAIPUR',  phenotype: 'HFrEF', visits: 2, status: 'Completed (with 3m follow-up)' },
-    { name: 'KISHOR SINGH',    mrn: 'MRN-1008', location: 'JAIPUR',  phenotype: 'HFrEF', visits: 2, status: 'Completed (with 3m follow-up)' },
-    { name: 'NAVI RAM',        mrn: 'MRN-1009', location: 'DILWARA', phenotype: 'HFrEF', visits: 1, status: 'Inpatient stay only' },
-    { name: 'J ROY',           mrn: 'MRN-1010', location: 'SIKAR',   phenotype: 'HFrEF', visits: 2, status: 'Completed (with 3m follow-up)' },
-  ]
-
   return (
     <div className="max-w-4xl mx-auto space-y-6 text-gray-300 py-6 animate-fade-in">
 
@@ -182,44 +169,6 @@ export default function SeederPage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Cohort preview */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="glass-card p-5 space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-white">Cohort Demographic Preview</h3>
-              <p className="text-xs text-gray-400 mt-1">
-                First 10 real patient records from HF.xlsx that will be imported:
-              </p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="registry-table w-full text-xs">
-                <thead>
-                  <tr>
-                    <th>Patient</th>
-                    <th>MRN</th>
-                    <th>Region</th>
-                    <th>Phenotype</th>
-                    <th>Visits</th>
-                    <th className="text-right">Encounters</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {patientsList.map((p, i) => (
-                    <tr key={i}>
-                      <td className="font-semibold text-white">{p.name}</td>
-                      <td className="font-mono text-gray-400">{p.mrn}</td>
-                      <td className="text-gray-300">{p.location}</td>
-                      <td><span className="badge badge-red text-[10px] font-bold">{p.phenotype}</span></td>
-                      <td className="text-gray-400">{p.status}</td>
-                      <td className="text-right font-semibold text-white">{p.visits}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
 
       </div>

@@ -72,68 +72,6 @@ export default function PatientDetailPage() {
     let t = await getPatientTrends(id)
     let o = await getOutcomeEvents(id)
 
-    // Fallback Mock data for demo patients
-    if (!p) {
-      const mockDb: Record<string, Patient> = {
-        '1': { id: '1', firstName: 'Arjun', lastName: 'Talpade', dob: '1978-05-19', sex: 'Male', mrn: 'MRN-784019', contact: '+91 9823019283', address: 'Kothrud, Pune, Maharashtra', comorbidities: ['HTN', 'Type 2 Diabetes'], allergies: 'Penicillin', createdAt: '2026-05-19T10:00:00Z', updatedAt: '2026-05-19T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
-        '2': { id: '2', firstName: 'Sunita', lastName: 'Deshmukh', dob: '1982-11-20', sex: 'Female', mrn: 'MRN-201948', contact: '+91 9123049182', address: 'Shivajinagar, Pune, Maharashtra', comorbidities: ['Dyslipidemia'], allergies: 'None', createdAt: '2026-05-20T10:00:00Z', updatedAt: '2026-05-20T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
-        '3': { id: '3', firstName: 'Ramesh', lastName: 'Kulkarni', dob: '1965-03-22', sex: 'Male', mrn: 'MRN-849102', contact: '+91 9422019283', address: 'Deccan Gymkhana, Pune, Maharashtra', comorbidities: ['CAD', 'Prior CABG'], allergies: 'Aspirin (Mild GI)', createdAt: '2026-05-22T10:00:00Z', updatedAt: '2026-05-22T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
-        '4': { id: '4', firstName: 'Priya', lastName: 'Sharma', dob: '1990-07-23', sex: 'Female', mrn: 'MRN-102948', contact: '+91 9011029481', address: 'Aundh, Pune, Maharashtra', comorbidities: [], allergies: 'Sulfa drugs', createdAt: '2026-05-23T10:00:00Z', updatedAt: '2026-05-23T10:00:00Z', status: 'Inactive', consentStatus: 'Declined' },
-        '5': { id: '5', firstName: 'Vijay', lastName: 'Mallya', dob: '1955-12-18', sex: 'Male', mrn: 'MRN-998822', contact: '+91 9890123456', address: 'Cuffe Parade, Mumbai, Maharashtra', comorbidities: ['Gout', 'HTN'], allergies: 'None', createdAt: '2026-05-24T10:00:00Z', updatedAt: '2026-05-24T10:00:00Z', status: 'Active', consentStatus: 'Pending' },
-        '6': { id: '6', firstName: 'Ananya', lastName: 'Rao', dob: '1995-04-26', sex: 'Female', mrn: 'MRN-334455', contact: '+91 9881122334', address: 'Viman Nagar, Pune, Maharashtra', comorbidities: ['Asthma'], allergies: 'None', createdAt: '2026-05-26T10:00:00Z', updatedAt: '2026-05-26T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
-        '7': { id: '7', firstName: 'Amitabh', lastName: 'Bachchan', dob: '1942-10-11', sex: 'Male', mrn: 'MRN-000777', contact: '+91 9820098200', address: 'Juhu, Mumbai, Maharashtra', comorbidities: ['COPD', 'Prior Angioplasty'], allergies: 'None', createdAt: '2026-05-28T10:00:00Z', updatedAt: '2026-05-28T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
-        '8': { id: '8', firstName: 'Sanjay', lastName: 'More', dob: '1980-08-15', sex: 'Male', mrn: 'MRN-554432', contact: '+91 9869234857', address: 'Dadar, Mumbai, Maharashtra', comorbidities: ['CAD', 'STEMI post-PCI'], allergies: 'None', createdAt: '2026-06-01T10:00:00Z', updatedAt: '2026-06-01T10:00:00Z', status: 'Active', consentStatus: 'Granted' },
-        '9': { id: '9', firstName: 'Lata', lastName: 'Patwardhan', dob: '1972-02-14', sex: 'Female', mrn: 'MRN-887766', contact: '+91 9371029485', address: 'Dhantoli, Nagpur, Maharashtra', comorbidities: ['HFrEF', 'Chronic Kidney Disease'], allergies: 'Contrast (Mild)', createdAt: '2026-06-02T10:00:00Z', updatedAt: '2026-06-02T10:00:00Z', status: 'Active', consentStatus: 'Granted' }
-      }
-      p = mockDb[id] || null
-      if (p) {
-        // Mock visit data to make profile complete
-        const emptyMed = { prescribed: '' as const }
-        const mockVisits: Visit[] = [
-          {
-            id: `v-${id}`,
-            patientId: id,
-            createdAt: '2026-06-02T10:00:00Z',
-            visitDate: '2026-06-02',
-            visitType: 'OPD',
-            weight: 72,
-            height: 170,
-            bpSystolic: 128,
-            bpDiastolic: 82,
-            heartRate: 74,
-            nyha: 'II',
-            rhythm: 'Sinus',
-            lvef: 35,
-            ntProBNP: 1800,
-            egfr: 58,
-            potassium: 4.2,
-            diuretic: { prescribed: 'Yes', type: 'Furosemide', dose: '40mg OD' },
-            raasi: { prescribed: 'Yes', type: 'Sacubitril/Valsartan', dose: '50mg BD' },
-            betaBlocker: { prescribed: 'Yes', type: 'Carvedilol', dose: '6.25mg BD' },
-            mra: { prescribed: 'Yes', type: 'Spironolactone', dose: '25mg OD' },
-            sglt2i: { prescribed: 'Yes', type: 'Dapagliflozin', dose: '10mg OD' },
-            ivabradine: emptyMed, digoxin: emptyMed, ivIron: emptyMed,
-            aspirin: { prescribed: 'Yes', dose: '75mg OD' },
-            statin: { prescribed: 'Yes', type: 'Atorvastatin', dose: '40mg OD' },
-            fibrate: { prescribed: '' }, pcsk9: { prescribed: '' },
-            noac: { prescribed: '' }, vki: { prescribed: '' }
-          }
-        ]
-        v = mockVisits
-        t = {
-          lvef: [{ date: '2026-06-02', value: 35, visitId: `v-${id}` }],
-          ntProBNP: [{ date: '2026-06-02', value: 1800, visitId: `v-${id}` }],
-          nyha: [{ date: '2026-06-02', value: 2, visitId: `v-${id}` }],
-          egfr: [{ date: '2026-06-02', value: 58, visitId: `v-${id}` }],
-          weight: [{ date: '2026-06-02', value: 72, visitId: `v-${id}` }],
-          bpSystolic: [{ date: '2026-06-02', value: 128, visitId: `v-${id}` }],
-          heartRate: [{ date: '2026-06-02', value: 74, visitId: `v-${id}` }],
-          sixMWT: [{ date: '2026-06-02', value: 380, visitId: `v-${id}` }],
-          kccq: [{ date: '2026-06-02', value: 78, visitId: `v-${id}` }],
-        }
-      }
-    }
-
     setPatient(p)
     setVisits(v)
     setTrends(t)

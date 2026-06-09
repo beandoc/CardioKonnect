@@ -40,35 +40,7 @@ interface LogRow {
   remarks: string
 }
 
-const GENERATED_LOGS: LogRow[] = [
-  { id: '1', type: 'Consent Granted', logUser: 'Dr. Srinivas Murthy', userRole: 'Provider', ipAddress: '192.168.1.114', registryName: 'Heart Failure Registry', patient: 'Arjun Talpade', provider: 'Dr. Srinivas Murthy', facility: 'AICTS Pune', timestamp: '02/06/2026 10:14:11 AM', reason: 'Consent Obtained', remarks: 'Signed paper consent form received.' },
-  { id: '2', type: 'Data Exported', logUser: 'Dr. A. Jayachandra', userRole: 'RegistryOwner', ipAddress: '192.168.1.102', registryName: 'Heart Failure Registry', patient: 'N/A', provider: 'Dr. A. Jayachandra', facility: 'AICTS Pune', timestamp: '02/06/2026 09:22:45 AM', reason: 'Cohort Study Analysis', remarks: 'Exported 10 records to Excel sheet.' },
-  { id: '3', type: 'Record Created', logUser: 'Dr. K. Raghavan', userRole: 'Provider', ipAddress: '192.168.1.130', registryName: 'Heart Failure Registry', patient: 'Sunita Deshmukh', provider: 'Dr. K. Raghavan', facility: 'AICTS Pune', timestamp: '02/06/2026 08:05:12 AM', reason: 'Clinical Visit Form', remarks: 'Added baseline diagnostic findings.' },
-  { id: '4', type: 'Consent Revoked', logUser: 'Dr. Srinivas Murthy', userRole: 'Provider', ipAddress: '192.168.1.114', registryName: 'Heart Failure Registry', patient: 'Priya Sharma', provider: 'Dr. Srinivas Murthy', facility: 'AICTS Pune', timestamp: '01/06/2026 04:30:00 PM', reason: 'Patient Withdrew', remarks: 'Patient requested withdrawal from registry.' },
-  { id: '5', type: 'Record Updated', logUser: 'Dr. A. Jayachandra', userRole: 'RegistryOwner', ipAddress: '106.215.177.22', registryName: 'Heart Failure Registry', patient: 'Ramesh Kulkarni', provider: 'Dr. A. Jayachandra', facility: 'AICTS Pune', timestamp: '31/05/2026 02:15:30 PM', reason: 'Follow-up visit update', remarks: 'Updated LVEF metric values.' },
-  { id: '6', type: 'Login Success', logUser: 'Dr. A. Jayachandra', userRole: 'RegistryOwner', ipAddress: '106.215.177.22', registryName: 'System Logs', patient: 'N/A', provider: 'N/A', facility: 'AICTS Pune', timestamp: '30/05/2026 09:12:00 AM', reason: 'User session started', remarks: 'Authenticated via 2FA' },
-  { id: '7', type: 'Record Created', logUser: 'Dr. Srinivas Murthy', userRole: 'Provider', ipAddress: '192.168.1.114', registryName: 'Heart Failure Registry', patient: 'Vijay Mallya', provider: 'Dr. Srinivas Murthy', facility: 'AICTS Pune', timestamp: '29/05/2026 11:22:45 AM', reason: 'Clinical Visit Form', remarks: 'Created baseline record' },
-  { id: '8', type: 'Consent Granted', logUser: 'Dr. K. Raghavan', userRole: 'Provider', ipAddress: '192.168.1.130', registryName: 'Heart Failure Registry', patient: 'Ananya Rao', provider: 'Dr. K. Raghavan', facility: 'AICTS Pune', timestamp: '28/05/2026 03:45:10 PM', reason: 'Standard Consent Process', remarks: 'Digital signature obtained' },
-  { id: '9', type: 'Record Created', logUser: 'Dr. A. Jayachandra', userRole: 'RegistryOwner', ipAddress: '106.215.177.22', registryName: 'Heart Failure Registry', patient: 'Amitabh Bachchan', provider: 'Dr. A. Jayachandra', facility: 'AICTS Pune', timestamp: '28/05/2026 01:30:15 PM', reason: 'Baseline admission form', remarks: 'Baseline assessment complete' },
-  { id: '10', type: 'Record Updated', logUser: 'Dr. Srinivas Murthy', userRole: 'Provider', ipAddress: '192.168.1.114', registryName: 'Heart Failure Registry', patient: 'Daya Ghadge', provider: 'Dr. Srinivas Murthy', facility: 'AICTS Pune', timestamp: '27/05/2026 04:10:05 PM', reason: 'Follow-up lab update', remarks: 'Updated NT-proBNP values.' }
-]
-
-for (let i = 11; i <= 58; i++) {
-  GENERATED_LOGS.push({
-    id: `${i}`,
-    type: i % 2 === 0 ? 'Record Updated' : 'Record Created',
-    logUser: 'Dr. Srinivas Murthy',
-    userRole: 'Provider',
-    ipAddress: '192.168.1.114',
-    registryName: 'Heart Failure Registry',
-    patient: `Patient Stub ${i}`,
-    provider: 'Dr. Srinivas Murthy',
-    facility: 'AICTS Pune',
-    timestamp: `25/05/2026 02:${i < 10 ? '0' + i : i}:00 PM`,
-    reason: 'Routine Follow-up',
-    remarks: 'Auto-saved system audit log.'
-  })
-}
+const GENERATED_LOGS: LogRow[] = []
 
 // Types and data from Language Master
 interface LanguageRow {

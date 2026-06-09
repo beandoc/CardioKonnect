@@ -15,17 +15,7 @@ interface Appointment {
   status: 'Today' | 'Upcoming' | 'Completed' | 'Pending Acknowledgement'
 }
 
-const INITIAL_APPOINTMENTS: Appointment[] = [
-  {
-    id: '1',
-    appointmentId: 'APT-90412',
-    patient: 'Arjun Talpade',
-    dateAndTime: '02/06/2026 11:30 AM',
-    registry: 'Heart Failure Registry',
-    facility: 'AICTS Pune',
-    status: 'Completed'
-  }
-]
+const INITIAL_APPOINTMENTS: Appointment[] = []
 
 interface Consent {
   id: string
@@ -38,18 +28,7 @@ interface Consent {
   expiry: string
 }
 
-const INITIAL_CONSENTS: Consent[] = [
-  {
-    id: '35',
-    patient: 'Daya Ghadge',
-    consent: 'Consent to share Coronary interventions related data for Research Purposes',
-    facility: 'AICTS Pune',
-    provider: 'Dr. A. Jayachandra',
-    status: 'Granted',
-    created: 'Feb 04, 2026',
-    expiry: 'Feb 04, 2029'
-  }
-]
+const INITIAL_CONSENTS: Consent[] = []
 
 function AppointmentsAndConsentsContent() {
   const searchParams = useSearchParams()
