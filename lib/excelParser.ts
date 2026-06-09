@@ -1,7 +1,8 @@
-import 'server-only'
-import fs from 'fs'
+/**
+ * Client-safe Excel row parser.
+ * NO Node.js `fs` module — safe to import in browser/client components.
+ */
 import type { Patient, Visit, MedEntry } from './types'
-import * as XLSX from 'xlsx'
 
 // Helper to format date relative to today or as ISO strings
 function parseExcelDate(val: any): string {
@@ -44,30 +45,6 @@ function cleanUndefined(obj: any): any {
     }
   })
   return res
-}
-
-/**
- * clearAllPatients — no-op on server side (client handles localStorage clearing).
- * Firestore clearing must be done via Firebase Console or Admin SDK.
- */
-export async function clearAllPatients(): Promise<void> {
-  console.log('[excelSeeder] clearAllPatients: skipping Firestore (no server-side auth). Client will clear localStorage.')
-}
-
-export async function seedRealPatientsFromExcel(): Promise<{ patientsCount: number; visitsCount: number; patients: Patient[]; visits: Visit[] }> {
-  const filePath = '/Users/sachinsrivastava/Desktop/HF.xlsx';
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Excel file not found at ${filePath}`);
-  }
-
-  console.log('[excelSeeder] Reading Excel file from:', filePath);
-  const fileBuffer = fs.readFileSync(filePath);
-  const wb = XLSX.read(fileBuffer, { type: 'buffer', cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<any>(ws);
-  console.log(`[excelSeeder] Parsed ${rows.length} rows from Excel sheet.`);
-
-  return parseExcelRows(rows);
 }
 
 export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCount: number; patients: Patient[]; visits: Visit[] } {
@@ -541,6 +518,6 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     }
   }
 
-  console.log(`[excelSeeder] Parsing complete. Prepared ${patientsCount} patients and ${visitsCount} visits.`);
+  console.log(`[excelParser] Parsing complete. Prepared ${patientsCount} patients and ${visitsCount} visits.`);
   return { patientsCount, visitsCount, patients, visits };
 }

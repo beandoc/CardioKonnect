@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 
 import { isDemoMode } from '@/lib/firestore'
 import * as XLSX from 'xlsx'
-import { parseExcelRows } from '@/lib/excelSeeder'
+import { parseExcelRows } from '@/lib/excelParser'
 
 export default function SeederPage() {
   const router = useRouter()
