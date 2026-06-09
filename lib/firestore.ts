@@ -565,28 +565,64 @@ export async function getPatientTrends(patientId: string): Promise<PatientTrends
 // ─── Settings / Configuration ────────────────────────────────────────────────
 
 export async function getRegistryFields(): Promise<RegistryField[]> {
+  let fields: RegistryField[] = BUILT_IN_FIELDS;
+
   if (isDemoMode) {
     if (typeof window !== 'undefined') {
       const data = localStorage.getItem('cardio_fields')
       if (data) {
-        return JSON.parse(data) as RegistryField[]
+        const stored = JSON.parse(data) as RegistryField[];
+        const existingNames = new Set(stored.map(f => f.fieldName));
+        const missing = BUILT_IN_FIELDS.filter(f => !existingNames.has(f.fieldName));
+        if (missing.length > 0) {
+          let lastSrNo = stored.length > 0 ? Math.max(...stored.map(f => f.srNo)) : 0;
+          const updated = [...stored];
+          missing.forEach(f => {
+            lastSrNo++;
+            updated.push({ ...f, srNo: lastSrNo });
+          });
+          localStorage.setItem('cardio_fields', JSON.stringify(updated));
+          fields = updated;
+        } else {
+          fields = stored;
+        }
+      } else {
+        localStorage.setItem('cardio_fields', JSON.stringify(BUILT_IN_FIELDS));
+        fields = BUILT_IN_FIELDS;
       }
     }
-    return BUILT_IN_FIELDS
-  }
-
-  try {
-    const snap = await getDoc(doc(db, 'settings', 'registryConfig'))
-    if (snap.exists()) {
-      const data = snap.data()
-      if (data.fields && Array.isArray(data.fields)) {
-        return data.fields as RegistryField[]
+  } else {
+    try {
+      const snap = await getDoc(doc(db, 'settings', 'registryConfig'))
+      if (snap.exists()) {
+        const data = snap.data()
+        if (data.fields && Array.isArray(data.fields)) {
+          const stored = data.fields as RegistryField[];
+          const existingNames = new Set(stored.map(f => f.fieldName));
+          const missing = BUILT_IN_FIELDS.filter(f => !existingNames.has(f.fieldName));
+          if (missing.length > 0) {
+            let lastSrNo = stored.length > 0 ? Math.max(...stored.map(f => f.srNo)) : 0;
+            const updated = [...stored];
+            missing.forEach(f => {
+              lastSrNo++;
+              updated.push({ ...f, srNo: lastSrNo });
+            });
+            await setDoc(doc(db, 'settings', 'registryConfig'), { fields: updated, updatedAt: serverTimestamp() }, { merge: true });
+            fields = updated;
+          } else {
+            fields = stored;
+          }
+        }
+      } else {
+        await setDoc(doc(db, 'settings', 'registryConfig'), { fields: BUILT_IN_FIELDS, updatedAt: serverTimestamp() });
+        fields = BUILT_IN_FIELDS;
       }
+    } catch (error) {
+      console.error('Failed to get registry fields from Firestore:', error)
+      fields = BUILT_IN_FIELDS;
     }
-  } catch (error) {
-    console.error('Failed to get registry fields from Firestore:', error)
   }
-  return BUILT_IN_FIELDS
+  return fields;
 }
 
 export async function setRegistryFields(fields: RegistryField[]): Promise<void> {
