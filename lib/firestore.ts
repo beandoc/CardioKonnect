@@ -131,8 +131,9 @@ export async function addPatient(input: PatientInput): Promise<string> {
     return id
   }
 
+  const cleanInput = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))
   const ref = await addDoc(collection(db, 'patients'), {
-    ...input,
+    ...cleanInput,
     visitCount: 0,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -151,7 +152,11 @@ export async function updatePatient(id: string, data: Partial<PatientInput>): Pr
     return
   }
 
-  await updateDoc(doc(db, 'patients', id), { ...data, updatedAt: serverTimestamp() })
+  // Firestore rejects undefined values — strip them before writing
+  const clean = Object.fromEntries(
+    Object.entries(data).filter(([, v]) => v !== undefined)
+  )
+  await updateDoc(doc(db, 'patients', id), { ...clean, updatedAt: serverTimestamp() })
 }
 
 export async function deletePatient(id: string): Promise<void> {
@@ -306,8 +311,9 @@ export async function addVisit(patientId: string, input: VisitInput): Promise<st
     return id
   }
 
+  const cleanVisit = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))
   const ref = await addDoc(collection(db, 'patients', patientId, 'visits'), {
-    ...input,
+    ...cleanVisit,
     createdAt: serverTimestamp(),
   })
 
@@ -333,8 +339,9 @@ export async function updateVisit(patientId: string, visitId: string, data: Part
     return
   }
 
+  const cleanData = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined))
   await updateDoc(doc(db, 'patients', patientId, 'visits', visitId), {
-    ...data,
+    ...cleanData,
     updatedAt: serverTimestamp(),
     editHistory: arrayUnion(historyEntry)
   })
