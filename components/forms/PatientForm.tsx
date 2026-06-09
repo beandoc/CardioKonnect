@@ -16,8 +16,8 @@ const schema = z.object({
   mrn:            z.string().optional(),
   contact:        z.string().optional(),
   email:          z.string().email('Invalid email').or(z.literal('')).optional(),
-  status:         z.enum(['Active', 'Inactive', 'Pending']).optional(),
-  consentStatus:  z.enum(['Granted', 'Revoked', 'Pending', 'Declined']).default('Pending'),
+  status:         z.preprocess(v => v === '' ? undefined : v, z.enum(['Active', 'Inactive', 'Pending']).optional()),
+  consentStatus:  z.preprocess(v => v === '' ? 'Pending' : v, z.enum(['Granted', 'Revoked', 'Pending', 'Declined'])).default('Pending'),
   address:        z.string().optional(),
   comorbidities:  z.array(z.string()).default([]),
   allergies:      z.string().optional(),
@@ -177,18 +177,21 @@ const FIELD_LABELS: Record<string, string> = {
   excludeActiveTrial: 'Active Clinical Trial Exclusion Status',
   excludeTerminalIllness: 'Terminal Illness Exclusion Status',
   excludeNonCompliance: 'Non-Compliance Exclusion Status',
+  vitalStatus: 'Vital Status',
+  dateOfDeath: 'Date of Death',
+  deathCauseCategory: 'Cause of Death Category',
 }
 
 export default function PatientForm({ defaultValues, onSubmit, loading, submitLabel = 'Save Patient' }: Props) {
   // Parse incoming legacy comorbidities (string) to array if present
+  // Strip enum fields from spread to normalize them explicitly below (avoids duplicate-key TS error)
+  const { vitalStatus: _vs, deathCauseCategory: _dcc, status: _st, consentStatus: _cs, ...restDefaults } = defaultValues || {}
   const parsedDefaultValues = {
-    status: 'Active',
-    consentStatus: 'Pending',
     indianCitizen: true,
     studyConsented: true,
     educationYears: 0,
     registryId: '',
-    ...defaultValues,
+    ...restDefaults,
     abhaId: defaultValues?.abhaId || (defaultValues as any)?.aadhaarNo || '',
     occupation: defaultValues?.occupation || '',
     indexEtiology: defaultValues?.indexEtiology || [],
@@ -210,7 +213,12 @@ export default function PatientForm({ defaultValues, onSubmit, loading, submitLa
     excludeNonCompliance: defaultValues?.excludeNonCompliance || false,
     comorbidities: typeof defaultValues?.comorbidities === 'string'
       ? (defaultValues.comorbidities as string).split(',').map(s => s.trim()).filter(Boolean)
-      : (defaultValues?.comorbidities || [])
+      : (defaultValues?.comorbidities || []),
+    // Normalize enum fields: Firestore may store '' which fails zod enum validation
+    vitalStatus: _vs || undefined,
+    deathCauseCategory: _dcc || undefined,
+    status: _st || 'Active',
+    consentStatus: _cs || 'Pending',
   } as FormValues
 
   const { register, handleSubmit, control, watch, formState: { errors } } = useForm<FormValues>({
