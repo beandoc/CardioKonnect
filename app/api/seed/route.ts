@@ -1,20 +1,17 @@
 import { NextResponse } from 'next/server'
-import { seedRealPatientsFromExcel } from '@/lib/excelSeeder'
 
+// This server-side route previously read from a local file path that only
+// exists on the developer's machine. It is no longer used — seeding now
+// happens client-side via the /seed page (Excel upload → Firestore writes).
 export async function GET() {
-  console.log('API seed endpoint triggered...')
-  try {
-    const result = await seedRealPatientsFromExcel()
-    return NextResponse.json({
-      success: true,
-      message: `Database seeded successfully with ${result.patientsCount} real patient registry records!`,
-      ...result
-    })
-  } catch (error: any) {
-    console.error('Seeding error via API:', error)
-    return NextResponse.json({
+  return NextResponse.json(
+    {
       success: false,
-      error: error.message || String(error)
-    }, { status: 500 })
-  }
+      error:
+        'Server-side file seeding is not supported on Vercel. ' +
+        'Use the /seed page to upload your HF.xlsx file directly — ' +
+        'it writes to Firestore and works on any device.',
+    },
+    { status: 410 }
+  )
 }
