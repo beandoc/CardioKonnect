@@ -81,6 +81,26 @@ export interface Patient {
   vitalStatus?: 'Alive' | 'Dead'
   dateOfDeath?: string              // ISO date
   deathCauseCategory?: 'Cardiovascular' | 'Non-cardiovascular' | 'Unknown'
+
+  // Additional registry variables
+  age?: number
+  residenceType?: string
+  hfDuration?: string
+  comorbidHypertension?: boolean
+  comorbidDiabetes?: boolean
+  comorbidDyslipidemia?: boolean
+  comorbidCAD?: boolean
+  comorbidPriorMI?: boolean
+  comorbidPriorPCI?: boolean
+  comorbidPriorCABG?: boolean
+  comorbidAF?: boolean
+  comorbidStrokeTIA?: boolean
+  comorbidPAD?: boolean
+  comorbidCKD?: boolean
+  comorbidCOPD?: boolean
+  comorbidOSA?: boolean
+  comorbidThyroid?: boolean
+  comorbidIronDeficiency?: boolean
 }
 
 export type PatientInput = Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>
@@ -114,7 +134,7 @@ export interface Visit {
   nyha?: 'I' | 'II' | 'III' | 'IV'
   rhythm?: 'Sinus' | 'AF' | 'Atrial Flutter' | 'VT' | 'Not Known' | 'Other'
   sixMWT?: number      // metres
-  hfType?: 'HFrEF' | 'HFmrEF' | 'HFpEF'
+  hfType?: 'HFrEF' | 'HFmrEF' | 'HFpEF' | 'HFimpEF'
   etiology?: string[]
   etiologyOther?: string
 
@@ -673,6 +693,38 @@ export interface Visit {
   causeOfDeath?: 'SCD' | 'Pump failure' | 'MODS' | 'Others' | ''
   lastHospDate?: string
 
+  // Additional registry variables
+  residenceType?: string
+  hfDuration?: string
+  hvHfAdmissions?: number
+  comorbidHypertension?: boolean
+  comorbidDiabetes?: boolean
+  comorbidDyslipidemia?: boolean
+  comorbidCAD?: boolean
+  comorbidPriorMI?: boolean
+  comorbidPriorPCI?: boolean
+  comorbidPriorCABG?: boolean
+  comorbidAF?: boolean
+  comorbidStrokeTIA?: boolean
+  comorbidPAD?: boolean
+  comorbidCKD?: boolean
+  comorbidCOPD?: boolean
+  comorbidOSA?: boolean
+  comorbidThyroid?: boolean
+  comorbidIronDeficiency?: boolean
+  symptomOrthopnea?: boolean
+  anticoagulation?: string
+  antiarrhythmic?: string
+  icdPresence?: boolean
+  icdIndication?: string
+  crtPresence?: boolean
+  bivPacingPercent?: number
+  gdmtStatus?: string
+  medAdherence?: string
+  outcomeHeartTransplant?: boolean
+  outcomeLVAD?: boolean
+  needAdvancedHFTherapy?: boolean
+
   // Meta
   createdAt: string
   updatedAt?: string
@@ -871,5 +923,78 @@ export const BUILT_IN_FIELDS: RegistryField[] = [
   { id: '97', srNo: 97, fieldName: 'familyHistorySuddenDeath',   displayLabel: 'Family history of sudden cardiac death', dataType: 'Boolean',  mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '98', srNo: 98, fieldName: 'familyHistoryCardiomyopathy', displayLabel: 'Family history of cardiomyopathy', dataType: 'Boolean',       mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
   { id: '99', srNo: 99, fieldName: 'familyHistoryGeneticHeart',  displayLabel: 'Family history of genetic heart disease', dataType: 'Boolean',  mandatory: false, pii: false, active: true, category: 'Clinical',    level: 'Level 2' },
+  // ─── Level 1 and 2 Extensions (Harmonization) ──────────────────────────────────
+  { id: '100', srNo: 100, fieldName: 'registryId', displayLabel: 'Registry ID', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 1' },
+  { id: '101', srNo: 101, fieldName: 'indexDate', displayLabel: 'Enrollment Date', dataType: 'Date', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 1' },
+  { id: '102', srNo: 102, fieldName: 'age', displayLabel: 'Age', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 1' },
+  { id: '103', srNo: 103, fieldName: 'bmi', displayLabel: 'BMI', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 1' },
+  { id: '104', srNo: 104, fieldName: 'residenceType', displayLabel: 'Residence Type (Urban/Rural)', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '105', srNo: 105, fieldName: 'contact', displayLabel: 'Primary Phone Number', dataType: 'Text', mandatory: false, pii: true, active: true, category: 'Clinical', level: 'Level 1' },
+  { id: '106', srNo: 106, fieldName: 'hfDuration', displayLabel: 'HF Duration', dataType: 'Text', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '107', srNo: 107, fieldName: 'etiology', displayLabel: 'Etiology', dataType: 'Multi-Select', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '108', srNo: 108, fieldName: 'hvHfAdmissions', displayLabel: 'Prior HF Hospitalizations (last 12 months)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '109', srNo: 109, fieldName: 'comorbidHypertension', displayLabel: 'Comorbidity: Hypertension', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '110', srNo: 110, fieldName: 'comorbidDiabetes', displayLabel: 'Comorbidity: Diabetes Mellitus', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '111', srNo: 111, fieldName: 'comorbidDyslipidemia', displayLabel: 'Comorbidity: Dyslipidemia', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '112', srNo: 112, fieldName: 'comorbidCAD', displayLabel: 'Comorbidity: Coronary Artery Disease', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '113', srNo: 113, fieldName: 'comorbidPriorMI', displayLabel: 'Comorbidity: Prior Myocardial Infarction', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '114', srNo: 114, fieldName: 'comorbidPriorPCI', displayLabel: 'Comorbidity: Prior PCI', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '115', srNo: 115, fieldName: 'comorbidPriorCABG', displayLabel: 'Comorbidity: Prior CABG', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '116', srNo: 116, fieldName: 'comorbidAF', displayLabel: 'Comorbidity: Atrial Fibrillation', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '117', srNo: 117, fieldName: 'comorbidStrokeTIA', displayLabel: 'Comorbidity: Stroke / TIA', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '118', srNo: 118, fieldName: 'comorbidPAD', displayLabel: 'Comorbidity: Peripheral Arterial Disease', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '119', srNo: 119, fieldName: 'comorbidCKD', displayLabel: 'Comorbidity: Chronic Kidney Disease', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '120', srNo: 120, fieldName: 'comorbidCOPD', displayLabel: 'Comorbidity: COPD', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '121', srNo: 121, fieldName: 'comorbidOSA', displayLabel: 'Comorbidity: Obstructive Sleep Apnea', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '122', srNo: 122, fieldName: 'comorbidThyroid', displayLabel: 'Comorbidity: Thyroid Disease', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '123', srNo: 123, fieldName: 'comorbidIronDeficiency', displayLabel: 'Comorbidity: Iron Deficiency', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '124', srNo: 124, fieldName: 'symptomOrthopnea', displayLabel: 'Symptoms: Orthopnea', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '125', srNo: 125, fieldName: 'sodium', displayLabel: 'Serum Sodium (mmol/L)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs', level: 'Level 2' },
+  { id: '126', srNo: 126, fieldName: 'potassium', displayLabel: 'Serum Potassium (mmol/L)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs', level: 'Level 2' },
+  { id: '127', srNo: 127, fieldName: 'ferritin', displayLabel: 'Serum Ferritin (µg/L)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs', level: 'Level 2' },
+  { id: '128', srNo: 128, fieldName: 'transferrinSat', displayLabel: 'Transferrin Saturation (TSAT) (%)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs', level: 'Level 2' },
+  { id: '129', srNo: 129, fieldName: 'albumin', displayLabel: 'Serum Albumin (g/dL)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs', level: 'Level 2' },
+  { id: '130', srNo: 130, fieldName: 'uricAcid', displayLabel: 'Serum Uric Acid (mg/dL)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs', level: 'Level 2' },
+  { id: '131', srNo: 131, fieldName: 'tft', displayLabel: 'Thyroid Profile (TSH mIU/L)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Labs', level: 'Level 2' },
+  { id: '132', srNo: 132, fieldName: 'qrsDuration', displayLabel: 'QRS Duration (ms)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '133', srNo: 133, fieldName: 'bbb', displayLabel: 'ECG: Left Bundle Branch Block (LBBB) vs Non-LBBB', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '134', srNo: 134, fieldName: 'qtcInterval', displayLabel: 'QTc Interval (ms)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '135', srNo: 135, fieldName: 'lvdd', displayLabel: 'LV End-Diastolic Diameter (LVEDD) (mm)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '136', srNo: 136, fieldName: 'lvsd', displayLabel: 'LV End-Systolic Diameter (LVESD) (mm)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '137', srNo: 137, fieldName: 'tapse', displayLabel: 'TAPSE (mm)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '138', srNo: 138, fieldName: 'rvsp', displayLabel: 'RVSP / PASP (mmHg)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '139', srNo: 139, fieldName: 'mrGrade', displayLabel: 'Mitral Regurgitation Severity', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '140', srNo: 140, fieldName: 'trGrade', displayLabel: 'Tricuspid Regurgitation Severity', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '141', srNo: 141, fieldName: 'ivcDiameter', displayLabel: 'IVC Diameter (mm)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '142', srNo: 142, fieldName: 'pericardialEffusion', displayLabel: 'Pericardial Effusion', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '143', srNo: 143, fieldName: 'lvThrombus', displayLabel: 'LV Thrombus Present', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Echo', level: 'Level 2' },
+  { id: '144', srNo: 144, fieldName: 'vericiguat', displayLabel: 'Vericiguat Use', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Medications', level: 'Level 2' },
+  { id: '145', srNo: 145, fieldName: 'diuretic', displayLabel: 'Loop Diuretic Dose', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Medications', level: 'Level 2' },
+  { id: '146', srNo: 146, fieldName: 'ivabradine', displayLabel: 'Ivabradine Use', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Medications', level: 'Level 2' },
+  { id: '147', srNo: 147, fieldName: 'digoxin', displayLabel: 'Digoxin Use', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Medications', level: 'Level 2' },
+  { id: '148', srNo: 148, fieldName: 'anticoagulation', displayLabel: 'Anticoagulation Use', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Medications', level: 'Level 2' },
+  { id: '149', srNo: 149, fieldName: 'antiarrhythmic', displayLabel: 'Antiarrhythmic Use', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Medications', level: 'Level 2' },
+  { id: '150', srNo: 150, fieldName: 'vaccInfluenza', displayLabel: 'Influenza Vaccination Status', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '151', srNo: 151, fieldName: 'vaccPneumo', displayLabel: 'Pneumococcal Vaccination Status', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '152', srNo: 152, fieldName: 'icdPresence', displayLabel: 'ICD Presence', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '153', srNo: 153, fieldName: 'icdIndication', displayLabel: 'ICD Indication (Primary/Secondary)', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '154', srNo: 154, fieldName: 'crtPresence', displayLabel: 'CRT Presence (CRT-P/CRT-D)', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '155', srNo: 155, fieldName: 'bivPacingPercent', displayLabel: 'Percentage Biventricular Pacing', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '156', srNo: 156, fieldName: 'eventICDShock', displayLabel: 'Appropriate ICD Shock / Therapy', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '157', srNo: 157, fieldName: 'clinicalFrailtyScale', displayLabel: 'Clinical Frailty Scale (CFS)', dataType: 'Score', mandatory: false, pii: false, active: true, category: 'QoL', level: 'Level 2' },
+  { id: '158', srNo: 158, fieldName: 'gripRight', displayLabel: 'Hand-Grip Strength (Right) (kg)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '159', srNo: 159, fieldName: 'gripLeft', displayLabel: 'Hand-Grip Strength (Left) (kg)', dataType: 'Number', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '160', srNo: 160, fieldName: 'gdmtStatus', displayLabel: 'GDMT Optimization Status', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '161', srNo: 161, fieldName: 'medAdherence', displayLabel: 'Medication Adherence Status', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '162', srNo: 162, fieldName: 'mmas8Score', displayLabel: 'MMAS-8 Adherence Score', dataType: 'Score', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '163', srNo: 163, fieldName: 'eventHospitalisation', displayLabel: 'Outcome: Heart Failure Hospitalization', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '164', srNo: 164, fieldName: 'vitalStatus', displayLabel: 'Outcome: All-Cause Mortality', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '165', srNo: 165, fieldName: 'deathCauseCategory', displayLabel: 'Outcome: Cardiovascular Mortality', dataType: 'Dropdown', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '166', srNo: 166, fieldName: 'outcomeHeartTransplant', displayLabel: 'Outcome: Heart Transplantation', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '167', srNo: 167, fieldName: 'outcomeLVAD', displayLabel: 'Outcome: LVAD', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '168', srNo: 168, fieldName: 'eventStroke', displayLabel: 'Outcome: Stroke / TIA', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '169', srNo: 169, fieldName: 'eventMI', displayLabel: 'Outcome: Myocardial Infarction', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '170', srNo: 170, fieldName: 'eventVTVF', displayLabel: 'Outcome: Sustained VT/VF', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
+  { id: '171', srNo: 171, fieldName: 'needAdvancedHFTherapy', displayLabel: 'Need for Advanced Heart Failure Therapy', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
 ]
 

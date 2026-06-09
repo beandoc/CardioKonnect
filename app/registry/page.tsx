@@ -83,7 +83,7 @@ export default function RegistryPage() {
   }
 
   const handleResetDefaults = () => {
-    if (confirm('Are you sure you want to reset all registry fields to default schema settings? This will overwrite your current configuration with the 52 built-in variables.')) {
+    if (confirm('Are you sure you want to reset all registry fields to default schema settings? This will overwrite your current configuration with the 171 built-in variables.')) {
       saveFields(BUILT_IN_FIELDS)
     }
   }
