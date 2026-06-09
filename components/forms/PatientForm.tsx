@@ -65,9 +65,9 @@ const schema = z.object({
   excludeNonCompliance: z.boolean().default(false),
 
   // Mortality / vital status
-  vitalStatus: z.enum(['Alive', 'Dead']).optional(),
+  vitalStatus: z.preprocess(v => v === '' ? undefined : v, z.enum(['Alive', 'Dead']).optional()),
   dateOfDeath: z.string().optional(),
-  deathCauseCategory: z.enum(['Cardiovascular', 'Non-cardiovascular', 'Unknown']).optional(),
+  deathCauseCategory: z.preprocess(v => v === '' ? undefined : v, z.enum(['Cardiovascular', 'Non-cardiovascular', 'Unknown']).optional()),
 }).superRefine((data, ctx) => {
   if (data.registryId === 'hf') {
     if (!data.indianCitizen) {
