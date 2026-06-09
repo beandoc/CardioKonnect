@@ -1,6 +1,5 @@
 import type { Patient, Visit, MedEntry } from './types'
 import * as XLSX from 'xlsx'
-import fs from 'fs'
 
 // Helper to format date relative to today or as ISO strings
 function parseExcelDate(val: any): string {
@@ -54,6 +53,7 @@ export async function clearAllPatients(): Promise<void> {
 }
 
 export async function seedRealPatientsFromExcel(): Promise<{ patientsCount: number; visitsCount: number; patients: Patient[]; visits: Visit[] }> {
+  const fs = require('fs');
   const filePath = '/Users/sachinsrivastava/Desktop/HF.xlsx';
   if (!fs.existsSync(filePath)) {
     throw new Error(`Excel file not found at ${filePath}`);
@@ -66,6 +66,10 @@ export async function seedRealPatientsFromExcel(): Promise<{ patientsCount: numb
   const rows = XLSX.utils.sheet_to_json<any>(ws);
   console.log(`[excelSeeder] Parsed ${rows.length} rows from Excel sheet.`);
 
+  return parseExcelRows(rows);
+}
+
+export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCount: number; patients: Patient[]; visits: Visit[] } {
   let patientsCount = 0;
   let visitsCount = 0;
   const patients: Patient[] = [];

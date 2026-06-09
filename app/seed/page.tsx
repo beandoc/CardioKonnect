@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 
 import { isDemoMode } from '@/lib/firestore'
+import * as XLSX from 'xlsx'
+import { parseExcelRows } from '@/lib/excelSeeder'
 
 export default function SeederPage() {
   const router = useRouter()
@@ -29,6 +31,9 @@ export default function SeederPage() {
         if (result.visits) {
           localStorage.setItem('cardio_visits', JSON.stringify(result.visits))
         }
+        // Dispatch events to trigger any open dashboards to update
+        window.dispatchEvent(new Event('cardio_patients_updated'))
+        window.dispatchEvent(new Event('cardio_visits_updated'))
         setSeeded(true)
         setSeedMsg(result.message || 'Database seeded successfully!')
         toast.success(result.message || 'Database seeded successfully!')
@@ -39,6 +44,54 @@ export default function SeederPage() {
       console.error(e)
       toast.error(e.message || 'Failed to seed database. Check browser console.')
     } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setLoading(true)
+    setSeeded(false)
+    try {
+      const reader = new FileReader()
+      reader.onload = (evt) => {
+        try {
+          const data = evt.target?.result
+          if (!data) throw new Error('Could not read file data')
+          
+          const wb = XLSX.read(data, { type: 'array', cellDates: true })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const rows = XLSX.utils.sheet_to_json<any>(ws)
+          
+          if (rows.length === 0) {
+            throw new Error('No rows found in the uploaded Excel file')
+          }
+          
+          const { patients, visits, patientsCount } = parseExcelRows(rows)
+          
+          localStorage.setItem('cardio_patients', JSON.stringify(patients))
+          localStorage.setItem('cardio_visits', JSON.stringify(visits))
+          
+          // Dispatch events to trigger any open dashboards to update
+          window.dispatchEvent(new Event('cardio_patients_updated'))
+          window.dispatchEvent(new Event('cardio_visits_updated'))
+
+          setSeeded(true)
+          setSeedMsg(`Database seeded successfully with ${patientsCount} patient records from ${file.name}!`)
+          toast.success(`Imported ${patientsCount} patients successfully!`)
+        } catch (err: any) {
+          console.error(err)
+          toast.toast ? toast.toast(err.message) : toast.error(err.message || 'Error parsing uploaded Excel file.')
+        } finally {
+          setLoading(false)
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'Failed to read uploaded file.')
       setLoading(false)
     }
   }
@@ -109,39 +162,53 @@ export default function SeederPage() {
                 Seeding will reset the database and import patient records from the Excel source sheet <strong>HF.xlsx</strong>, mapping demographics, lab values, ECG, grip strength tests, and comorbidities.
               </p>
 
-              
-              <Button 
-                onClick={handleSeed} 
-                disabled={loading || clearing} 
-                className="w-full justify-center gap-2 bg-blue-600 hover:bg-blue-500"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Seeding Database...
-                  </>
-                ) : (
-                  <>
-                    <Database className="w-4 h-4" /> Clear & Seed Data
-                  </>
-                )}
-              </Button>
+              <div className="pt-1 pb-2">
+                <p className="text-xs font-semibold text-white mb-2">Direct Upload (Works on Vercel)</p>
+                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-blue-500/25 hover:border-blue-500/50 rounded-xl cursor-pointer hover:bg-blue-500/[0.02] transition duration-200">
+                  <div className="flex flex-col items-center justify-center text-center px-3">
+                    <Database className="w-5 h-5 text-blue-400 mb-1" />
+                    <p className="text-[10px] text-gray-300 font-semibold">Click to browse or drag HF.xlsx</p>
+                    <p className="text-[9px] text-gray-500 mt-0.5">XLSX / XLS spreadheet</p>
+                  </div>
+                  <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} disabled={loading || clearing} />
+                </label>
+              </div>
 
-              <Button 
-                onClick={handleClear} 
-                disabled={loading || clearing} 
-                variant="outline"
-                className="w-full justify-center gap-2 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50"
-              >
-                {clearing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Clearing...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" /> Clear All Patients
-                  </>
-                )}
-              </Button>
+              <div className="border-t border-blue-500/10 pt-2 space-y-2">
+                <p className="text-xs font-semibold text-white">Local Server Options</p>
+                <Button 
+                  onClick={handleSeed} 
+                  disabled={loading || clearing} 
+                  className="w-full justify-center gap-2 bg-blue-600/20 hover:bg-blue-600/35 border border-blue-500/20 text-blue-300 text-xs py-1.5"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Seeding...
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-3.5 h-3.5" /> Seed Local File (Host-only)
+                    </>
+                  )}
+                </Button>
+
+                <Button 
+                  onClick={handleClear} 
+                  disabled={loading || clearing} 
+                  variant="outline"
+                  className="w-full justify-center gap-2 border-red-500/20 text-red-400 hover:bg-red-500/10 hover:border-red-500/30 text-xs py-1.5"
+                >
+                  {clearing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Clearing...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" /> Clear All Patients
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
 
