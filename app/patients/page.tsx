@@ -94,12 +94,14 @@ function PatientList() {
           <Database className="w-16 h-16 mb-4 text-blue-500/40 animate-pulse" />
           <h3 className="text-lg font-bold text-white">No Patients in Registry Yet</h3>
           <p className="text-sm text-gray-400 mt-2 max-w-md mx-auto">
-            You don't have any patients registered in Cardio-Konnect yet. You can register a new patient manually.
+            Upload your HF.xlsx spreadsheet in the Seeder page to import patient records, or add a patient manually.
           </p>
-
           <div className="flex gap-4 mt-6">
+            <Link href="/seed">
+              <Button className="flex items-center gap-1.5"><Database className="w-4 h-4" /> Import from Excel</Button>
+            </Link>
             <Link href="/patients/new">
-              <Button className="flex items-center gap-1.5"><PlusCircle className="w-4 h-4" /> Add Patient</Button>
+              <Button variant="outline" className="flex items-center gap-1.5"><PlusCircle className="w-4 h-4" /> Add Patient</Button>
             </Link>
           </div>
         </div>

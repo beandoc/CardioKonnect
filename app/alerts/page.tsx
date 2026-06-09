@@ -18,11 +18,6 @@ interface AlertItem {
   status: 'Open' | 'Resolved'
 }
 
-const INITIAL_ALERTS: AlertItem[] = [
-  { id: '1', patient: 'Lata Patwardhan', mrn: 'MRN-887766', trigger: 'Decompensated Heart Failure Risk', severity: 'Critical', value: 'NT-proBNP: 1800 pg/mL', timestamp: '02/06/2026', status: 'Open' },
-  { id: '2', patient: 'Sanjay More', mrn: 'MRN-554432', trigger: 'eGFR Decline', severity: 'Warning', value: 'eGFR: 42 ml/min', timestamp: '01/06/2026', status: 'Open' },
-  { id: '3', patient: 'Arjun Talpade', mrn: 'MRN-784019', trigger: 'Sub-therapeutic Adherence', severity: 'Info', value: 'MMAS-8 Score: 5.4', timestamp: '01/06/2026', status: 'Resolved' },
-]
 
 function toDate(ts: any): string {
   if (!ts) return ''
@@ -141,13 +136,7 @@ export default function ClinicalAlertsPage() {
           }
         })
 
-        // Merge initial alerts with dynamic alerts
-        const merged = [...INITIAL_ALERTS.map(a => ({
-          ...a,
-          status: (resolvedIds.includes(a.id) ? 'Resolved' : a.status) as 'Open' | 'Resolved'
-        })), ...dynamicAlerts]
-
-        setAlerts(merged)
+        setAlerts(dynamicAlerts)
       } catch (err) {
         console.error(err)
       } finally {

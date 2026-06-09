@@ -6,34 +6,23 @@ import {
 import { db } from './firebase'
 import type { Patient, PatientInput, Visit, VisitInput, PopulationStats, PatientTrends, TrendPoint, RegistryField, OutcomeEvent, OutcomeEventInput } from './types'
 import { BUILT_IN_FIELDS } from './types'
-import { MOCK_PATIENTS_COHORT, MOCK_VISITS_COHORT } from './seeder'
 
 // ─── Local Storage Fallback for Offline Demo Mode ────────────────────────────
 
 // Always use localStorage (demo/local mode) — Firestore security rules require
 // Firebase Authentication which is not configured in this deployment. All patient
 // data is stored in localStorage and seeded via the Excel parser API route.
-export const isDemoMode = true
+export const isDemoMode = false
 
 function getLocalPatients(): Patient[] {
   if (typeof window === 'undefined') return []
   const data = localStorage.getItem('cardio_patients')
-  if (!data) {
-    const initialPatients = Object.entries(MOCK_PATIENTS_COHORT).map(([id, p]) => {
-      const comorbidities: string[] = Array.isArray(p.comorbidities) ? p.comorbidities : []
-      return {
-        ...p,
-        id,
-        comorbidities,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        lastVisitDate: p.lastVisitDate ? new Date(p.lastVisitDate).toISOString() : '',
-      }
-    }) as Patient[]
-    localStorage.setItem('cardio_patients', JSON.stringify(initialPatients))
-    return initialPatients
+  if (!data) return []
+  try {
+    return JSON.parse(data)
+  } catch {
+    return []
   }
-  return JSON.parse(data)
 }
 
 function saveLocalPatients(pts: Patient[]) {
@@ -45,17 +34,12 @@ function saveLocalPatients(pts: Patient[]) {
 function getLocalVisits(): Visit[] {
   if (typeof window === 'undefined') return []
   const data = localStorage.getItem('cardio_visits')
-  if (!data) {
-    const initialVisits = MOCK_VISITS_COHORT.map(v => ({
-      ...v.data,
-      id: v.visitId,
-      patientId: v.patientId,
-      createdAt: new Date().toISOString(),
-    })) as Visit[]
-    localStorage.setItem('cardio_visits', JSON.stringify(initialVisits))
-    return initialVisits
+  if (!data) return []
+  try {
+    return JSON.parse(data)
+  } catch {
+    return []
   }
-  return JSON.parse(data)
 }
 
 function saveLocalVisits(vts: Visit[]) {
@@ -320,25 +304,6 @@ export async function addVisit(patientId: string, input: VisitInput): Promise<st
 
     await updatePatientCachedFields(patientId)
     return id
-  }
-
-  const patientDocRef = doc(db, 'patients', patientId)
-  const patientSnap = await getDoc(patientDocRef)
-  if (!patientSnap.exists()) {
-    const mockDb: Record<string, any> = {
-      '1': { firstName: 'Arjun', lastName: 'Talpade', dob: '1978-05-19', sex: 'Male', mrn: 'MRN-784019', contact: '+91 9823019283', address: 'Kothrud, Pune, Maharashtra', comorbidities: 'HTN, Type 2 Diabetes', allergies: 'Penicillin', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'arjun.talpade@gmail.com' },
-      '2': { firstName: 'Sunita', lastName: 'Deshmukh', dob: '1982-11-20', sex: 'Female', mrn: 'MRN-201948', contact: '+91 9123049182', address: 'Shivajinagar, Pune, Maharashtra', comorbidities: 'Dyslipidemia', allergies: 'None', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'sunita.d@yahoo.com' },
-      '3': { firstName: 'Ramesh', lastName: 'Kulkarni', dob: '1965-03-22', sex: 'Male', mrn: 'MRN-849102', contact: '+91 9422019283', address: 'Deccan Gymkhana, Pune, Maharashtra', comorbidities: 'CAD, Prior CABG', allergies: 'Aspirin (Mild GI)', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'ramesh.k@outlook.com' },
-      '4': { firstName: 'Priya', lastName: 'Sharma', dob: '1990-07-23', sex: 'Female', mrn: 'MRN-102948', contact: '+91 9011029481', address: 'Aundh, Pune, Maharashtra', comorbidities: 'None', allergies: 'Sulfa drugs', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Inactive', email: 'priya.sharma@gmail.com' },
-      '5': { firstName: 'Vijay', lastName: 'Mallya', dob: '1955-12-18', sex: 'Male', mrn: 'MRN-998822', contact: '+91 9890123456', address: 'Cuffe Parade, Mumbai, Maharashtra', comorbidities: 'Gout, HTN', allergies: 'None', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'vijay.m@gmail.com' },
-      '6': { firstName: 'Ananya', lastName: 'Rao', dob: '1995-04-26', sex: 'Female', mrn: 'MRN-334455', contact: '+91 9881122334', address: 'Viman Nagar, Pune, Maharashtra', comorbidities: 'Asthma', allergies: 'None', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'ananya.rao@gmail.com' },
-      '7': { firstName: 'Amitabh', lastName: 'Bachchan', dob: '1942-10-11', sex: 'Male', mrn: 'MRN-000777', contact: '+91 9820098200', address: 'Juhu, Mumbai, Maharashtra', comorbidities: 'COPD, Prior Angioplasty', allergies: 'None', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'amitabh.b@gmail.com' },
-      '8': { firstName: 'Sanjay', lastName: 'More', dob: '1980-08-15', sex: 'Male', mrn: 'MRN-554432', contact: '+91 9869234857', address: 'Dadar, Mumbai, Maharashtra', comorbidities: 'CAD, STEMI post-PCI', allergies: 'None', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'sanjay.more@gmail.com' },
-      '9': { firstName: 'Lata', lastName: 'Patwardhan', dob: '1972-02-14', sex: 'Female', mrn: 'MRN-887766', contact: '+91 9371029485', address: 'Dhantoli, Nagpur, Maharashtra', comorbidities: 'HFrEF, Chronic Kidney Disease', allergies: 'Contrast (Mild)', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'Active', email: 'lata.p@gmail.com' }
-    }
-    if (mockDb[patientId]) {
-      await setDoc(patientDocRef, mockDb[patientId])
-    }
   }
 
   const ref = await addDoc(collection(db, 'patients', patientId, 'visits'), {

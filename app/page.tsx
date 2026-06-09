@@ -322,12 +322,16 @@ export default function DashboardPage() {
               <Database className="w-12 h-12 mb-3 text-blue-500/40 animate-pulse" />
               <p className="text-sm font-bold text-white">No Patients in Registry Yet</p>
               <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-                Cardio-Konnect registry is currently empty. You can register a patient manually.
+                Upload your HF.xlsx spreadsheet to import patient records, or add a patient manually.
               </p>
-
               <div className="flex gap-3 justify-center mt-5 flex-wrap">
-                <Link href="/patients/new">
+                <Link href="/seed">
                   <button className="btn-primary btn-sm flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5" /> Import from Excel
+                  </button>
+                </Link>
+                <Link href="/patients/new">
+                  <button className="btn-outline btn-sm flex items-center gap-1.5">
                     <PlusCircle className="w-3.5 h-3.5" /> Add Patient
                   </button>
                 </Link>

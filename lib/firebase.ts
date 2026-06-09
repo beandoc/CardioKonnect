@@ -1,5 +1,10 @@
 import { initializeApp, getApps } from 'firebase/app'
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, disableNetwork } from 'firebase/firestore'
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  getFirestore,
+} from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'mock-api-key-for-cardiokonnect-demo',
@@ -10,24 +15,22 @@ const firebaseConfig = {
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:1234567890:web:abcdef123456',
 }
 
-// Prevent re-initialisation on hot reloads
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  experimentalAutoDetectLongPolling: false,
-  localCache: typeof window !== 'undefined'
-    ? persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      })
-    : undefined
-})
-
-// Force local offline mode when running with mock or missing credentials so seeding and other writes resolve instantly in IndexedDB
-const apiKey = firebaseConfig.apiKey
-if (typeof window !== 'undefined' && (!apiKey || apiKey.startsWith('mock') || apiKey === 'undefined')) {
-  disableNetwork(db).catch(err => {
-    console.warn('Firestore disableNetwork failed:', err)
-  })
+// initializeFirestore throws if called again on an already-initialised app (hot reloads).
+// Fall back to getFirestore in that case.
+function getOrInitDb() {
+  try {
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: false,
+      localCache: typeof window !== 'undefined'
+        ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        : undefined,
+    })
+  } catch {
+    return getFirestore(app)
+  }
 }
 
+export const db = getOrInitDb()

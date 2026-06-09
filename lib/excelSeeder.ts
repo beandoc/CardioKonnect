@@ -1,4 +1,3 @@
-import 'server-only'
 import fs from 'fs'
 import type { Patient, Visit, MedEntry } from './types'
 import * as XLSX from 'xlsx'
