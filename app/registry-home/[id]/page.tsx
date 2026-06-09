@@ -991,35 +991,53 @@ function ResearchBoardSection({ data }: { data: NonNullable<RegistryData['resear
       <div className="p-6 space-y-6" style={{ background: 'rgba(139,92,246,0.02)' }}>
 
 
-        {/* ═══ Scatter plot grid (3 scatters) ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <ResearchScatterCard
-            title="1. Grip Strength vs NT-proBNP"
-            note="Right hand grip strength vs log10-transformed NT-proBNP"
-            data={data.gripVsBnp}
-            xLabel="Right Hand Grip (kg)"
-            yLabel="log10 NT-proBNP (pg/mL)"
-            r={data.spearmanGrip ?? data.pearsonGrip}
-            isSpearman={true}
-          />
-          <ResearchScatterCard
-            title="2. 6MWT Distance vs NT-proBNP"
-            note="6-minute walk test distance vs log10-transformed NT-proBNP"
-            data={data.sixMwtVsBnp}
-            xLabel="6MWT Distance (m)"
-            yLabel="log10 NT-proBNP (pg/mL)"
-            r={data.spearmanSixMWT ?? data.pearsonSixMWT}
-            isSpearman={true}
-          />
-          <ResearchScatterCard
-            title="3. Grip Strength vs 6MWT Distance"
-            note="Hand grip strength vs exercise tolerance (Normally distributed variables)"
-            data={data.gripVs6MWT || []}
-            xLabel="Right Hand Grip (kg)"
-            yLabel="6MWT Distance (m)"
-            r={data.pearsonGripSixMWT ?? 0}
-            isSpearman={false}
-          />
+        {/* ═══ Scatter plot carousel (one card visible at a time, horizontal scroll) ═══ */}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-3 px-1">
+            Correlation Analysis — scroll to view all 3 charts →
+          </p>
+          <div
+            className="flex gap-5 overflow-x-auto pb-3"
+            style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+          >
+            {[
+              {
+                title: '1. Grip Strength vs NT-proBNP',
+                note: 'Right hand grip strength vs log10-transformed NT-proBNP',
+                data: data.gripVsBnp,
+                xLabel: 'Right Hand Grip (kg)',
+                yLabel: 'log10 NT-proBNP (pg/mL)',
+                r: data.spearmanGrip ?? data.pearsonGrip,
+                isSpearman: true,
+              },
+              {
+                title: '2. 6MWT Distance vs NT-proBNP',
+                note: '6-minute walk test distance vs log10-transformed NT-proBNP',
+                data: data.sixMwtVsBnp,
+                xLabel: '6MWT Distance (m)',
+                yLabel: 'log10 NT-proBNP (pg/mL)',
+                r: data.spearmanSixMWT ?? data.pearsonSixMWT,
+                isSpearman: true,
+              },
+              {
+                title: '3. Grip Strength vs 6MWT Distance',
+                note: 'Hand grip strength vs exercise tolerance (Normally distributed variables)',
+                data: data.gripVs6MWT || [],
+                xLabel: 'Right Hand Grip (kg)',
+                yLabel: '6MWT Distance (m)',
+                r: data.pearsonGripSixMWT ?? 0,
+                isSpearman: false,
+              },
+            ].map((card, i) => (
+              <div
+                key={i}
+                className="flex-shrink-0 w-[min(100%,480px)]"
+                style={{ scrollSnapAlign: 'start' }}
+              >
+                <ResearchScatterCard {...card} />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* ═══ Bivariate Stratifications (Quartiles & Follow-up Trajectory) ═══ */}
