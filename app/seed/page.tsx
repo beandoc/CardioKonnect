@@ -83,7 +83,7 @@ export default function SeederPage() {
           toast.success(`Imported ${patientsCount} patients successfully!`)
         } catch (err: any) {
           console.error(err)
-          toast.toast ? toast.toast(err.message) : toast.error(err.message || 'Error parsing uploaded Excel file.')
+          toast.error(err.message || 'Error parsing uploaded Excel file.')
         } finally {
           setLoading(false)
         }
