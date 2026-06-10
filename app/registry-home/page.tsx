@@ -312,15 +312,31 @@ export default function RegistryHomePage() {
             ? Math.round(updatedCategories.reduce((sum, c) => sum + c.pct, 0) / updatedCategories.length)
             : 0
 
-          // Calculate average LVEF if it is HF registry
+          // Calculate HF registry metrics from latest visits (not patient-level cache)
           let quickStats = r.quickStats
           if (r.id === 'hf') {
-            const lvefVals = regPatients.map(p => p.lvef).filter(v => v !== undefined && v !== null && typeof v === 'number') as number[]
-            const avgLvef = lvefVals.length ? Math.round(lvefVals.reduce((a, b) => a + b, 0) / lvefVals.length) : 32
+            // 1. Avg LVEF from latest visits (not stale patient.lvef)
+            const lvefVals = hfVisits.map(v => v.lvef).filter(v => v !== undefined && v !== null && typeof v === 'number') as number[]
+            const avgLvef = lvefVals.length ? Math.round(lvefVals.reduce((a, b) => a + b, 0) / lvefVals.length) : 0
+
+            // 2. GDMT Rate: % of patients on all 4 pillars (RAASi, BB, MRA, SGLT2i)
+            const gdmtCount = hfVisits.filter(v => {
+              const hasRaasi = v.raasi?.prescribed === 'Yes'
+              const hasBB = v.betaBlocker?.prescribed === 'Yes'
+              const hasMRA = v.mra?.prescribed === 'Yes'
+              const hasSGLT2i = v.sglt2i?.prescribed === 'Yes'
+              return hasRaasi && hasBB && hasMRA && hasSGLT2i
+            }).length
+            const gdmtRate = hfVisits.length ? Math.round((gdmtCount / hfVisits.length) * 100) : 0
+
+            // 3. NYHA III–IV: % of patients with NYHA class III or IV
+            const nyha34Count = hfVisits.filter(v => v.nyha === 'III' || v.nyha === 'IV').length
+            const nyha34Rate = hfVisits.length ? Math.round((nyha34Count / hfVisits.length) * 100) : 0
+
             quickStats = r.quickStats.map(stat => {
-              if (stat.label === 'Avg LVEF') {
-                return { ...stat, value: `${avgLvef}%` }
-              }
+              if (stat.label === 'Avg LVEF') return { ...stat, value: `${avgLvef}%` }
+              if (stat.label === 'GDMT Rate') return { ...stat, value: `${gdmtRate}%` }
+              if (stat.label === 'NYHA III–IV') return { ...stat, value: `${nyha34Rate}%` }
               return stat
             })
           } else {
