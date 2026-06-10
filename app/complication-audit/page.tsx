@@ -672,13 +672,13 @@ export default function ComplicationAuditPage() {
   return (
     <div className="space-y-5 animate-fade-in">
 
-      {/* Reference data disclaimer */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 p-3">
-        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-        <p className="text-xs">
-          <span className="font-semibold text-amber-300">Sample / Reference Data — </span>
-          <span className="text-gray-400">All complication records and aggregate statistics shown are illustrative only. This module requires integration with the Cath Lab procedure-entry workflow to display real complication events.</span>
-        </p>
+      {/* ⚠️ DEMO DATA WARNING */}
+      <div className="p-4 bg-amber-950/50 border-2 border-amber-500/60 rounded-lg flex items-start gap-3 text-amber-100">
+        <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+        <div>
+          <p className="text-sm font-bold text-amber-100">⚠️ DEMO DATA — Complication records are fictional</p>
+          <p className="text-xs text-amber-100/80 mt-1">All complication statistics shown are illustrative sample data only. Do NOT use these numbers for clinical quality reporting or safety monitoring. Requires integration with your Cath Lab workflow to display real complications.</p>
+        </div>
       </div>
 
       {/* ── Critical header ── */}

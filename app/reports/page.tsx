@@ -746,7 +746,22 @@ export default function ReportsArchitecturePage() {
 
   return (
     <div className="space-y-6 animate-fade-in text-gray-300">
-      
+
+      {/* ⚠️ DEMO DATA WARNING - CRITICAL */}
+      <div className="p-4 bg-amber-950/50 border-2 border-amber-500/60 rounded-lg flex items-start gap-3 text-amber-100">
+        <div className="flex-shrink-0 mt-0.5">
+          <AlertTriangle className="w-6 h-6 text-amber-400 animate-pulse" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-amber-100">⚠️ DEMO DATA — NOT FOR CLINICAL USE</p>
+          <p className="text-xs text-amber-100/80 mt-2">
+            This Reports module contains <strong>hardcoded sample data</strong> for design reference only. All metrics (patient counts, percentages, outcomes) are fictional.
+            <strong className="block mt-1">Do NOT present these figures to ethics committees, leadership, or patients.</strong>
+            To enable real reporting, connect this module to your live patient database in firestore.ts.
+          </p>
+        </div>
+      </div>
+
       {/* Dynamic styles for printing the modal overlay */}
       <style jsx global>{`
         @media print {

@@ -393,6 +393,15 @@ export default function ProceduralAuditPage() {
   return (
     <div className="space-y-5 animate-fade-in">
 
+      {/* ⚠️ DEMO DATA WARNING */}
+      <div className="p-4 bg-amber-950/50 border-2 border-amber-500/60 rounded-lg flex items-start gap-3 text-amber-100">
+        <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+        <div>
+          <p className="text-sm font-bold text-amber-100">⚠️ DEMO DATA — Sample numbers only</p>
+          <p className="text-xs text-amber-100/80 mt-1">Procedure records and outcomes shown here are fictional for interface design. Do not use for clinical decisions or reporting.</p>
+        </div>
+      </div>
+
       {/* ── Page header ── */}
       <div className="glass-card p-5 border border-blue-500/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
