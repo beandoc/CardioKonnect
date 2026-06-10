@@ -407,17 +407,16 @@ export async function getAllLatestVisits(): Promise<Map<string, Visit>> {
     return map
   }
 
-  // Firestore mode — fetch latest visit per patient by reading visits ordered by date DESC, limit to 10K docs
-  // This caps reads at 10K regardless of visit count; in practice most patients have 1-3 visits
+  // Firestore mode — collectionGroup without orderBy avoids needing a Collection Group scope index.
+  // We pick the latest visit per patient in memory instead.
   try {
-    const snap = await getDocs(query(collectionGroup(db, 'visits'), orderBy('visitDate', 'desc'), limit(10000)))
+    const snap = await getDocs(query(collectionGroup(db, 'visits'), limit(10000)))
     for (const d of snap.docs) {
       const patientId = d.ref.parent.parent?.id || ''
       if (!patientId) continue
       const v = docToVisit(d.id, patientId, d.data())
       const existing = map.get(patientId)
-      // Keep only the latest visit per patient (first one we see, since results are DESC by date)
-      if (!existing) {
+      if (!existing || new Date(v.visitDate).getTime() > new Date(existing.visitDate).getTime()) {
         map.set(patientId, v)
       }
     }
