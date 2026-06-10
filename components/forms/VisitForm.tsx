@@ -396,9 +396,41 @@ const schema = z.object({
     healthStateScore: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   }).default({}),
   phq9Score:      z.coerce.number().optional().or(z.literal('')),
+  phq9Date:       z.string().optional(),
+  phq9Category:   z.string().optional(),
   gad7Score:      z.coerce.number().optional().or(z.literal('')),
   hadsAnxiety:    z.coerce.number().optional().or(z.literal('')),
   hadsDepression: z.coerce.number().optional().or(z.literal('')),
+
+  // Tobacco & Alcohol
+  tobaccoStatus:        z.string().optional(),
+  tobaccoType:          z.array(z.string()).default([]),
+  tobaccoPackYears:     z.coerce.number().optional().or(z.literal('')),
+  tobaccoQuitDate:      z.string().optional(),
+  alcoholStatus:        z.string().optional(),
+  alcoholUnitsPerWeek:  z.coerce.number().optional().or(z.literal('')),
+  alcoholCardiomyopathy: z.boolean().optional(),
+
+  // 6MWT Extended
+  sixMWTBorgScore:   z.coerce.number().min(0).max(10).optional().or(z.literal('')),
+  sixMWTO2SatPre:    z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  sixMWTO2SatPost:   z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  sixMWTHrPeak:      z.coerce.number().optional().or(z.literal('')),
+  sixMWTStoppedEarly: z.boolean().optional(),
+
+  // Thyroid detail
+  thyroidType:          z.string().optional(),
+  thyroidOnTreatment:   z.boolean().optional(),
+
+  // GDMT numeric doses
+  raasiDoseMg:           z.coerce.number().optional().or(z.literal('')),
+  betablockerDoseMg:     z.coerce.number().optional().or(z.literal('')),
+  mraDoseMg:             z.coerce.number().optional().or(z.literal('')),
+  sglt2iDoseMg:          z.coerce.number().optional().or(z.literal('')),
+  furosemideDoseMgDaily: z.coerce.number().optional().or(z.literal('')),
+
+  // Index admission type
+  indexAdmissionType: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.lvef !== undefined && data.lvef !== '') {
     const lvef = Number(data.lvef)
@@ -1251,6 +1283,14 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
             <div>
               <p className="section-heading">Hospitalisation History</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FieldWrap label="Index / First Admission Type" hint="Characterises how this patient entered the registry">
+                  <Select {...register('indexAdmissionType')}>
+                    <option value="">Select</option>
+                    <option value="De-novo HF">De-novo HF — new diagnosis at this admission</option>
+                    <option value="Decompensated chronic HF">Decompensated chronic HF — known HF, acute deterioration</option>
+                    <option value="Incidental">Incidental — HF found during admission for other reason</option>
+                  </Select>
+                </FieldWrap>
                 <FieldWrap label="H/O Hospitalisation">
                   <Controller name="hospHistory" control={control} render={({ field }) => (
                     <RadioChipGroup
@@ -1265,6 +1305,28 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 </FieldWrap>
                 <FieldWrap label="Details" className="col-span-2">
                   <Textarea {...register('hospDetails')} placeholder="Dates, reason, duration…" />
+                </FieldWrap>
+              </div>
+            </div>
+
+            <div>
+              <p className="section-heading">Thyroid Status</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FieldWrap label="Thyroid Disease Type">
+                  <Select {...register('thyroidType')}>
+                    <option value="">None / Not assessed</option>
+                    <option value="Hypothyroid">Hypothyroid (clinical)</option>
+                    <option value="Subclinical hypo">Subclinical hypothyroidism</option>
+                    <option value="Hyperthyroid">Hyperthyroid (clinical)</option>
+                    <option value="Subclinical hyper">Subclinical hyperthyroidism</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="On Thyroid Treatment?">
+                  <Select {...register('thyroidOnTreatment', { setValueAs: v => v === 'true' ? true : v === 'false' ? false : undefined })}>
+                    <option value="">Select</option>
+                    <option value="true">Yes — on thyroxine / antithyroid drugs</option>
+                    <option value="false">No</option>
+                  </Select>
                 </FieldWrap>
               </div>
             </div>
@@ -1819,10 +1881,116 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
             </div>
 
             <div>
+              <p className="section-heading text-white">Tobacco & Alcohol — Social History</p>
+              <div className="space-y-4 bg-slate-900/40 p-4 rounded-xl border border-amber-500/10">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FieldWrap label="Tobacco Status">
+                    <Select {...register('tobaccoStatus')}>
+                      <option value="">Select</option>
+                      <option value="Never">Never</option>
+                      <option value="Current">Current smoker / tobacco user</option>
+                      <option value="Former">Former (quit)</option>
+                    </Select>
+                  </FieldWrap>
+                  <FieldWrap label="Pack-Years" hint="Packs/day × years smoked">
+                    <Input type="number" step="0.1" {...register('tobaccoPackYears')} placeholder="e.g. 15" />
+                  </FieldWrap>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Tobacco Type (select all that apply)</p>
+                  <Controller name="tobaccoType" control={control} render={({ field }) => (
+                    <CheckChipGroup
+                      options={[
+                        { value: 'Cigarette',         label: 'Cigarette' },
+                        { value: 'Bidi',              label: 'Bidi' },
+                        { value: 'Smokeless (gutka)',  label: 'Smokeless tobacco (gutka/pan masala)' },
+                        { value: 'Hookah',            label: 'Hookah / Waterpipe' },
+                        { value: 'Other',             label: 'Other' },
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FieldWrap label="Quit Date (if former)">
+                    <Input type="date" {...register('tobaccoQuitDate')} />
+                  </FieldWrap>
+                </div>
+                <div className="border-t border-white/5 pt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FieldWrap label="Alcohol Status">
+                    <Select {...register('alcoholStatus')}>
+                      <option value="">Select</option>
+                      <option value="Never">Never</option>
+                      <option value="Current">Current drinker</option>
+                      <option value="Former">Former (quit)</option>
+                    </Select>
+                  </FieldWrap>
+                  <FieldWrap label="Units per Week" hint="1 unit = 10g alcohol (e.g. 1 peg whiskey ≈ 1.5 units)">
+                    <Input type="number" step="0.5" {...register('alcoholUnitsPerWeek')} placeholder="e.g. 14" />
+                  </FieldWrap>
+                  <FieldWrap label="Alcohol Cardiomyopathy?" hint="Is alcohol the primary HF etiology?">
+                    <Select {...register('alcoholCardiomyopathy', { setValueAs: v => v === 'true' ? true : v === 'false' ? false : undefined })}>
+                      <option value="">Select</option>
+                      <option value="true">Yes — alcohol-induced cardiomyopathy</option>
+                      <option value="false">No</option>
+                    </Select>
+                  </FieldWrap>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className="section-heading text-white">6-Minute Walk Test (6MWT)</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10">
+                <FieldWrap label="Distance (metres)">
+                  <Input type="number" {...register('sixMWT')} placeholder="e.g. 320" />
+                </FieldWrap>
+                <FieldWrap label="Borg Dyspnea Score at End" hint="0 (nothing) — 10 (maximal)">
+                  <Select {...register('sixMWTBorgScore', { setValueAs: v => v === '' ? undefined : Number(v) })}>
+                    <option value="">Select</option>
+                    {[0,0.5,1,2,3,4,5,6,7,8,9,10].map(v => (
+                      <option key={v} value={v}>{v} — {v === 0 ? 'Nothing at all' : v <= 2 ? 'Very light' : v <= 4 ? 'Moderate' : v <= 6 ? 'Somewhat hard' : v <= 8 ? 'Very hard' : 'Maximal'}</option>
+                    ))}
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="Stopped Early?">
+                  <Select {...register('sixMWTStoppedEarly', { setValueAs: v => v === 'true' ? true : v === 'false' ? false : undefined })}>
+                    <option value="">Select</option>
+                    <option value="false">No — completed 6 minutes</option>
+                    <option value="true">Yes — stopped early</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="O₂ Sat Pre-Walk (%)">
+                  <Input type="number" step="0.1" {...register('sixMWTO2SatPre')} placeholder="e.g. 97" />
+                </FieldWrap>
+                <FieldWrap label="O₂ Sat Post-Walk (%)">
+                  <Input type="number" step="0.1" {...register('sixMWTO2SatPost')} placeholder="e.g. 93" />
+                </FieldWrap>
+                <FieldWrap label="Peak HR During Walk (bpm)">
+                  <Input type="number" {...register('sixMWTHrPeak')} placeholder="e.g. 110" />
+                </FieldWrap>
+              </div>
+            </div>
+
+            <div>
               <p className="section-heading text-white">Mental Health &amp; Depression/Anxiety Screening</p>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-900/40 p-4 rounded-xl border border-blue-500/10 mb-4">
                 <FieldWrap label="PHQ-9 Score (0–27)" hint="Depression screening; >=10 = moderate">
                   <Input type="number" min={0} max={27} {...register('phq9Score')} placeholder="e.g. 5" />
+                </FieldWrap>
+                <FieldWrap label="PHQ-9 Category">
+                  <Select {...register('phq9Category')}>
+                    <option value="">Select / Auto-fill from score</option>
+                    <option value="Minimal">Minimal (0–4)</option>
+                    <option value="Mild">Mild (5–9)</option>
+                    <option value="Moderate">Moderate (10–14)</option>
+                    <option value="Moderately Severe">Moderately Severe (15–19)</option>
+                    <option value="Severe">Severe (20–27)</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="PHQ-9 Date">
+                  <Input type="date" {...register('phq9Date')} />
                 </FieldWrap>
                 <FieldWrap label="GAD-7 Score (0–21)" hint="Anxiety screening; >=10 = moderate">
                   <Input type="number" min={0} max={21} {...register('gad7Score')} placeholder="e.g. 3" />

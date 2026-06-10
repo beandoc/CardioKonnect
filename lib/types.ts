@@ -247,6 +247,40 @@ export interface Visit {
   gripLeft?: number    // kg
   frailty?: 'Not frail' | 'Pre-frail' | 'Frail' | ''
 
+  // ── 6MWT Extended ────────────────────────────────────────────────────────────
+  sixMWTBorgScore?: number        // Borg dyspnea scale at end (0–10)
+  sixMWTO2SatPre?: number         // O2 saturation before walk (%)
+  sixMWTO2SatPost?: number        // O2 saturation after walk (%)
+  sixMWTHrPeak?: number           // Peak HR during walk (bpm)
+  sixMWTStoppedEarly?: boolean    // Walk stopped before 6 min
+
+  // ── Tobacco & Alcohol — Social History ────────────────────────────────────────
+  tobaccoStatus?: 'Never' | 'Current' | 'Former' | ''
+  tobaccoType?: string[]          // Cigarette / Bidi / Smokeless (gutka/pan) / Mixed
+  tobaccoPackYears?: number
+  tobaccoQuitDate?: string
+  alcoholStatus?: 'Never' | 'Current' | 'Former' | ''
+  alcoholUnitsPerWeek?: number
+  alcoholCardiomyopathy?: boolean // Is alcohol the primary HF etiology?
+
+  // ── Thyroid Detail ────────────────────────────────────────────────────────────
+  thyroidType?: 'Hypothyroid' | 'Hyperthyroid' | 'Subclinical hypo' | 'Subclinical hyper' | ''
+  thyroidOnTreatment?: boolean
+
+  // ── GDMT Numeric Doses (mg) ───────────────────────────────────────────────────
+  raasiDoseMg?: number            // e.g. ramipril 10, sacubitril/valsartan 97/103
+  betablockerDoseMg?: number      // e.g. carvedilol 25
+  mraDoseMg?: number              // e.g. spironolactone 25
+  sglt2iDoseMg?: number           // e.g. dapagliflozin 10
+  furosemideDoseMgDaily?: number  // Daily loop diuretic dose in mg
+
+  // ── Index Admission Type ──────────────────────────────────────────────────────
+  indexAdmissionType?: 'De-novo HF' | 'Decompensated chronic HF' | 'Incidental' | ''
+
+  // ── PHQ-9 Extended ────────────────────────────────────────────────────────────
+  phq9Date?: string
+  phq9Category?: 'Minimal' | 'Mild' | 'Moderate' | 'Moderately Severe' | 'Severe' | ''
+
   // ── Patient Education ────────────────────────────────────────────────────────
   education?: string[]
   eduNotes?: string

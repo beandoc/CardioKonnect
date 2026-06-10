@@ -156,6 +156,28 @@ export const MedicationsSection = memo(function MedicationsSection({
           </div>
         </div>
 
+        {/* GDMT Numeric Doses */}
+        <div className="mt-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/10 space-y-2">
+          <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3">GDMT Numeric Doses (mg) — for uptitration tracking</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <FieldWrap label="Furosemide daily dose (mg)" hint="Total daily loop diuretic dose">
+              <Input type="number" {...register('furosemideDoseMgDaily')} placeholder="e.g. 40" />
+            </FieldWrap>
+            <FieldWrap label="RAASi dose (mg)" hint="e.g. Ramipril 10, ARNI 97/103">
+              <Input type="number" step="0.5" {...register('raasiDoseMg')} placeholder="e.g. 10" />
+            </FieldWrap>
+            <FieldWrap label="Beta-blocker dose (mg)" hint="e.g. Carvedilol 25, Bisoprolol 10">
+              <Input type="number" step="0.5" {...register('betablockerDoseMg')} placeholder="e.g. 25" />
+            </FieldWrap>
+            <FieldWrap label="MRA dose (mg)" hint="e.g. Spironolactone 25 or 50">
+              <Input type="number" {...register('mraDoseMg')} placeholder="e.g. 25" />
+            </FieldWrap>
+            <FieldWrap label="SGLT2i dose (mg)" hint="Dapagliflozin 10 / Empagliflozin 10">
+              <Input type="number" {...register('sglt2iDoseMg')} placeholder="e.g. 10" />
+            </FieldWrap>
+          </div>
+        </div>
+
         {/* Other Meds */}
         <p className="section-heading mt-6">Other Medications</p>
 
