@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Database, Trash2, CheckCircle, RefreshCw, ArrowRight } from 'lucide-react'
 import Button from '@/components/ui/Button'
@@ -9,11 +10,20 @@ import { parseExcelRows } from '@/lib/excelParser'
 import { seedFirestore, clearFirestorePatients } from '@/lib/firestoreSeed'
 
 export default function SeederPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [seeded, setSeeded] = useState(false)
   const [seedMsg, setSeedMsg] = useState('')
   const [progress, setProgress] = useState<string[]>([])
+
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    const auth = typeof window !== 'undefined' ? localStorage.getItem('cardiokonnect_auth') : null
+    if (auth !== 'true') {
+      router.replace('/login')
+    }
+  }, [router])
 
   const addProgress = (msg: string) => setProgress(prev => [...prev, msg])
 

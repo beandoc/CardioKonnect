@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Users, TrendingUp, CheckCircle, ArrowRight, Clock, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
-import { getPatients, getVisits } from '@/lib/firestore'
+import { getPatients, getAllLatestVisits } from '@/lib/firestore'
 
 
 
@@ -250,18 +250,11 @@ export default function RegistryHomePage() {
         }
 
         const hfPatients = getPatientsForRegistry('hf')
-        
-        // Fetch visits for HF patients to calculate medications, labs, and QoL completeness
-        const visitsPromises = hfPatients.map(async (p) => {
-          try {
-            return await getVisits(p.id)
-          } catch (e) {
-            console.warn(`Failed to fetch visits for patient ${p.id}`, e)
-            return []
-          }
-        })
-        const visitsResults = await Promise.all(visitsPromises)
-        const hfVisits = visitsResults.flat()
+        const hfPatientIds = new Set(hfPatients.map(p => p.id))
+
+        // Fetch latest visits for all patients (single query, not N+1)
+        const latestVisitsMap = await getAllLatestVisits()
+        const hfVisits = Array.from(latestVisitsMap.values()).filter(v => hfPatientIds.has(v.patientId))
 
         // 6 clinical category definitions matching the detail page
         const hfCategories = [

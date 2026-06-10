@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m 'refactor: break VisitForm into memoized tab components for better performance *)"
+    ]
+  }
+}

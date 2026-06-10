@@ -1,8 +1,19 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { addPatient, getPatient, addVisit, getVisits, deletePatient } from '@/lib/firestore'
 import type { PatientInput, VisitInput } from '@/lib/types'
 import fs from 'fs'
 import path from 'path'
+
+function isAuthorized(req: NextRequest): boolean {
+  const authHeader = req.headers.get('authorization')
+  const testKey = process.env.TEST_API_KEY
+  if (testKey && authHeader === `Bearer ${testKey}`) {
+    return true
+  }
+  // Fallback: check for a test token in query params (for development only)
+  const token = req.nextUrl.searchParams.get('token')
+  return testKey ? token === testKey : false
+}
 
 // Async test runner function that runs in the background
 async function executeTest() {
@@ -174,7 +185,11 @@ async function executeTest() {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized. This endpoint requires TEST_API_KEY.' }, { status: 403 })
+  }
+
   try {
     await executeTest()
     return NextResponse.json({

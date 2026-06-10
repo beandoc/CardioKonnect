@@ -12,6 +12,7 @@ import type { VisitInput, Patient } from '@/lib/types'
 import { calculateCHADSVASc, calculateHASBLED } from '@/lib/riskScores'
 import { ChevronRight, ChevronLeft, ShieldAlert, Award, Save } from 'lucide-react'
 import { toast } from 'sonner'
+import { MedicationsSection, LabsSection, EchocardiographySection } from './VisitFormSections'
 
 // ─── Zod schema ─────────────────────────────────────────────────────────────
 const medEntry = z.object({
@@ -1271,7 +1272,9 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
         )}
 
         {/* ── Tab: Echocardiography (conditional) ─────────────────── */}
-        {activeTabId === 'echo' && (
+        {activeTabId === 'echo' && <EchocardiographySection register={register} control={control} errors={errors} />}
+
+        {activeTabId === 'echo' && false && (
           <div className="space-y-5 animate-fade-in">
             <div>
               <p className="section-heading">Echocardiography Details</p>
@@ -1492,7 +1495,9 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
           </div>
         )}
         {/* ── Tab: Labs & Biomarkers (conditional) ───────────────── */}
-        {activeTabId === 'labs' && (
+        {activeTabId === 'labs' && <LabsSection register={register} control={control} errors={errors} />}
+
+        {activeTabId === 'labs' && false && (
           <div className="space-y-5 animate-fade-in">
             <div>
               <p className="section-heading">Biomarkers (Admission / Baseline)</p>
@@ -1682,216 +1687,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
 
         {/* ── Tab: Medications ───────────────────────────────────── */}
         {activeTabId === 'meds' && (
-          <div className="space-y-5">
-            {/* GDMT Validation / Alert for HFrEF */}
-            {hfType === 'HFrEF' && (
-              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex gap-3 items-start text-xs text-rose-300">
-                <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5 text-rose-400 animate-pulse" />
-                <div>
-                  <p className="font-bold">Guideline-Directed Medical Therapy (GDMT) Required</p>
-                  <p className="text-gray-400 mt-1">
-                    For HFrEF patients, evaluate all core columns: 1) RAASi/ARNI, 2) Beta-Blockers, 3) MRA, and 4) SGLT2 inhibitors.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <p className="section-heading font-semibold text-white">1. Core Heart Failure Therapy</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <MedRow label="Beta Blocker" prescribedField="betaBlocker.prescribed"
-                typeField="betaBlocker.type" typeOptions={['Carvedilol','Metoprolol Succinate','Bisoprolol','Nebivolol']}
-                doseField="betaBlocker.dose" reasonField="betaBlocker.reason"
-                startDateField="betaBlocker.startDate" stopDateField="betaBlocker.stopDate" changeReasonField="betaBlocker.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="ACE Inhibitor / ARB / ARNI (RAASi)" prescribedField="raasi.prescribed"
-                typeField="raasi.type" typeOptions={['Ramipril (ACEi)','Enalapril (ACEi)','Lisinopril (ACEi)','Losartan (ARB)','Valsartan (ARB)','Telmisartan (ARB)','Sacubitril/Valsartan (ARNI)']}
-                doseField="raasi.dose" reasonField="raasi.reason"
-                startDateField="raasi.startDate" stopDateField="raasi.stopDate" changeReasonField="raasi.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="MRA — Mineralocorticoid Receptor Antagonist" prescribedField="mra.prescribed"
-                typeField="mra.type" typeOptions={['Spironolactone','Eplerenone','Finerenone']}
-                doseField="mra.dose" reasonField="mra.reason"
-                startDateField="mra.startDate" stopDateField="mra.stopDate" changeReasonField="mra.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="SGLT2 Inhibitor" prescribedField="sglt2i.prescribed"
-                typeField="sglt2i.type" typeOptions={['Dapagliflozin 10mg OD','Empagliflozin 10mg OD']}
-                doseField="sglt2i.dose" reasonField="sglt2i.reason"
-                startDateField="sglt2i.startDate" stopDateField="sglt2i.stopDate" changeReasonField="sglt2i.changeReason"
-                control={control} register={register} />
-            </div>
-
-            <p className="section-heading font-semibold text-white mt-4">2. Other Heart Failure / Clinical Medications</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <MedRow label="Diuretics" prescribedField="diuretic.prescribed"
-                typeField="diuretic.type" typeOptions={['Furosemide','Torsemide','Bumetanide','Hydrochlorothiazide']}
-                doseField="diuretic.dose" reasonField="diuretic.reason"
-                startDateField="diuretic.startDate" stopDateField="diuretic.stopDate" changeReasonField="diuretic.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="Ivabradine" prescribedField="ivabradine.prescribed"
-                doseField="ivabradine.dose" reasonField="ivabradine.reason"
-                startDateField="ivabradine.startDate" stopDateField="ivabradine.stopDate" changeReasonField="ivabradine.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="Digoxin" prescribedField="digoxin.prescribed"
-                doseField="digoxin.dose" reasonField="digoxin.reason"
-                startDateField="digoxin.startDate" stopDateField="digoxin.stopDate" changeReasonField="digoxin.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="IV Iron Therapy" prescribedField="ivIron.prescribed"
-                doseField="ivIron.dose" reasonField="ivIron.reason"
-                startDateField="ivIron.startDate" stopDateField="ivIron.stopDate" changeReasonField="ivIron.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="Vericiguat (sGC stimulator)" prescribedField="vericiguat.prescribed"
-                typeField="vericiguat.type" typeOptions={['Vericiguat 2.5mg', 'Vericiguat 5mg', 'Vericiguat 10mg']}
-                doseField="vericiguat.dose" reasonField="vericiguat.reason"
-                startDateField="vericiguat.startDate" stopDateField="vericiguat.stopDate" changeReasonField="vericiguat.changeReason"
-                control={control} register={register} />
-
-              <MedRow label="Tafamidis (TTR Amyloidosis)" prescribedField="tafamidis.prescribed"
-                typeField="tafamidis.type" typeOptions={['Tafamidis 20mg', 'Tafamidis 61mg (Vynmax)', 'Tafamidis 80mg']}
-                doseField="tafamidis.dose" reasonField="tafamidis.reason"
-                startDateField="tafamidis.startDate" stopDateField="tafamidis.stopDate" changeReasonField="tafamidis.changeReason"
-                control={control} register={register} />
-            </div>
-
-            <p className="section-heading font-semibold text-white mt-4">3. Comorbidity & Cardiovascular Therapies</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Aspirin */}
-              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4">
-                <p className="text-sm font-semibold text-white mb-2">Aspirin</p>
-                <Controller name="aspirin.prescribed" control={control} render={({ field }) => (
-                  <RadioChipGroup
-                    options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                    value={field.value} onChange={field.onChange} />
-                )} />
-                <div className="mt-3">
-                  <FieldWrap label="Dose">
-                    <Input {...register('aspirin.dose')} placeholder="75mg OD" />
-                  </FieldWrap>
-                </div>
-              </div>
-
-              {/* Statin */}
-              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4">
-                <p className="text-sm font-semibold text-white mb-2">Statin</p>
-                <Controller name="statin.prescribed" control={control} render={({ field }) => (
-                  <RadioChipGroup
-                    options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                    value={field.value} onChange={field.onChange} />
-                )} />
-                <div className="grid grid-cols-2 gap-2 mt-3">
-                  <FieldWrap label="Type">
-                    <Select {...register('statin.type')}>
-                      <option value="">Select</option>
-                      <option>Atorvastatin</option><option>Rosuvastatin</option>
-                      <option>Pitavastatin</option><option>Simvastatin</option>
-                    </Select>
-                  </FieldWrap>
-                  <FieldWrap label="Dose">
-                    <Input {...register('statin.dose')} placeholder="40mg OD" />
-                  </FieldWrap>
-                </div>
-              </div>
-
-              {/* Anticoagulants */}
-              <div className="bg-gray-800/40 border border-blue-500/10 rounded-xl p-4 col-span-1 md:col-span-2 space-y-4">
-                <p className="text-sm font-semibold text-white">Anticoagulation / Anti-arrhythmic</p>
-
-                {acDecisionSupport && (
-                  <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 space-y-3">
-                    <div className="flex items-center gap-2 text-blue-400">
-                      <Award className="w-5 h-5 flex-shrink-0" />
-                      <span className="text-xs font-bold uppercase tracking-wider">AF Anticoagulation Decision Support</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-3 bg-gray-900/40 rounded-lg border border-blue-500/5 space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] text-gray-400">CHA₂DS₂-VASc Score</span>
-                          <span className={cn(
-                            "text-[10px] px-2 py-0.5 rounded-full font-bold",
-                            acDecisionSupport.chadsCategory === 'High' ? "bg-rose-500/20 text-rose-300 border border-rose-500/30" :
-                            acDecisionSupport.chadsCategory === 'Moderate' ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" :
-                            "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          )}>
-                            {acDecisionSupport.chadsScore} ({acDecisionSupport.chadsCategory})
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-gray-300 mt-1 leading-normal">{acDecisionSupport.chadsRec}</p>
-                      </div>
-
-                      <div className="p-3 bg-gray-900/40 rounded-lg border border-blue-500/5 space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] text-gray-400">HAS-BLED Bleeding Risk</span>
-                          <span className={cn(
-                            "text-[10px] px-2 py-0.5 rounded-full font-bold",
-                            acDecisionSupport.hasbledCategory === 'High' ? "bg-rose-500/20 text-rose-300 border border-rose-500/30" :
-                            "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          )}>
-                            {acDecisionSupport.hasbledScore} ({acDecisionSupport.hasbledCategory} Risk)
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-gray-300 mt-1 leading-normal">{acDecisionSupport.hasbledRec}</p>
-                      </div>
-                    </div>
-
-                    <div className="text-[9px] text-gray-500 border-t border-blue-500/10 pt-2 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-                      <span>ESC Guidelines: In patients with AF indicated for anticoagulation, NOACs are preferred over VKAs. Avoid dual antiplatelet + anticoagulant therapy unless indicated post-PCI.</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="p-3 bg-gray-900/40 border border-blue-500/5 rounded-lg">
-                    <p className="text-xs font-semibold text-gray-400 mb-2">NOAC</p>
-                    <Controller name="noac.prescribed" control={control} render={({ field }) => (
-                      <RadioChipGroup
-                        options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                        value={field.value} onChange={field.onChange} />
-                    )} />
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <FieldWrap label="Type">
-                        <Select {...register('noac.type')}>
-                          <option value="">Select</option>
-                          <option>Apixaban</option><option>Rivaroxaban</option>
-                          <option>Dabigatran</option><option>Edoxaban</option>
-                        </Select>
-                      </FieldWrap>
-                      <FieldWrap label="Dose">
-                        <Input {...register('noac.dose')} placeholder="5mg BD" />
-                      </FieldWrap>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-gray-900/40 border border-blue-500/5 rounded-lg">
-                    <p className="text-xs font-semibold text-gray-400 mb-2">Vitamin K Inhibitor</p>
-                    <Controller name="vki.prescribed" control={control} render={({ field }) => (
-                      <RadioChipGroup
-                        options={[{ value: 'Yes', label: 'Prescribed' }, { value: 'No', label: 'Not Prescribed' }]}
-                        value={field.value} onChange={field.onChange} />
-                    )} />
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <FieldWrap label="Type">
-                        <Select {...register('vki.type')}>
-                          <option value="">Select</option>
-                          <option>Warfarin</option><option>Acenocoumarol</option>
-                        </Select>
-                      </FieldWrap>
-                      <FieldWrap label="Dose">
-                        <Input {...register('vki.dose')} placeholder="INR 2-3" />
-                      </FieldWrap>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <MedicationsSection register={register} control={control} errors={errors} isInpatient={visitType === 'Inpatient'} />
         )}
 
         {/* ── Tab: Advanced Studies ──────────────────────────────── */}

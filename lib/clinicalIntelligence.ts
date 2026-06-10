@@ -395,6 +395,47 @@ export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
   const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000))
 
+  // ── Contraindication Safety Alerts ───────────────────────────────────────
+
+  // Dual RAASi + MRA when K > 5.0 or eGFR < 30
+  const hasRAASi = visit.raasi?.prescribed === 'Yes'
+  const hasMRA = visit.mra?.prescribed === 'Yes'
+  const k = visit.potassium
+  const egfr = visit.egfr
+
+  if (hasRAASi && hasMRA && k && k > 5.0) {
+    alerts.push({
+      id: 'raasi-mra-hyperkalemia', severity: 'critical', category: 'Safety',
+      title: 'Dangerous Drug Combination: RAASi + MRA with Hyperkalaemia',
+      detail: `Both RAASi and MRA prescribed, K⁺ ${k} mmol/L — extreme hyperkalemia risk`,
+      action: 'STOP MRA immediately. Reduce RAASi. Check K⁺ again in 24–48h. Consider potassium binder.',
+      evidence: 'ESC 2023 Safety',
+    })
+  }
+
+  if (hasRAASi && hasMRA && egfr && egfr < 30) {
+    alerts.push({
+      id: 'raasi-mra-ckd', severity: 'high', category: 'Safety',
+      title: 'Risky Combination: RAASi + MRA in Severe CKD',
+      detail: `Both agents prescribed with eGFR ${egfr} ml/min — high hyperkalemia and AKI risk`,
+      action: 'Reduce MRA dose or stop. Increase monitoring frequency. Check K⁺ and creatinine weekly.',
+      evidence: 'KDIGO 2022 + ESC 2023',
+    })
+  }
+
+  // ACE/ARB-specific hypotension alert
+  const raasi = visit.raasi
+  const sbp = visit.bpSystolic
+  if (raasi?.prescribed === 'Yes' && sbp && sbp < 90) {
+    alerts.push({
+      id: 'raasi-hypotension', severity: 'high', category: 'Safety',
+      title: 'ACEi/ARB/ARNI Causing Hypotension',
+      detail: `${raasi.type || 'RAASi'} at SBP ${sbp} mmHg — risk of syncope and AKI`,
+      action: 'Reduce RAASi dose. Assess volume status. Hold diuretic if dehydrated. Recheck BP before next uptitration.',
+      evidence: 'ESC 2023 HF Safety',
+    })
+  }
+
   // ── Safety Alerts ─────────────────────────────────────────────────────────
 
   if (visit.potassium && visit.potassium > 5.5) {
