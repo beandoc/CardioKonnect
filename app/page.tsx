@@ -98,12 +98,14 @@ export default function DashboardPage() {
   const [rows, setRows] = useState<PatientRow[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [dbError, setDbError] = useState<string | null>(null)
 
   const greeting = getGreeting(mounted ? new Date().getHours() : 9)
   const GreetIcon = greeting.icon
 
   const loadData = async () => {
     setLoading(true)
+    setDbError(null)
     try {
       const [pts, latestVisitMap] = await Promise.all([
         getPatients(),
@@ -115,7 +117,9 @@ export default function DashboardPage() {
       }))
       setRows(withVisits)
     } catch (e) {
-      console.error(e)
+      console.error('Dashboard data load error:', e)
+      setDbError('Failed to load patient data from database. Please check your connection and refresh.')
+      setRows([])
     } finally {
       setLoading(false)
     }
@@ -190,6 +194,23 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+
+      {/* ── Database Error Banner ────────────────────────────────── */}
+      {dbError && (
+        <div className="p-4 bg-red-950/30 border border-red-500/40 rounded-lg flex items-start gap-3 text-red-300 text-sm animate-fade-in">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-400" />
+          <div className="flex-1">
+            <p className="font-semibold">Database Connection Error</p>
+            <p className="text-red-300/80 mt-1">{dbError}</p>
+          </div>
+          <button
+            onClick={loadData}
+            className="ml-2 px-3 py-1.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-semibold whitespace-nowrap transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* ── Hero Banner ──────────────────────────────────────────── */}
       <div className="relative rounded-2xl overflow-hidden p-6 hero-gradient"

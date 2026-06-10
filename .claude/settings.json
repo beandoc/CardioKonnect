@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit -m 'refactor: break VisitForm into memoized tab components for better performance *)"
+      "Bash(git commit -m 'refactor: break VisitForm into memoized tab components for better performance *)",
+      "Bash(git commit -m 'fix: add error handling for silent Firestore failures \\(BUG-1\\) *)"
     ]
   }
 }

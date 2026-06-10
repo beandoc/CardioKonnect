@@ -15,9 +15,25 @@ const EMPTY_STATS: PopulationStats = {
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<PopulationStats>(EMPTY_STATS)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadStats = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const s = await getPopulationStats()
+      setStats(s)
+    } catch (e) {
+      console.error('Failed to load analytics:', e)
+      setError('Failed to load population analytics. Please refresh the page.')
+      setStats(EMPTY_STATS)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    getPopulationStats().then(s => { setStats(s); setLoading(false) })
+    loadStats()
   }, [])
 
   if (loading) return (
@@ -31,7 +47,24 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in text-gray-300">
-      
+
+      {/* Error Banner */}
+      {error && (
+        <div className="p-4 bg-red-950/30 border border-red-500/40 rounded-lg flex items-start gap-3 text-red-300 text-sm">
+          <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-400" />
+          <div className="flex-1">
+            <p className="font-semibold">Analytics Error</p>
+            <p className="text-red-300/80 mt-1">{error}</p>
+          </div>
+          <button
+            onClick={loadStats}
+            className="ml-2 px-3 py-1.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-semibold whitespace-nowrap transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0">

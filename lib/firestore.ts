@@ -9,9 +9,13 @@ import { BUILT_IN_FIELDS } from './types'
 
 // ─── Local Storage Fallback for Offline Demo Mode ────────────────────────────
 
-// Always use localStorage (demo/local mode) — Firestore security rules require
-// Firebase Authentication which is not configured in this deployment. All patient
-// data is stored in localStorage and seeded via the Excel parser API route.
+// isDemoMode controls whether to use localStorage (browser storage) vs Firestore (cloud database).
+// Set to false = use Firestore (current production config)
+// Set to true = use localStorage only (demo mode, no cloud backend)
+//
+// If Firestore is unreachable, queries may silently return empty results. This will
+// cause the dashboard to show 0 patients with no error message. Use dashboard's
+// dbError state and error banner to alert users when the database is unavailable.
 export const isDemoMode = false
 
 function getLocalPatients(): Patient[] {
