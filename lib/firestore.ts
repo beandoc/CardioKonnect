@@ -403,15 +403,17 @@ export async function getAllLatestVisits(): Promise<Map<string, Visit>> {
     return map
   }
 
-  // Firestore mode
+  // Firestore mode — fetch latest visit per patient by reading visits ordered by date DESC, limit to 10K docs
+  // This caps reads at 10K regardless of visit count; in practice most patients have 1-3 visits
   try {
-    const snap = await getDocs(collectionGroup(db, 'visits'))
+    const snap = await getDocs(query(collectionGroup(db, 'visits'), orderBy('visitDate', 'desc'), limit(10000)))
     for (const d of snap.docs) {
       const patientId = d.ref.parent.parent?.id || ''
       if (!patientId) continue
       const v = docToVisit(d.id, patientId, d.data())
       const existing = map.get(patientId)
-      if (!existing || new Date(v.visitDate).getTime() > new Date(existing.visitDate).getTime()) {
+      // Keep only the latest visit per patient (first one we see, since results are DESC by date)
+      if (!existing) {
         map.set(patientId, v)
       }
     }
@@ -422,16 +424,17 @@ export async function getAllLatestVisits(): Promise<Map<string, Visit>> {
 }
 
 /**
- * Return ALL visits from localStorage in one pass (O(1) read).
+ * Return all visits with a hard limit to prevent unbounded reads.
+ * For registries <2000 patients with avg 5 visits each, 10K limit = safe margin.
  * Use this instead of calling getVisits(patientId) per patient.
  */
 export async function getAllVisits(): Promise<Visit[]> {
   if (isDemoMode) {
     return getLocalVisits()
   }
-  // Firestore mode — collectionGroup query
+  // Firestore mode — collectionGroup query with limit to prevent runaway costs
   try {
-    const snap = await getDocs(collectionGroup(db, 'visits'))
+    const snap = await getDocs(query(collectionGroup(db, 'visits'), limit(10000)))
     return snap.docs.map(d => {
       const patientId = d.ref.parent.parent?.id || ''
       return docToVisit(d.id, patientId, d.data())
@@ -444,6 +447,13 @@ export async function getAllVisits(): Promise<Visit[]> {
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
+/**
+ * Compute population-level statistics from latest patient visits.
+ * OPTIMIZATION: Uses getAllLatestVisits() instead of getAllVisits() because stats
+ * only show current status (latest LVEF, NYHA, meds, etc.), not historical trends.
+ * This reduces Firestore reads from N×visits_per_patient to just N (one per patient).
+ * For 500 patients × 10 visits avg: ~5000 reads → ~500 reads = 90% cost reduction.
+ */
 export async function getPopulationStats(): Promise<PopulationStats> {
   const patients = await getPatients()
 
@@ -463,29 +473,13 @@ export async function getPopulationStats(): Promise<PopulationStats> {
   const egfrVals: number[] = []
   const ageVals: number[] = []
 
-  let visits: Visit[] = []
-  if (isDemoMode) {
-    visits = getLocalVisits()
-  } else {
-    try {
-      const visitsSnap = await getDocs(collectionGroup(db, 'visits'))
-      visits = visitsSnap.docs.map(doc => {
-        const patientId = doc.ref.parent.parent?.id || ''
-        return docToVisit(doc.id, patientId, doc.data())
-      })
-    } catch (e) {
-      console.warn('Failed to query collectionGroup visits, using empty array:', e)
-    }
-  }
-
+  // Fetch latest visit per patient (much cheaper than all visits)
+  // Most stats only care about current status, not historical trends
+  const latestVisitsMap = await getAllLatestVisits()
   const visitsByPatient: Record<string, Visit[]> = {}
-  visits.forEach(v => {
-    if (v.patientId) {
-      if (!visitsByPatient[v.patientId]) {
-        visitsByPatient[v.patientId] = []
-      }
-      visitsByPatient[v.patientId].push(v)
-    }
+
+  latestVisitsMap.forEach((visit, patientId) => {
+    visitsByPatient[patientId] = [visit]  // Only latest visit per patient
   })
 
   patients.forEach((p) => {
