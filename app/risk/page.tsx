@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { FlaskConical, Calculator, Heart, Info, ArrowRight, ShieldCheck, Activity, Save, User, Printer } from 'lucide-react'
+import { FlaskConical, Calculator, Heart, Info, ArrowRight, ShieldCheck, Activity, Save, User, Printer, Database, Layers, Sparkles, CheckCircle2, RotateCcw } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
@@ -155,9 +155,16 @@ function RiskCalculatorContent() {
 
   const [allPatients, setAllPatients] = useState<Patient[]>([])
   const [allVisitsMap, setAllVisitsMap] = useState<Map<string, Visit>>(new Map())
+  const [selectedRegistry, setSelectedRegistry] = useState<string>('hf')
   const [selectedPatientId, setSelectedPatientId] = useState<string>(patientId || '')
 
   const [saving, setSaving] = useState(false)
+
+  // Derived filtered patients by selected registry track
+  const selectablePatients = useMemo(() => {
+    if (selectedRegistry === 'all') return allPatients
+    return allPatients.filter(p => (p.registryId || 'hf').toLowerCase() === selectedRegistry.toLowerCase())
+  }, [allPatients, selectedRegistry])
 
   // Populate all calculators from a given patient and visit
   const populateFromPatientAndVisit = (pt: Patient, vt?: Visit | null) => {
@@ -571,7 +578,7 @@ function RiskCalculatorContent() {
   return (
     <div className="space-y-6 animate-fade-in text-gray-300">
       
-      {/* Header & Patient Selector */}
+      {/* Header */}
       <div className="flex justify-between items-start flex-wrap gap-4">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-violet-600/10 border border-violet-500/20 flex items-center justify-center text-violet-400 flex-shrink-0">
@@ -584,56 +591,147 @@ function RiskCalculatorContent() {
             </p>
           </div>
         </div>
-
-        {/* Patient Selection Dropdown & Persistence Controls */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="bg-slate-900 border border-blue-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
-            <User className="w-4 h-4 text-blue-400 flex-shrink-0" />
-            <select
-              value={selectedPatientId}
-              onChange={(e) => handleSelectPatient(e.target.value)}
-              className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer pr-2"
-            >
-              <option value="" className="bg-slate-900 text-gray-400">
-                — Manual Simulation Mode —
-              </option>
-              {allPatients.map((p) => {
-                const vt = allVisitsMap.get(p.id)
-                const lvefTxt = vt?.lvef != null ? ` • LVEF ${vt.lvef}%` : (p.lvef != null ? ` • LVEF ${p.lvef}%` : '')
-                const nyhaTxt = vt?.nyha ? ` • NYHA ${vt.nyha}` : ''
-                const srTxt = p.srNo ? `SR-${p.srNo}: ` : ''
-                return (
-                  <option key={p.id} value={p.id} className="bg-slate-900 text-white">
-                    {srTxt}{p.firstName} {p.lastName}{lvefTxt}{nyhaTxt}
-                  </option>
-                )
-              })}
-            </select>
-          </div>
-
-          {connectedPatient && (
-            <Button size="sm" onClick={handleSaveToVisit} loading={saving} className="btn-sm flex items-center gap-1.5">
-              <Save className="w-3.5 h-3.5" /> Save to Visit
-            </Button>
-          )}
-        </div>
       </div>
 
-      {connectedPatient && (
-        <div className="bg-blue-950/30 border border-blue-500/20 rounded-xl p-3 flex items-center justify-between flex-wrap gap-2 text-xs">
+      {/* ── Registry & Patient Dynamic Auto-Population Console ── */}
+      <div className="accent-card p-4 space-y-3 border border-blue-500/20 bg-slate-900/80 rounded-2xl shadow-xl">
+        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-blue-500/10">
           <div className="flex items-center gap-2">
-            <span className="badge badge-blue text-[10px] uppercase font-bold">Live Registry Sync</span>
-            <span className="font-semibold text-white">{connectedPatient.firstName} {connectedPatient.lastName}</span>
-            <span className="text-gray-400">({connectedPatient.sex || 'Male'}, {connectedPatient.dob ? `${Math.floor((Date.now() - new Date(connectedPatient.dob).getTime()) / (365.25 * 86400000))} yrs` : `${connectedPatient.age || '—'} yrs`})</span>
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              Dynamic Registry & Patient Data Auto-Population
+            </h3>
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-gray-300 font-mono">
-            <span>LVEF: <b className="text-blue-400">{maggicLvef}%</b></span>
-            <span>SBP: <b className="text-emerald-400">{maggicSbp} mmHg</b></span>
-            <span>Cr: <b className="text-amber-400">{maggicCr} {crUnit}</b></span>
-            <span>GDMT: <b className="text-violet-400">{connectedVisit?.betaBlocker?.prescribed === 'Yes' && connectedVisit?.raasi?.prescribed === 'Yes' ? 'Active' : 'Partial'}</b></span>
+          <span className="text-[11px] text-gray-400">
+            Select a cohort and patient to auto-fill calculators with electronic visit records
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+          {/* 1. Registry Track Selector */}
+          <div className="md:col-span-4 space-y-1">
+            <label className="text-[11px] font-semibold text-gray-300 flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5 text-blue-400" /> 1. Select Registry Track
+            </label>
+            <div className="relative">
+              <select
+                value={selectedRegistry}
+                onChange={(e) => {
+                  setSelectedRegistry(e.target.value)
+                  setSelectedPatientId('')
+                  setConnectedPatient(null)
+                  setConnectedVisit(null)
+                }}
+                className="w-full bg-slate-950 border border-blue-500/30 rounded-xl px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-blue-400 cursor-pointer shadow-inner"
+              >
+                <option value="hf">Heart Failure Registry (HF • {allPatients.filter(p => (p.registryId || 'hf') === 'hf').length} pts)</option>
+                <option value="cad">Coronary Artery Disease & ACS (CAD)</option>
+                <option value="af">Atrial Fibrillation & Arrhythmias (AF)</option>
+                <option value="vhd">Valvular & Structural Heart (VHD)</option>
+                <option value="all">All Registries & Cohorts ({allPatients.length} pts)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 2. Patient from Registry Selector */}
+          <div className="md:col-span-5 space-y-1">
+            <label className="text-[11px] font-semibold text-gray-300 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-cyan-400" /> 2. Select Patient from Registry
+            </label>
+            <div className="relative">
+              <select
+                value={selectedPatientId}
+                onChange={(e) => handleSelectPatient(e.target.value)}
+                className="w-full bg-slate-950 border border-blue-500/30 rounded-xl px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-cyan-400 cursor-pointer shadow-inner"
+              >
+                <option value="" className="text-gray-400">
+                  — Manual Simulation Mode (Enter custom parameters) —
+                </option>
+                {selectablePatients.map((p) => {
+                  const vt = allVisitsMap.get(p.id)
+                  const lvefTxt = vt?.lvef != null ? ` • LVEF ${vt.lvef}%` : (p.lvef != null ? ` • LVEF ${p.lvef}%` : '')
+                  const nyhaTxt = vt?.nyha ? ` • NYHA ${vt.nyha}` : ''
+                  const srTxt = p.srNo ? `[SR-${p.srNo}] ` : ''
+                  return (
+                    <option key={p.id} value={p.id} className="text-white">
+                      {srTxt}{p.firstName} {p.lastName}{lvefTxt}{nyhaTxt}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
+          </div>
+
+          {/* 3. Action / Reset Controls */}
+          <div className="md:col-span-3 flex items-end justify-end gap-2 pt-5 md:pt-0">
+            {selectedPatientId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleSelectPatient('')}
+                className="btn-sm flex items-center gap-1 text-gray-400 hover:text-white"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Reset
+              </Button>
+            )}
+            {connectedPatient && (
+              <Button size="sm" onClick={handleSaveToVisit} loading={saving} className="btn-sm flex items-center gap-1.5">
+                <Save className="w-3.5 h-3.5" /> Save to Visit
+              </Button>
+            )}
           </div>
         </div>
-      )}
+
+        {/* Dynamic Patient Baseline Summary Bar */}
+        {connectedPatient ? (
+          <div className="bg-blue-950/40 border border-blue-500/25 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="badge badge-blue text-[10px] uppercase font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Live Registry Data Loaded
+                </span>
+                <span className="font-bold text-white text-xs">
+                  {connectedPatient.firstName} {connectedPatient.lastName}
+                </span>
+                <span className="text-gray-400 text-xs">
+                  ({connectedPatient.sex || 'Male'}, {connectedPatient.dob ? `${Math.floor((Date.now() - new Date(connectedPatient.dob).getTime()) / (365.25 * 86400000))} yrs` : `${connectedPatient.age || '—'} yrs`})
+                </span>
+              </div>
+              <p className="text-[11px] text-cyan-300">
+                You can adjust parameters below or add missing data to compute customized risk projections.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 flex-wrap text-[11px] font-mono pt-1 border-t border-blue-500/10">
+              <span className="bg-slate-900/80 px-2 py-0.5 rounded border border-blue-500/15 text-gray-300">
+                LVEF: <b className="text-blue-400">{maggicLvef}%</b>
+              </span>
+              <span className="bg-slate-900/80 px-2 py-0.5 rounded border border-blue-500/15 text-gray-300">
+                SBP: <b className="text-emerald-400">{maggicSbp} mmHg</b>
+              </span>
+              <span className="bg-slate-900/80 px-2 py-0.5 rounded border border-blue-500/15 text-gray-300">
+                Creatinine: <b className="text-amber-400">{maggicCr} {crUnit}</b>
+              </span>
+              <span className="bg-slate-900/80 px-2 py-0.5 rounded border border-blue-500/15 text-gray-300">
+                NYHA: <b className="text-purple-400">{maggicNyha}</b>
+              </span>
+              <span className="bg-slate-900/80 px-2 py-0.5 rounded border border-blue-500/15 text-gray-300">
+                4-Pillar GDMT: <b className="text-teal-400">{maggicBb && maggicAce ? 'Active' : 'Partial'}</b>
+              </span>
+              <span className="bg-slate-900/80 px-2 py-0.5 rounded border border-blue-500/15 text-gray-300">
+                DM: <b className={maggicDiabetes ? 'text-rose-400' : 'text-gray-400'}>{maggicDiabetes ? 'Yes' : 'No'}</b>
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="p-2.5 rounded-xl bg-slate-950/40 border border-dashed border-gray-700/50 flex items-center justify-between text-xs text-gray-400">
+            <span className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />
+              Manual Simulation Mode active: Select a patient above to pre-populate clinical variables from Firestore, or enter custom values manually.
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Calculator Selector Tabs */}
       <div className="flex border-b border-blue-500/10 pb-3 gap-6 flex-wrap">
