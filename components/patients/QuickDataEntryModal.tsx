@@ -551,12 +551,12 @@ export default function QuickDataEntryModal({
             </div>
           </div>
 
-          {/* SECTION 5: Granular Discrete Comorbidities */}
+          {/* SECTION 5: Comorbidities */}
           <div className="p-4 rounded-xl bg-slate-900/40 border border-blue-500/15 space-y-3">
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-rose-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-rose-300">
-                Discrete Comorbidity Variables (Calculators &amp; Clinical Logic)
+                Comorbidities &amp; Clinical Variables
               </span>
             </div>
 

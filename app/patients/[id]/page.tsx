@@ -484,7 +484,7 @@ export default function PatientDetailPage() {
             </CardBody>
           </Card>
 
-          {/* Granular Discrete Comorbidities Matrix */}
+          {/* Comorbidities Multi-Select */}
           <div className="lg:col-span-2">
             <ComorbiditiesMatrix
               patient={patient}
