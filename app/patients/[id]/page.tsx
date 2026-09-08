@@ -21,6 +21,7 @@ import { PlusCircle, Edit2, Edit3, X, Activity, ShieldAlert, Award, Calendar, Tr
 import MLRiskCard from '@/components/patients/MLRiskCard'
 import DataCompletenessCard from '@/components/patients/DataCompletenessCard'
 import QuickDataEntryModal from '@/components/patients/QuickDataEntryModal'
+import ComorbiditiesMatrix from '@/components/patients/ComorbiditiesMatrix'
 
 const EVENT_TYPES: EventType[] = [
   'All-cause death', 'CV death', 'HF hospitalisation', 'Urgent HF visit', 'LVAD implant',
@@ -470,7 +471,7 @@ export default function PatientDetailPage() {
                 ['Consent status', patient.consentStatus ?? 'Pending'],
                 ['Contact', patient.contact ?? '—'],
                 ['Email', patient.email ?? '—'],
-                ['Comorbidities', Array.isArray(patient.comorbidities) ? patient.comorbidities.join(', ') : (patient.comorbidities ?? '—')],
+                ['Comorbidities', Array.isArray(patient.comorbidities) && patient.comorbidities.length > 0 ? patient.comorbidities.join(' · ') : 'None documented'],
                 ['Allergies', patient.allergies ?? '—'],
               ].filter(Boolean) as [string, string][]).map(([k, v]) => (
                 <div key={k} className="flex justify-between py-1.5 border-b border-blue-500/5">
@@ -480,6 +481,14 @@ export default function PatientDetailPage() {
               ))}
             </CardBody>
           </Card>
+
+          {/* Granular Discrete Comorbidities Matrix */}
+          <div className="lg:col-span-2">
+            <ComorbiditiesMatrix
+              patient={patient}
+              onRefresh={load}
+            />
+          </div>
 
           {/* Registry Workflow & Next Steps Card */}
           {(visits.length === 0 || !patient.registryId) && (

@@ -81,6 +81,21 @@ export default function QuickDataEntryModal({
     latestVisit?.sixMWT != null ? String(latestVisit.sixMWT) : ''
   )
 
+  // Discrete comorbidity flags
+  const rawList = Array.isArray(patient.comorbidities) ? patient.comorbidities : []
+  const rawUpper = rawList.map(s => String(s).toUpperCase())
+
+  const [dm, setDm] = useState<boolean>(Boolean(patient.comorbidDiabetes ?? (rawUpper.some(s => s.includes('DM') || s.includes('DIABETES')))))
+  const [cad, setCad] = useState<boolean>(Boolean(patient.comorbidCAD ?? (rawUpper.some(s => s.includes('CAD') || s.includes('CORONARY') || s.includes('ISCHEMIC')))))
+  const [priorMI, setPriorMI] = useState<boolean>(Boolean(patient.comorbidPriorMI ?? (rawUpper.some(s => s.includes('MI') || s.includes('INFARCT')))))
+  const [priorPCI, setPriorPCI] = useState<boolean>(Boolean(patient.comorbidPriorPCI ?? (rawUpper.some(s => s.includes('PCI') || s.includes('STENT')))))
+  const [priorCABG, setPriorCABG] = useState<boolean>(Boolean(patient.comorbidPriorCABG ?? (rawUpper.some(s => s.includes('CABG') || s.includes('BYPASS')))))
+  const [htn, setHtn] = useState<boolean>(Boolean(patient.comorbidHypertension ?? (rawUpper.some(s => s.includes('HTN') || s.includes('HYPERTENSION')))))
+  const [dyslipidemia, setDyslipidemia] = useState<boolean>(Boolean(patient.comorbidDyslipidemia ?? (rawUpper.some(s => s.includes('LIPID') || s.includes('DYSLIPIDEMIA')))))
+  const [ckd, setCkd] = useState<boolean>(Boolean(patient.comorbidCKD ?? (rawUpper.some(s => s.includes('CKD') || s.includes('KIDNEY') || s.includes('RENAL')))))
+  const [af, setAf] = useState<boolean>(Boolean(patient.comorbidAF ?? (rawUpper.some(s => s.includes('AF') || s.includes('ATRIAL FIBRILLATION')))))
+  const [copd, setCopd] = useState<boolean>(Boolean(patient.comorbidCOPD ?? (rawUpper.some(s => s.includes('COPD') || s.includes('ASTHMA')))))
+
   const [saving, setSaving] = useState(false)
 
   // Real-time eGFR CKD-EPI 2021 calculation whenever creatinine or unit changes
@@ -194,11 +209,34 @@ export default function QuickDataEntryModal({
         } as unknown as VisitInput)
       }
 
-      // 2. Update patient profile cached values
+      // 2. Update patient profile cached values and discrete comorbidity flags
+      const updatedComorbiditiesList: string[] = []
+      if (htn) updatedComorbiditiesList.push('HTN')
+      if (dm) updatedComorbiditiesList.push('DM2')
+      if (cad) updatedComorbiditiesList.push('CAD')
+      if (priorMI) updatedComorbiditiesList.push('Prior MI')
+      if (priorPCI) updatedComorbiditiesList.push('Prior PCI')
+      if (priorCABG) updatedComorbiditiesList.push('Prior CABG')
+      if (dyslipidemia) updatedComorbiditiesList.push('Dyslipidemia')
+      if (ckd) updatedComorbiditiesList.push('CKD')
+      if (af) updatedComorbiditiesList.push('AF')
+      if (copd) updatedComorbiditiesList.push('COPD')
+
       await updatePatient(patient.id, {
         lvef: numLvef,
         hfType: hfType as any,
         nyha: nyha as any,
+        comorbidDiabetes: dm,
+        comorbidCAD: cad,
+        comorbidPriorMI: priorMI,
+        comorbidPriorPCI: priorPCI,
+        comorbidPriorCABG: priorCABG,
+        comorbidHypertension: htn,
+        comorbidDyslipidemia: dyslipidemia,
+        comorbidCKD: ckd,
+        comorbidAF: af,
+        comorbidCOPD: copd,
+        comorbidities: updatedComorbiditiesList,
       })
 
       toast.success('Clinical data and calculations saved successfully!', { id: toastId })
@@ -510,6 +548,48 @@ export default function QuickDataEntryModal({
                   className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* SECTION 5: Granular Discrete Comorbidities */}
+          <div className="p-4 rounded-xl bg-slate-900/40 border border-blue-500/15 space-y-3">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-rose-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-rose-300">
+                Discrete Comorbidity Variables (Calculators &amp; Clinical Logic)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {[
+                { label: 'Type 2 Diabetes', checked: dm, set: setDm, color: '#f59e0b' },
+                { label: 'Coronary Artery Dis. (CAD)', checked: cad, set: setCad, color: '#ef4444' },
+                { label: 'Prior Myocardial Infarct', checked: priorMI, set: setPriorMI, color: '#f43f5e' },
+                { label: 'Prior PCI', checked: priorPCI, set: setPriorPCI, color: '#fb7185' },
+                { label: 'Prior CABG', checked: priorCABG, set: setPriorCABG, color: '#e11d48' },
+                { label: 'Hypertension', checked: htn, set: setHtn, color: '#3b82f6' },
+                { label: 'Dyslipidemia', checked: dyslipidemia, set: setDyslipidemia, color: '#a855f7' },
+                { label: 'Chronic Kidney Disease', checked: ckd, set: setCkd, color: '#06b6d4' },
+                { label: 'Atrial Fibrillation', checked: af, set: setAf, color: '#8b5cf6' },
+                { label: 'COPD / Asthma', checked: copd, set: setCopd, color: '#10b981' },
+              ].map(item => (
+                <label
+                  key={item.label}
+                  className={`p-2 rounded-lg border text-xs flex items-center gap-2 cursor-pointer transition-colors ${
+                    item.checked
+                      ? 'bg-blue-950/40 border-blue-500/40 text-white font-semibold'
+                      : 'bg-slate-950/40 border-gray-800/60 text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={item.checked}
+                    onChange={e => item.set(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-blue-600 bg-gray-900 border-gray-700 cursor-pointer"
+                  />
+                  <span className="truncate">{item.label}</span>
+                </label>
+              ))}
             </div>
           </div>
 
