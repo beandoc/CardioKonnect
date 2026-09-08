@@ -87,30 +87,64 @@ export default function GDMTDashboard({ patient, visits }: Props) {
     return pillars.filter(p => p.entry?.prescribed === 'Yes').length
   }, [pillars])
 
-  // Device criteria checks
+  // Multi-factor Device criteria evaluation (ICD & CRT)
   const deviceStatus = useMemo(() => {
     if (!latestVisit) return null
     const lvef = latestVisit.lvef ?? 100
     const qrs = latestVisit.qrsDuration ?? 0
-    const bbb = latestVisit.bbb || ''
+    const bbb = latestVisit.bbb || 'None'
+    const rhythm = latestVisit.rhythm || 'Sinus'
+    const nyha = latestVisit.nyha || patient.nyha || 'II'
     const currentDevices = latestVisit.device || []
 
     const hasICD = currentDevices.includes('ICD') || currentDevices.includes('CRT-D')
     const hasCRT = currentDevices.includes('CRT-D') || currentDevices.includes('CRT-P')
 
-    const qualifiesICD = lvef <= 35 && !hasICD
-    const qualifiesCRT = lvef <= 35 && qrs >= 150 && bbb === 'LBBB' && !hasCRT
+    // Determine HF Etiology context
+    const etiologyList: string[] = latestVisit.etiology || (patient as any).etiology || []
+    const isIschemic = etiologyList.some((e: string) => /cad|coronary|ischemic|infarct|mi/i.test(e)) ||
+      patient.comorbidCAD || patient.comorbidPriorMI || patient.comorbidPriorPCI || patient.comorbidPriorCABG
+
+    // ICD evaluation trigger: LVEF <= 35% in NYHA II-III (or I if ischemic) without existing ICD
+    const meetsICDTrigger = lvef <= 35 && !hasICD
+
+    // CRT evaluation pathways:
+    // Class I: Sinus Rhythm + LBBB + QRS >= 150ms + LVEF <= 35%
+    // Class IIa: (Sinus + LBBB + QRS 130-149ms) OR (Sinus + Non-LBBB + QRS >= 150ms)
+    // Class IIb: Sinus + Non-LBBB + QRS 130-149ms
+    // AF Pathway: AF + LVEF <= 35% + QRS >= 130ms (requires >=95% BiV pacing feasibility / AV node ablation)
+    const isLBBB = bbb === 'LBBB'
+    const isWideQRS = qrs >= 130
+    const isVeryWideQRS = qrs >= 150
+    const isAF = rhythm === 'AF' || rhythm === 'Atrial Flutter'
+
+    let crtPathway: 'Class I' | 'Class IIa' | 'Class IIb' | 'AF Pathway' | 'None' = 'None'
+    if (lvef <= 35 && isWideQRS && !hasCRT) {
+      if (!isAF) {
+        if (isLBBB && isVeryWideQRS) crtPathway = 'Class I'
+        else if ((isLBBB && !isVeryWideQRS) || (!isLBBB && isVeryWideQRS)) crtPathway = 'Class IIa'
+        else if (!isLBBB && !isVeryWideQRS) crtPathway = 'Class IIb'
+      } else {
+        crtPathway = 'AF Pathway'
+      }
+    }
+
+    const meetsCRTTrigger = crtPathway !== 'None'
 
     return {
       hasICD,
       hasCRT,
-      qualifiesICD,
-      qualifiesCRT,
+      meetsICDTrigger,
+      meetsCRTTrigger,
+      crtPathway,
+      isIschemic,
       lvef,
       qrs,
       bbb,
+      rhythm,
+      nyha,
     }
-  }, [latestVisit])
+  }, [latestVisit, patient])
 
   // Newer agent indication checks (Vericiguat / Tafamidis)
   const newerAgents = useMemo(() => {
@@ -318,54 +352,126 @@ export default function GDMTDashboard({ patient, visits }: Props) {
       {/* Device Optimization Advisor Card */}
       {deviceStatus && (
         <div className="glass-card p-5 border border-blue-500/10 rounded-2xl space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-1.5 border-b border-blue-500/10 pb-2">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            Device Therapy Optimization Advisor (ICD / CRT)
-          </h3>
+          <div className="flex items-center justify-between border-b border-blue-500/10 pb-2 flex-wrap gap-2">
+            <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              Device Therapy Referral &amp; Eligibility Evaluation (ICD / CRT)
+            </h3>
+            <span className="text-[10px] text-gray-400 font-medium">
+              Clinical Decision Support: Screening Trigger Only · Formal Evaluation Required
+            </span>
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
-            {/* ICD Eligibility */}
+            {/* ICD Evaluation */}
             <div className={cn(
-              "p-4 rounded-xl border space-y-2",
-              deviceStatus.qualifiesICD ? "bg-rose-500/5 border-rose-500/20" : "bg-emerald-500/5 border-emerald-500/15"
+              "p-4 rounded-xl border space-y-3",
+              deviceStatus.meetsICDTrigger ? "bg-amber-500/5 border-amber-500/25" : "bg-slate-900/40 border-gray-800"
             )}>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-1">
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">ICD Evaluation Status</h4>
-                {deviceStatus.qualifiesICD ? (
-                  <span className="badge badge-red text-[8px] font-extrabold uppercase">Indicated</span>
+                {deviceStatus.hasICD ? (
+                  <span className="badge badge-green text-[8px] font-extrabold uppercase">Existing Implant (ICD/CRT-D)</span>
+                ) : deviceStatus.meetsICDTrigger ? (
+                  <span className="badge badge-amber text-[8px] font-extrabold uppercase">Possible Referral for Eligibility Assessment</span>
                 ) : (
-                  <span className="badge badge-green text-[8px] font-extrabold uppercase">No Action</span>
+                  <span className="badge badge-gray text-[8px] font-extrabold uppercase">Criteria Not Met</span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 leading-normal">
-                {deviceStatus.qualifiesICD
-                  ? `Patient qualifies for ICD (LVEF is ${deviceStatus.lvef}%, which is ≤35%, and they have no documented ICD/CRT-D). Refer to EP for sudden cardiac death prevention after 3 months of optimal GDMT.`
-                  : deviceStatus.hasICD
-                    ? "Patient already has an ICD or CRT-D device implanted."
-                    : `Patient LVEF is ${deviceStatus.lvef}%, which is >35%. Standard ICD clinical indication criteria are not met.`}
+
+              <div className="space-y-1.5 text-[11px] text-gray-300">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">LVEF Trigger:</span>
+                  <span className={cn("font-semibold", deviceStatus.lvef <= 35 ? "text-amber-400" : "text-gray-300")}>
+                    {deviceStatus.lvef}% ({deviceStatus.lvef <= 35 ? '≤ 35% Threshold Met' : '> 35%'})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">Etiology Context:</span>
+                  <span className="font-semibold text-gray-200">
+                    {deviceStatus.isIschemic ? 'Ischemic CMP (>40d post-MI / >90d post-CABG/PCI required)' : 'Non-Ischemic CMP (DCM/NICM)'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">Functional Class:</span>
+                  <span className="font-semibold text-gray-200">NYHA Class {deviceStatus.nyha}</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">Medical Therapy:</span>
+                  <span className="font-semibold text-gray-200">≥3 months optimized GDMT required</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">Prognosis &amp; Goals:</span>
+                  <span className="font-semibold text-gray-200">&gt;1 year meaningful survival &amp; shared decision-making</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-400 leading-normal pt-1">
+                {deviceStatus.hasICD
+                  ? "Patient has documented ICD / CRT-D device in situ."
+                  : deviceStatus.meetsICDTrigger
+                    ? "Patient exhibits severe LV systolic dysfunction (LVEF ≤35%). Consider electrophysiology (EP) referral for sudden cardiac death (SCD) risk assessment and primary prevention ICD counselling after verifying ≥3 months of optimized GDMT and appropriate post-revascularization windows."
+                    : `LVEF is ${deviceStatus.lvef}% (>35%). Standard primary prevention ICD guideline criteria not triggered.`}
               </p>
             </div>
 
-            {/* CRT Eligibility */}
+            {/* CRT Evaluation */}
             <div className={cn(
-              "p-4 rounded-xl border space-y-2",
-              deviceStatus.qualifiesCRT ? "bg-rose-500/5 border-rose-500/20" : "bg-emerald-500/5 border-emerald-500/15"
+              "p-4 rounded-xl border space-y-3",
+              deviceStatus.meetsCRTTrigger ? "bg-amber-500/5 border-amber-500/25" : "bg-slate-900/40 border-gray-800"
             )}>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-1">
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">CRT-D/P Evaluation Status</h4>
-                {deviceStatus.qualifiesCRT ? (
-                  <span className="badge badge-red text-[8px] font-extrabold uppercase">Indicated</span>
+                {deviceStatus.hasCRT ? (
+                  <span className="badge badge-green text-[8px] font-extrabold uppercase">Existing Implant (CRT)</span>
+                ) : deviceStatus.meetsCRTTrigger ? (
+                  <span className="badge badge-amber text-[8px] font-extrabold uppercase">Possible Referral for Eligibility Assessment</span>
                 ) : (
-                  <span className="badge badge-green text-[8px] font-extrabold uppercase">No Action</span>
+                  <span className="badge badge-gray text-[8px] font-extrabold uppercase">Criteria Not Met</span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 leading-normal">
-                {deviceStatus.qualifiesCRT
-                  ? `Patient qualifies for CRT (LBBB present, QRS is ${deviceStatus.qrs}ms which is ≥150ms, and LVEF is ${deviceStatus.lvef}%). Resynchronization therapy is strongly recommended.`
-                  : deviceStatus.hasCRT
-                    ? "Patient already has a CRT-D or CRT-P device implanted."
-                    : `Patient criteria not met. (QRS: ${deviceStatus.qrs}ms, BBB: ${deviceStatus.bbb || 'none'}, LVEF: ${deviceStatus.lvef}%). CRT requires LBBB + QRS ≥150ms + LVEF ≤35%.`}
+
+              <div className="space-y-1.5 text-[11px] text-gray-300">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">Guideline Pathway:</span>
+                  <span className={cn(
+                    "font-bold",
+                    deviceStatus.crtPathway === 'Class I' ? 'text-emerald-400' :
+                    deviceStatus.crtPathway.startsWith('Class II') ? 'text-amber-400' :
+                    deviceStatus.crtPathway === 'AF Pathway' ? 'text-cyan-400' : 'text-gray-400'
+                  )}>
+                    {deviceStatus.crtPathway !== 'None' ? `${deviceStatus.crtPathway} Evaluation Pathway` : 'Criteria Not Met'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">ECG Morphology:</span>
+                  <span className="font-semibold text-gray-200">{deviceStatus.bbb} (LBBB Class I vs Non-LBBB Class II)</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">QRS Duration:</span>
+                  <span className={cn("font-semibold", deviceStatus.qrs >= 130 ? "text-amber-400" : "text-gray-200")}>
+                    {deviceStatus.qrs} ms ({deviceStatus.qrs >= 150 ? '≥150ms' : deviceStatus.qrs >= 130 ? '130–149ms' : '<130ms'})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">Rhythm Context:</span>
+                  <span className="font-semibold text-gray-200">
+                    {deviceStatus.rhythm} ({deviceStatus.rhythm === 'AF' ? 'AF pathway: ≥95% BiV capture / AV junction ablation required' : 'Sinus rhythm'})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                  <span className="text-gray-400">Pacing Context:</span>
+                  <span className="font-semibold text-gray-200">High RV pacing burden (&gt;40%) prevention</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-400 leading-normal pt-1">
+                {deviceStatus.hasCRT
+                  ? "Patient has documented CRT-D or CRT-P device in situ."
+                  : deviceStatus.meetsCRTTrigger
+                    ? `Cardiac resynchronization screening criteria met (LVEF ${deviceStatus.lvef}%, ${deviceStatus.bbb}, QRS ${deviceStatus.qrs}ms). Consider referral to EP / heart failure device clinic for individualized candidacy evaluation.`
+                    : `Patient does not meet primary resynchronization screening thresholds (QRS: ${deviceStatus.qrs}ms, Morphology: ${deviceStatus.bbb}, LVEF: ${deviceStatus.lvef}%). CRT requires LVEF ≤35% with QRS ≥130ms.`}
               </p>
             </div>
 

@@ -82,9 +82,9 @@ export default function ComplicationAuditPage() {
       {/* Real Safety KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="kpi-card emerald">
-          <p className="text-[10px] uppercase tracking-wider text-gray-400">In-Lab Major Complications</p>
-          <p className="text-2xl font-bold text-emerald-400 mt-1">0.0%</p>
-          <p className="text-[10px] text-gray-500 mt-1">0 adverse procedural events reported</p>
+          <p className="text-[10px] uppercase tracking-wider text-gray-400">In-Hospital Major Complications</p>
+          <p className="text-2xl font-bold text-emerald-400 mt-1">0</p>
+          <p className="text-[10px] text-gray-500 mt-1">0 acute in-hospital events audited</p>
         </div>
 
         <div className="kpi-card violet">
@@ -109,7 +109,7 @@ export default function ComplicationAuditPage() {
       {/* Audit Navigation Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[
-          { id: 'complications', label: 'Procedural Complications (0 Events)' },
+          { id: 'complications', label: 'In-Hospital Complications (0 Events Audited)' },
           { id: 'hf_admissions', label: 'Heart Failure Readmissions & Decompensations' },
           { id: 'renal_safety', label: 'Cardiorenal & Electrolyte Safety Surveillance' },
         ].map(t => (
@@ -135,10 +135,11 @@ export default function ComplicationAuditPage() {
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-white">Zero Major Procedural Complications Logged</h3>
-            <p className="text-xs text-gray-400 max-w-md mx-auto">
-              All 19 enrolled patients in the HF registry are currently in stable follow-up without in-hospital procedural adverse events.
-              To record new outcome events or re-admissions, open the respective patient's profile and use the "Record Outcome Event" tab.
+            <h3 className="text-base font-bold text-white">In-Hospital Procedural Complications: 0 Recorded</h3>
+            <p className="text-xs text-gray-400 max-w-lg mx-auto leading-relaxed">
+              Zero in-hospital procedural adverse events recorded among audited registry records ({totalPatients} enrolled patients).
+              Longitudinal 30/90-day post-discharge complication surveillance is active and under ongoing ascertainment across the cohort.
+              Outcome conclusions require structured follow-up verification at 30 and 90 days.
             </p>
           </div>
         )}

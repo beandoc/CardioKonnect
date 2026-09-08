@@ -1095,12 +1095,12 @@ export default function ReportsArchitecturePage() {
           </div>
 
           {/* Core Analytics Quick View */}
-          <div className="accent-card p-5 space-y-3">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-cyan-400" /> Longitudinal Benchmarking Insights
+          <div className="accent-card p-5 space-y-3 border-amber-500/20 bg-amber-950/10">
+            <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400" /> Longitudinal Benchmarking &amp; Reference Models
             </h4>
             <p className="text-xs text-gray-400 leading-relaxed">
-              These reports are modeled after the EuroHeart and NCDR registries, allowing risk-adjusted outcomes tracking for clinical audits and research publications at AICTS Pune.
+              Visual trajectories and comparative departmental curves represent synthetic reference benchmark models (modeled after EuroHeart, NHFR, and NCDR quality frameworks). Audited institutional figures are derived dynamically from verified registry records ({total} patients).
             </p>
           </div>
 
@@ -1189,15 +1189,23 @@ export default function ReportsArchitecturePage() {
                 ))}
               </div>
 
+              {/* Synthetic Benchmark Watermark Notice */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span>
+                  <strong className="font-semibold uppercase tracking-wide">Synthetic Simulation &amp; Benchmark Model:</strong> Visual trends and threshold lines in this panel represent guideline-derived reference benchmarks for quality comparison.
+                </span>
+              </div>
+
               {/* Visualization Chart */}
-              <div className="glass-card p-5 border border-slate-800 rounded-xl bg-slate-950/20">
+              <div className="glass-card p-5 border border-slate-800 rounded-xl bg-slate-950/20 relative">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                     <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
                     Longitudinal Performance Visualisation ({timeframe})
                   </p>
-                  <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 rounded px-2 py-0.5 font-medium flex items-center gap-1">
-                    <AlertTriangle className="w-2.5 h-2.5" /> Reference Data
+                  <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 rounded px-2 py-0.5 font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-2.5 h-2.5" /> SYNTHETIC BENCHMARK
                   </span>
                 </div>
 

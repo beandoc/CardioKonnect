@@ -27,6 +27,11 @@ export interface ClinicalAlert {
   detail: string
   action: string
   evidence?: string  // guideline class + level e.g. "Class I-A"
+  guidelineVersion?: string // guideline reference and release version e.g. "ESC 2023 Heart Failure Guidelines"
+  recordedDate?: string
+  measuredValue?: string
+  checklist?: string[]
+  requiresAcknowledgement?: boolean
   field?: string     // which form field to jump to
 }
 
@@ -234,124 +239,167 @@ export function calculateHASBLED(
   return { score: clampedScore, bleedingRiskPctPerYear, riskCategory, modifiableFactors, detail }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GDMT Optimization Engine
-// Reference: ESC 2023 HF Guidelines, Table 9 (HFrEF pharmacotherapy)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const TARGET_DOSES: Record<string, number> = {
-  // RAASi
-  enalapril: 40, lisinopril: 35, captopril: 150, ramipril: 10,
-  perindopril: 8, trandolapril: 4, fosinopril: 40,
-  candesartan: 32, valsartan: 320, losartan: 150,
-  'sacubitril/valsartan': 400, sacubitril: 400, entresto: 400,
-  // Beta-blockers
-  carvedilol: 50, bisoprolol: 10, metoprolol: 200, nebivolol: 10,
-  // MRA
-  spironolactone: 50, eplerenone: 50,
-  // SGLT2i
-  dapagliflozin: 10, empagliflozin: 10,
-  // Ivabradine
-  ivabradine: 15,
-}
-
-function parseDoseMg(doseStr?: string): number {
-  if (!doseStr) return 0
-  const m = doseStr.match(/(\d+\.?\d*)/)
-  return m ? parseFloat(m[1]) : 0
-}
-
+// Helper to compute dose achievement percentage
 function getDosePct(drugName?: string, doseStr?: string): number | undefined {
   if (!drugName || !doseStr) return undefined
-  const target = TARGET_DOSES[drugName.toLowerCase().replace(/\s+/g, '')]
-      ?? TARGET_DOSES[drugName.toLowerCase()]
-  if (!target) return undefined
-  return Math.min(100, Math.round((parseDoseMg(doseStr) / target) * 100))
+  const d = drugName.toLowerCase()
+  const s = doseStr.toLowerCase()
+
+  // ARNI (Sacubitril/Valsartan) — Target 97/103mg (200mg) BD = 400mg/day
+  if (d.includes('vymada') || d.includes('cidmus') || d.includes('azmarda') || d.includes('sacubitril') || d.includes('arni')) {
+    if (s.includes('200') || s.includes('97/103')) return 100
+    if (s.includes('100') || s.includes('49/51'))  return 50
+    if (s.includes('50')  || s.includes('24/26'))  return 25
+  }
+  // ACEi - Ramipril target 10mg OD or 5mg BD
+  if (d.includes('ramipril') || d.includes('cardace')) {
+    if (s.includes('10')) return 100
+    if (s.includes('5'))  return 50
+    if (s.includes('2.5')) return 25
+  }
+  // ARB - Telmisartan target 80mg, Losartan target 150mg
+  if (d.includes('telmisartan') || d.includes('telma')) {
+    if (s.includes('80')) return 100
+    if (s.includes('40')) return 50
+    if (s.includes('20')) return 25
+  }
+  // Beta Blockers
+  // Bisoprolol target 10mg OD
+  if (d.includes('bisoprolol') || d.includes('concor')) {
+    if (s.includes('10')) return 100
+    if (s.includes('5'))  return 50
+    if (s.includes('2.5')) return 25
+    if (s.includes('1.25')) return 12.5
+  }
+  // Metoprolol Succinate target 200mg OD
+  if (d.includes('metoprolol') || d.includes('met-xl') || d.includes('betaloc')) {
+    if (s.includes('200')) return 100
+    if (s.includes('100')) return 50
+    if (s.includes('50'))  return 25
+    if (s.includes('25'))  return 12.5
+  }
+  // Carvedilol target 25mg BD (50mg/day)
+  if (d.includes('carvedilol') || d.includes('carca')) {
+    if (s.includes('25') && s.includes('bd')) return 100
+    if (s.includes('25')) return 50
+    if (s.includes('12.5')) return 25
+    if (s.includes('6.25') || s.includes('3.125')) return 12.5
+  }
+  // Nebivolol target 10mg OD
+  if (d.includes('nebivolol') || d.includes('nebipil')) {
+    if (s.includes('10')) return 100
+    if (s.includes('5'))  return 50
+    if (s.includes('2.5')) return 25
+  }
+  // MRA - Spironolactone / Eplerenone target 50mg OD
+  if (d.includes('aldactone') || d.includes('spironolactone') || d.includes('eplerenone') || d.includes('eptus')) {
+    if (s.includes('50')) return 100
+    if (s.includes('25')) return 50
+    if (s.includes('12.5')) return 25
+  }
+  // SGLT2i - Fixed standard target dose (Dapa 10mg OD, Empa 10mg OD)
+  if (d.includes('dapa') || d.includes('empa') || d.includes('forxiga') || d.includes('jardiance')) {
+    if (s.includes('10') || s.includes('25')) return 100
+    if (s.includes('5')) return 50
+  }
+
+  return undefined
 }
 
 export function evaluateGDMT(patient: Patient, visit: Visit): GDMTSummary {
-  const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
   const pillars: GDMTPillar[] = []
-
-  const egfr = visit.egfr
-  const k = visit.potassium
-  const sbp = visit.bpSystolic
-  const hr = visit.heartRate
   const hfType = visit.hfType || patient.hfType
-
   const isHFrEF = hfType === 'HFrEF'
   const isHFpEF = hfType === 'HFpEF'
-  const hasCOPD = comorbStr.includes('copd')
+  const isHFmrEF = hfType === 'HFmrEF'
 
-  // ── 1. RAASi (ACEi / ARB / ARNI) ─────────────────────────────────────────
+  const sbp = visit.bpSystolic
+  const hr = visit.heartRate
+  const k = visit.potassium
+  const egfr = visit.egfr
+
+  // ── 1. RAASi / ARNI ─────────────────────────────────────────────────────────
   const raasi = visit.raasi
-  const raasContra = egfr && egfr < 15 ? 'eGFR < 15 ml/min'
-    : k && k > 5.5 ? 'Hyperkalaemia > 5.5 mmol/L'
-    : sbp && sbp < 90 ? 'Hypotension SBP < 90 mmHg'
-    : null
+  const raasiContra =
+    sbp && sbp < 90 ? 'Systolic BP < 90 mmHg' :
+    k && k > 5.5 ? 'Potassium > 5.5 mmol/L' :
+    egfr && egfr < 30 ? 'eGFR < 30 ml/min/1.73m² (relative caution)' :
+    null
+
+  const raasiStatus: GDMTStatus =
+    raasiContra ? 'contraindicated' :
+    raasi?.prescribed === 'Yes' ?
+      ((getDosePct(raasi.type, raasi.dose) ?? 100) < 100 ? 'below-target' : 'prescribed') :
+    isHFpEF ? 'not-indicated' :
+    'missing'
 
   pillars.push({
-    drug: 'RAASi',
-    shortName: raasi?.type || 'ACEi / ARB / ARNI',
-    status: raasContra ? 'contraindicated'
-      : !isHFrEF && !hfType ? 'not-indicated'
-      : raasi?.prescribed !== 'Yes' ? 'missing'
-      : getDosePct(raasi.type, raasi.dose) !== undefined && (getDosePct(raasi.type, raasi.dose)! < 50) ? 'below-target'
-      : 'prescribed',
+    drug: 'ARNI / ACEi / ARB',
+    shortName: raasi?.type || 'Sacubitril/Valsartan preferred',
+    status: raasiStatus,
     currentDose: raasi?.dose,
-    targetDose: raasi?.type ? `${TARGET_DOSES[raasi.type.toLowerCase()] ?? '?'} mg/day` : undefined,
+    targetDose: 'Sacubitril/Valsartan 97/103 mg BD (or Ramipril 10 mg OD)',
     dosePct: getDosePct(raasi?.type, raasi?.dose),
-    contraindication: raasContra ?? undefined,
-    evidence: 'Class I-A, ESC 2023',
-    benefit: 'Reduces mortality by 17% and HF hospitalization by 19%',
+    contraindication: raasiContra ?? undefined,
+    evidence: isHFrEF ? 'Class I-A, ESC 2023' : isHFmrEF ? 'Class IIb-B, ESC 2023' : 'Class IIb, ESC 2023',
+    benefit: 'Reduces all-cause mortality by 20% vs enalapril (PARADIGM-HF)',
   })
 
-  // ── 2. Beta-Blocker ────────────────────────────────────────────────────────
+  // ── 2. Beta Blocker ────────────────────────────────────────────────────────
   const bb = visit.betaBlocker
-  const bbContra = hr && hr < 50 ? 'Bradycardia < 50 bpm'
-    : sbp && sbp < 90 ? 'Hypotension SBP < 90 mmHg'
-    : null
+  const bbContra =
+    hr && hr < 50 ? 'Resting HR < 50 bpm (Bradycardia)' :
+    sbp && sbp < 85 ? 'Severe hypotension (SBP < 85 mmHg)' :
+    null
+
+  const bbStatus: GDMTStatus =
+    bbContra ? 'contraindicated' :
+    bb?.prescribed === 'Yes' ?
+      ((getDosePct(bb.type, bb.dose) ?? 100) < 100 ? 'below-target' : 'prescribed') :
+    isHFpEF ? 'not-indicated' :
+    'missing'
 
   pillars.push({
-    drug: 'Beta-Blocker',
-    shortName: bb?.type || 'Carvedilol / Bisoprolol',
-    status: bbContra ? 'contraindicated'
-      : !isHFrEF && !hfType ? 'not-indicated'
-      : bb?.prescribed !== 'Yes' ? 'missing'
-      : getDosePct(bb.type, bb.dose) !== undefined && (getDosePct(bb.type, bb.dose)! < 50) ? 'below-target'
-      : 'prescribed',
+    drug: 'Beta Blocker',
+    shortName: bb?.type || 'Bisoprolol / Metoprolol Succinate / Carvedilol',
+    status: bbStatus,
     currentDose: bb?.dose,
-    targetDose: bb?.type ? `${TARGET_DOSES[bb.type.toLowerCase()] ?? '?'} mg/day` : undefined,
+    targetDose: 'Bisoprolol 10 mg OD / Metoprolol Succ 200 mg OD / Carvedilol 25 mg BD',
     dosePct: getDosePct(bb?.type, bb?.dose),
     contraindication: bbContra ?? undefined,
-    evidence: 'Class I-A, ESC 2023',
-    benefit: 'Reduces mortality by 34% in HFrEF (CIBIS-II, MERIT-HF)',
+    evidence: isHFrEF ? 'Class I-A, ESC 2023' : isHFmrEF ? 'Class IIb-B, ESC 2023' : 'Not indicated (unless AF/CAD)',
+    benefit: 'Reduces mortality by 34% in HFrEF (CIBIS-II, MERIT-HF, COPERNICUS)',
   })
 
-  // ── 3. MRA ────────────────────────────────────────────────────────────────
+  // ── 3. MRA ─────────────────────────────────────────────────────────────────
   const mra = visit.mra
-  const mraContra = egfr && egfr < 30 ? 'eGFR < 30 ml/min'
-    : k && k > 5.0 ? 'Hyperkalaemia > 5.0 mmol/L'
-    : null
+  const mraContra =
+    k && k > 5.0 ? 'Potassium > 5.0 mmol/L' :
+    egfr && egfr < 30 ? 'eGFR < 30 ml/min/1.73m²' :
+    null
+
+  const mraStatus: GDMTStatus =
+    mraContra ? 'contraindicated' :
+    mra?.prescribed === 'Yes' ?
+      ((getDosePct(mra.type, mra.dose) ?? 100) < 100 ? 'below-target' : 'prescribed') :
+    isHFpEF ? 'not-indicated' :
+    'missing'
 
   pillars.push({
     drug: 'MRA',
     shortName: mra?.type || 'Spironolactone / Eplerenone',
-    status: mraContra ? 'contraindicated'
-      : !isHFrEF && !hfType ? 'not-indicated'
-      : mra?.prescribed !== 'Yes' ? 'missing'
-      : 'prescribed',
+    status: mraStatus,
     currentDose: mra?.dose,
+    targetDose: 'Spironolactone 50 mg OD / Eplerenone 50 mg OD',
     dosePct: getDosePct(mra?.type, mra?.dose),
     contraindication: mraContra ?? undefined,
-    evidence: 'Class I-A, ESC 2023',
-    benefit: 'Reduces mortality by 30% (RALES, EMPHASIS-HF)',
+    evidence: isHFrEF ? 'Class I-A, ESC 2023' : isHFmrEF ? 'Class IIb-B, ESC 2023' : 'Class IIb-B (TOPCAT)',
+    benefit: 'Reduces all-cause mortality by 30% in HFrEF (RALES, EMPHASIS-HF)',
   })
 
   // ── 4. SGLT2i ─────────────────────────────────────────────────────────────
   const sglt2 = visit.sglt2i
-  const sglt2Contra = egfr && egfr < 20 ? 'eGFR < 20 ml/min (dapagliflozin)'
-    : null
+  const sglt2Contra = egfr && egfr < 20 ? 'eGFR < 20 ml/min (dapagliflozin/empagliflozin)' : null
 
   pillars.push({
     drug: 'SGLT2i',
@@ -362,9 +410,9 @@ export function evaluateGDMT(patient: Patient, visit: Visit): GDMTSummary {
     currentDose: sglt2?.dose,
     dosePct: getDosePct(sglt2?.type, sglt2?.dose),
     contraindication: sglt2Contra ?? undefined,
-    evidence: isHFpEF ? 'Class IIa-B, ESC 2023' : 'Class I-A, ESC 2023',
+    evidence: isHFpEF ? 'Class I-A, ESC 2023 (EMPEROR-Preserved/DELIVER)' : 'Class I-A, ESC 2023',
     benefit: isHFpEF
-      ? 'Reduces HF hospitalisation by 21% in HFpEF (EMPEROR-Preserved)'
+      ? 'Reduces CV death and HF hospitalisation in HFpEF/HFmrEF (DELIVER, EMPEROR-Preserved)'
       : 'Reduces CV death + HF hosp by 25% (DAPA-HF, EMPEROR-Reduced)',
   })
 
@@ -378,134 +426,230 @@ export function evaluateGDMT(patient: Patient, visit: Visit): GDMTSummary {
 
   const nextBestAction =
     missing.length > 0
-      ? `Initiate ${missing[0].drug} — ${missing[0].evidence}`
+      ? `Evaluate eligibility for ${missing[0].drug} initiation (${missing[0].evidence})`
       : belowTarget.length > 0
-      ? `Uptitrate ${belowTarget[0].drug} to target dose — ${belowTarget[0].evidence}`
-      : 'Patient on optimal GDMT — maintain current regimen'
+      ? `Assess clinical tolerance for ${belowTarget[0].drug} uptitration toward guideline target dose`
+      : 'Patient receives 4-pillar GDMT — continue surveillance and maintain regimen'
 
   return { pillarsOnTarget: prescribed, totalApplicable: applicable, optimizationScore, pillars, nextBestAction }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Clinical Safety Alert Engine
+// Clinical Safety Alert Engine (Non-Directive Clinical Decision Support)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits: Visit[]): ClinicalAlert[] {
   const alerts: ClinicalAlert[] = []
-  const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
-  const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000))
+  const visitDate = visit.visitDate || 'Latest Visit'
 
-  // ── Contraindication Safety Alerts ───────────────────────────────────────
+  // ── Contraindication & Biochemical Safety Alerts ──────────────────────────
 
-  // Dual RAASi + MRA when K > 5.0 or eGFR < 30
   const hasRAASi = visit.raasi?.prescribed === 'Yes'
   const hasMRA = visit.mra?.prescribed === 'Yes'
   const k = visit.potassium
   const egfr = visit.egfr
+  const sbp = visit.bpSystolic
 
+  // Dual RAASi + MRA when K > 5.0
   if (hasRAASi && hasMRA && k && k > 5.0) {
     alerts.push({
-      id: 'raasi-mra-hyperkalemia', severity: 'critical', category: 'Safety',
-      title: 'Dangerous Drug Combination: RAASi + MRA with Hyperkalaemia',
-      detail: `Both RAASi and MRA prescribed, K⁺ ${k} mmol/L — extreme hyperkalemia risk`,
-      action: 'STOP MRA immediately. Reduce RAASi. Check K⁺ again in 24–48h. Consider potassium binder.',
-      evidence: 'ESC 2023 Safety',
+      id: 'raasi-mra-hyperkalemia',
+      severity: 'critical',
+      category: 'Safety',
+      title: 'Clinical Review Required: Hyperkalaemia on RAASi + MRA',
+      detail: `Measured K⁺ ${k} mmol/L on ${visitDate}. Patient is prescribed combined ${visit.raasi?.type || 'RAASi'} and ${visit.mra?.type || 'MRA'}.`,
+      action: 'Clinical evaluation recommended: Assess for hyperkalemia-induced cardiotoxicity (check 12-lead ECG). Review dietary potassium, salt substitutes, and nephrotoxic co-medications. Consider temporary MRA dose reduction or withholding, potassium binder evaluation, and repeat serum potassium in 24–48 hours.',
+      evidence: 'Class I-C, ESC 2023 Guidelines',
+      guidelineVersion: 'ESC 2023 Heart Failure Guidelines (Section 5.3) / ACC/AHA 2022',
+      recordedDate: visitDate,
+      measuredValue: `${k} mmol/L`,
+      checklist: [
+        'Check 12-lead ECG for peaked T waves / widened QRS / PR prolongation',
+        'Review dietary potassium and salt substitutes',
+        'Verify no concurrent NSAIDs or potassium-sparing agents',
+        'Schedule repeat serum K⁺ and creatinine within 24–48h',
+      ],
+      requiresAcknowledgement: true,
     })
   }
 
+  // Dual RAASi + MRA in severe CKD
   if (hasRAASi && hasMRA && egfr && egfr < 30) {
     alerts.push({
-      id: 'raasi-mra-ckd', severity: 'high', category: 'Safety',
-      title: 'Risky Combination: RAASi + MRA in Severe CKD',
-      detail: `Both agents prescribed with eGFR ${egfr} ml/min — high hyperkalemia and AKI risk`,
-      action: 'Reduce MRA dose or stop. Increase monitoring frequency. Check K⁺ and creatinine weekly.',
-      evidence: 'KDIGO 2022 + ESC 2023',
+      id: 'raasi-mra-ckd',
+      severity: 'high',
+      category: 'Safety',
+      title: 'Clinical Review Required: RAASi + MRA in Severe CKD',
+      detail: `Recorded eGFR ${egfr} mL/min/1.73m² on ${visitDate} with combined RAASi and MRA therapy.`,
+      action: 'Clinical evaluation recommended: Heightened risk for acute kidney injury and progressive hyperkalemia. Consider dose titration, closer cardiorenal surveillance (weekly K+ and creatinine), or nephrology co-consultation.',
+      evidence: 'KDIGO 2022 / ESC 2023',
+      guidelineVersion: 'KDIGO 2022 Clinical Practice Guideline / ESC 2023 HF Guidelines',
+      recordedDate: visitDate,
+      measuredValue: `${egfr} mL/min/1.73m²`,
+      checklist: [
+        'Assess volume status (hypovolemia vs venous congestion)',
+        'Check recent serum potassium and creatinine trajectory',
+        'Review concomitant nephrotoxic medications',
+      ],
+      requiresAcknowledgement: true,
     })
   }
 
-  // ACE/ARB-specific hypotension alert
-  const raasi = visit.raasi
-  const sbp = visit.bpSystolic
-  if (raasi?.prescribed === 'Yes' && sbp && sbp < 90) {
+  // Hypotension on Vasodilators
+  if (hasRAASi && sbp && sbp < 90) {
     alerts.push({
-      id: 'raasi-hypotension', severity: 'high', category: 'Safety',
-      title: 'ACEi/ARB/ARNI Causing Hypotension',
-      detail: `${raasi.type || 'RAASi'} at SBP ${sbp} mmHg — risk of syncope and AKI`,
-      action: 'Reduce RAASi dose. Assess volume status. Hold diuretic if dehydrated. Recheck BP before next uptitration.',
+      id: 'raasi-hypotension',
+      severity: 'high',
+      category: 'Safety',
+      title: 'Clinical Review Required: Symptomatic Hypotension / SBP <90 mmHg',
+      detail: `Recorded SBP ${sbp} mmHg on ${visitDate} in patient receiving ${visit.raasi?.type || 'RAASi'}.`,
+      action: 'Clinical evaluation recommended: Differentiate asymptomatic low BP from symptomatic hypoperfusion. Assess volume status (over-diuresis vs cardiogenic failure). Consider staggering antihypertensive dosing or adjusting diuretic dose before reducing core GDMT.',
       evidence: 'ESC 2023 HF Safety',
+      guidelineVersion: 'ESC 2023 Heart Failure Guidelines (Section 5.2)',
+      recordedDate: visitDate,
+      measuredValue: `${sbp} mmHg`,
+      checklist: [
+        'Assess for postural dizziness or syncope',
+        'Evaluate clinical volume status (JVP, peripheral edema)',
+        'Check serum creatinine & BUN for hypovolemia-induced prerenal azotemia',
+      ],
+      requiresAcknowledgement: true,
     })
   }
 
-  // ── Safety Alerts ─────────────────────────────────────────────────────────
-
-  if (visit.potassium && visit.potassium > 5.5) {
+  // Hyperkalemia > 5.5
+  if (k && k > 5.5 && !(hasRAASi && hasMRA)) {
     alerts.push({
-      id: 'k-high', severity: 'critical', category: 'Safety',
-      title: 'Hyperkalaemia',
-      detail: `K⁺ ${visit.potassium} mmol/L — dangerous with current RAASi/MRA`,
-      action: 'Hold MRA. Reduce RAASi dose. Dietitian referral for low-K diet. Recheck in 48–72h.',
+      id: 'k-high',
+      severity: 'critical',
+      category: 'Safety',
+      title: 'Clinical Review Required: Hyperkalaemia (K⁺ >5.5 mmol/L)',
+      detail: `Measured K⁺ ${k} mmol/L on ${visitDate}. Elevated arrhythmogenic risk.`,
+      action: 'Clinical evaluation recommended: Obtain 12-lead ECG. Re-evaluate dietary intake and potassium-sparing medications. Recheck serum potassium within 24–48 hours.',
       evidence: 'ESC 2023 HF Safety',
+      guidelineVersion: 'ESC 2023 Guidelines on Acute and Chronic Heart Failure',
+      recordedDate: visitDate,
+      measuredValue: `${k} mmol/L`,
+      checklist: [
+        'Obtain 12-lead ECG to rule out cardiotoxicity',
+        'Review RAASi/MRA dosing and potassium supplements',
+        'Repeat potassium and creatinine within 24–48h',
+      ],
+      requiresAcknowledgement: true,
     })
   }
 
-  if (visit.potassium && visit.potassium < 3.5) {
+  // Hypokalemia < 3.5
+  if (k && k < 3.5) {
     alerts.push({
-      id: 'k-low', severity: 'high', category: 'Safety',
-      title: 'Hypokalaemia',
-      detail: `K⁺ ${visit.potassium} mmol/L — arrhythmia risk, especially with digoxin`,
-      action: 'Oral or IV potassium replacement. Review diuretic dose. Recheck in 48h.',
+      id: 'k-low',
+      severity: 'high',
+      category: 'Safety',
+      title: 'Clinical Review Required: Hypokalaemia (K⁺ <3.5 mmol/L)',
+      detail: `Measured K⁺ ${k} mmol/L on ${visitDate}. Increased susceptibility to life-threatening ventricular arrhythmias, especially in patients receiving digitalis or with myocardial scar.`,
+      action: 'Clinical evaluation recommended: Assess dietary intake and diuretic dosing. Consider potassium supplementation (target K⁺ 4.0–5.0 mmol/L) and MRA optimization. Check serum magnesium.',
+      evidence: 'ESC 2023 / ACC/AHA 2022',
+      guidelineVersion: 'ESC 2023 Heart Failure Guidelines / ACC/AHA 2022',
+      recordedDate: visitDate,
+      measuredValue: `${k} mmol/L`,
+      checklist: [
+        'Check serum Magnesium level',
+        'Review loop/thiazide diuretic dose',
+        'Target serum K⁺ between 4.0–5.0 mmol/L',
+      ],
+      requiresAcknowledgement: true,
     })
   }
 
-  if (visit.egfr && visit.egfr < 20) {
+  // Severe Renal Impairment eGFR < 20
+  if (egfr && egfr < 20) {
     alerts.push({
-      id: 'egfr-critical', severity: 'critical', category: 'Safety',
-      title: 'Severe Renal Impairment',
-      detail: `eGFR ${visit.egfr} ml/min — nephrology review mandatory`,
-      action: 'Stop SGLT2i. Review RAASi. Reduce MRA/digoxin. Consider nephrology co-management.',
-      evidence: 'KDIGO 2022',
+      id: 'egfr-critical',
+      severity: 'critical',
+      category: 'Safety',
+      title: 'Clinical Review Required: Severe Renal Impairment (eGFR <20 mL/min)',
+      detail: `Measured eGFR ${egfr} mL/min/1.73m² on ${visitDate}.`,
+      action: 'Clinical evaluation recommended: Review renally cleared medications (e.g., Digoxin, SGLT2i, direct oral anticoagulants). Evaluate MRA/RAASi safety and consider nephrology co-management.',
+      evidence: 'KDIGO 2022 / ESC 2023',
+      guidelineVersion: 'KDIGO 2022 Clinical Practice Guideline for CKD',
+      recordedDate: visitDate,
+      measuredValue: `${egfr} mL/min/1.73m²`,
+      checklist: [
+        'Evaluate renally excreted medications for dose adjustment',
+        'Review SGLT2i initiation threshold (contraindicated if eGFR <20 mL/min)',
+        'Check for acute decompensation or prerenal azotemia',
+      ],
+      requiresAcknowledgement: true,
     })
   }
 
+  // Hyponatremia < 130
   if (visit.sodium && visit.sodium < 130) {
     alerts.push({
-      id: 'na-low', severity: 'high', category: 'Safety',
-      title: 'Severe Hyponatraemia',
-      detail: `Na⁺ ${visit.sodium} mmol/L — poor prognosis marker in HF`,
-      action: 'Fluid restriction to 1 L/day. Review diuretics. Consider vasopressin antagonist if refractory.',
+      id: 'na-low',
+      severity: 'high',
+      category: 'Safety',
+      title: 'Clinical Review Required: Severe Hyponatraemia (Na⁺ <130 mmol/L)',
+      detail: `Measured Na⁺ ${visit.sodium} mmol/L on ${visitDate}. Marker of neurohormonal activation and advanced disease.`,
+      action: 'Clinical evaluation recommended: Assess volume status (hypovolemic vs hypervolemic/dilutional). Review fluid intake, diuretic regimen, and thiazide usage.',
+      evidence: 'ESC 2023 HF Guidelines',
+      guidelineVersion: 'ESC 2023 Guidelines on Acute and Chronic Heart Failure',
+      recordedDate: visitDate,
+      measuredValue: `${visit.sodium} mmol/L`,
+      checklist: [
+        'Assess clinical volume status (euvolemic vs hypervolemic vs hypovolemic)',
+        'Consider fluid restriction if dilutional hyponatremia',
+        'Review thiazide and loop diuretic dosing',
+      ],
     })
   }
 
-  if (visit.bpSystolic && visit.bpSystolic < 90) {
+  // Bradycardia HR < 50 in Sinus
+  if (visit.heartRate && visit.heartRate < 50 && (visit.rhythm === 'Sinus' || !visit.rhythm)) {
     alerts.push({
-      id: 'bp-low', severity: 'critical', category: 'Safety',
-      title: 'Hypotension',
-      detail: `SBP ${visit.bpSystolic} mmHg — unsafe to uptitrate HF medications`,
-      action: 'Hold diuretics if dehydrated. Reduce vasodilator doses. Rule out cardiogenic shock.',
+      id: 'hr-low',
+      severity: 'high',
+      category: 'Safety',
+      title: 'Clinical Review Required: Significant Bradycardia (HR <50 bpm)',
+      detail: `Heart rate ${visit.heartRate} bpm recorded on ${visitDate} in sinus rhythm.`,
+      action: 'Clinical evaluation recommended: Assess for symptoms (fatigue, presyncope, chronotropic incompetence). Review negative chronotropic agents (beta-blockers, ivabradine, digoxin, non-dihydropyridine CCBs). Obtain 12-lead ECG.',
+      evidence: 'ESC 2021 Pacing / ESC 2023 HF',
+      guidelineVersion: 'ESC 2021 Guidelines on Cardiac Pacing and Cardiac Resynchronization Therapy',
+      recordedDate: visitDate,
+      measuredValue: `${visit.heartRate} bpm`,
+      checklist: [
+        'Obtain 12-lead ECG to evaluate for conduction disease (AV block / sinus pause)',
+        'Review beta-blocker, ivabradine, and antiarrhythmic dosing',
+        'Assess for symptomatic chronotropic incompetence',
+      ],
     })
   }
 
-  if (visit.heartRate && visit.heartRate < 50 && visit.rhythm === 'Sinus') {
-    alerts.push({
-      id: 'hr-low', severity: 'high', category: 'Safety',
-      title: 'Significant Bradycardia',
-      detail: `HR ${visit.heartRate} bpm in sinus rhythm`,
-      action: 'Reduce or hold beta-blocker. Stop digoxin if co-prescribed. ECG + Holter.',
-    })
-  }
-
+  // Prolonged QTc Interval > 500 ms (Note: Digoxin shortens QT, does NOT prolong QT)
   if (visit.qtcInterval && visit.qtcInterval > 500) {
     alerts.push({
-      id: 'qtc-long', severity: 'critical', category: 'Safety',
-      title: 'Prolonged QTc Interval',
-      detail: `QTc ${visit.qtcInterval} ms — torsades de pointes risk`,
-      action: 'Stop QT-prolonging drugs (digoxin if co-prescribed). Check electrolytes. Cardiology/EP review.',
+      id: 'qtc-long',
+      severity: 'critical',
+      category: 'Safety',
+      title: 'Clinical Review Required: Prolonged QTc Interval (>500 ms)',
+      detail: `Measured QTc ${visit.qtcInterval} ms on ${visitDate}. Heightened risk for Torsades de Pointes. Note: Digoxin is not a QT-prolonging agent (it typically shortens QT).`,
+      action: 'Clinical evaluation recommended: Review QT-prolonging pharmacotherapy (e.g., Amiodarone, Sotalol, Macrolides, Fluoroquinolones, Psychotropics). Check and correct serum potassium (target ≥4.0 mmol/L) and magnesium (target ≥2.0 mg/dL). Obtain 12-lead ECG and electrophysiology consultation if persistent.',
+      evidence: 'AHA/ACC/HRS Guideline on Drug-Induced Arrhythmias',
+      guidelineVersion: 'AHA/ACC/HRS 2023 Guidelines for Management of Ventricular Arrhythmias',
+      recordedDate: visitDate,
+      measuredValue: `${visit.qtcInterval} ms`,
+      checklist: [
+        'Screen all concurrent medications against QT prolongation registries (CredibleMeds)',
+        'Ensure serum K⁺ ≥ 4.0 mmol/L and serum Mg²⁺ ≥ 2.0 mg/dL',
+        'Confirm manual measurement on 12-lead ECG (lead II / V5)',
+      ],
+      requiresAcknowledgement: true,
     })
   }
 
-  // ── GDMT / Device Alerts ──────────────────────────────────────────────────
+  // ── Device Assessment Alerts (Non-Directive Evaluation Candidate) ─────────
 
-  const lvef = visit.lvef
+  const lvef = visit.lvef ?? patient.lvef
   const qrs = visit.qrsDuration
   const hasBBB = visit.bbb
 
@@ -513,26 +657,49 @@ export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits
     const prevVisitWithLowEF = allVisits.filter(v => v.id !== visit.id && v.lvef && v.lvef <= 35)
     if (prevVisitWithLowEF.length >= 1) {
       alerts.push({
-        id: 'icd-eligible', severity: 'high', category: 'Device',
-        title: 'Possible ICD Eligibility',
-        detail: `LVEF ${lvef}% on ≥2 visits — may meet criteria for primary prevention ICD`,
-        action: 'Confirm LVEF on optimised therapy ≥90 days. Refer to EP if NYHA II–III. Check LVEF is not recovering.',
-        evidence: 'Class I-A, ESC 2023',
+        id: 'icd-assessment',
+        severity: 'high',
+        category: 'Device',
+        title: 'Device Evaluation: Possible Referral for ICD Eligibility Assessment',
+        detail: `Persistent LVEF ${lvef}% (≤35%) documented across sequential encounters (${visitDate}).`,
+        action: 'Clinical evaluation recommended: Evaluate candidate for primary prevention ICD assessment. Criteria include: (1) ≥3 months optimal GDMT, (2) NYHA Class II–III symptoms, (3) Expected survival with good functional status >1 year, (4) >40 days post-acute MI and >90 days post-revascularization if ischemic etiology.',
+        evidence: 'Class I-A (Ischemic) / Class I-B (Non-ischemic), ESC 2023',
+        guidelineVersion: 'ESC 2021/2023 Guidelines on Cardiac Pacing and Resynchronization / ACC/AHA 2022',
+        recordedDate: visitDate,
+        measuredValue: `LVEF ${lvef}%`,
+        checklist: [
+          'Confirmed on ≥3 months of optimized guideline-directed medical therapy',
+          'NYHA Class II–III symptoms documented',
+          'Ischemic etiology: >40 days post-MI and >90 days post-CABG/PCI',
+          'Expected survival with good functional capacity >1 year',
+          'Shared decision-making and patient preference confirmed',
+        ],
       })
     }
   }
 
   const hasLBBB = hasBBB === 'LBBB'
   const qrsDur = qrs || visit.qrsDuration
-  const isCRTEligible = (lvef != null && lvef < 35) && (hasLBBB || (qrsDur != null && qrsDur >= 130))
+  const meetsCRTThreshold = (lvef != null && lvef <= 35) && (hasLBBB || (qrsDur != null && qrsDur >= 130))
 
-  if (isCRTEligible && !(visit.device ?? []).includes('CRT-D') && !(visit.device ?? []).includes('CRT-P')) {
+  if (meetsCRTThreshold && !(visit.device ?? []).includes('CRT-D') && !(visit.device ?? []).includes('CRT-P')) {
     alerts.push({
-      id: 'crt-eligible', severity: 'high', category: 'Device',
-      title: 'CRT Candidate Criteria Met',
-      detail: `LVEF ${lvef}%, ${hasLBBB ? 'LBBB' : `QRS ${qrsDur} ms`} — meets criteria for Cardiac Resynchronization Therapy (LBBB / QRS ≥130ms + LVEF <35%)`,
-      action: 'Refer for CRT-D/CRT-P implantation and optimization. Expected LVEF improvement and mortality reduction.',
-      evidence: 'Class I-A, ESC 2023 / ACC 2022',
+      id: 'crt-assessment',
+      severity: 'high',
+      category: 'Device',
+      title: 'Device Evaluation: Possible Referral for CRT Eligibility Assessment',
+      detail: `LVEF ${lvef}%, ${hasLBBB ? 'LBBB morphology' : 'Non-LBBB conduction delay'} (QRS ${qrsDur || '—'} ms) documented on ${visitDate}.`,
+      action: 'Clinical evaluation recommended: Assess candidate for Cardiac Resynchronization Therapy (CRT-D / CRT-P) referral. Indication strength varies by morphology: LBBB with QRS ≥150ms is Class I-A; LBBB with QRS 130–149ms is Class I-B; Non-LBBB with QRS ≥150ms is Class IIa-B. Requires ≥3 months optimal GDMT and NYHA II–IV status.',
+      evidence: hasLBBB && (qrsDur ?? 0) >= 150 ? 'Class I-A, ESC 2023' : 'Class I-B / IIa-B, ESC 2023',
+      guidelineVersion: 'ESC 2021 Guidelines on Cardiac Pacing and Cardiac Resynchronization Therapy',
+      recordedDate: visitDate,
+      measuredValue: `LVEF ${lvef}%, QRS ${qrsDur || '—'} ms, ${hasBBB || 'Unknown morphology'}`,
+      checklist: [
+        'Evaluate QRS morphology (LBBB vs Non-LBBB) on 12-lead ECG',
+        'Verify QRS duration is measured accurately in sinus rhythm',
+        'Verify patient has received ≥3 months optimal GDMT',
+        'In Atrial Fibrillation: Strategy required to achieve >95% biventricular pacing',
+      ],
     })
   }
 
@@ -547,22 +714,24 @@ export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits
       const ratio = lastTwo[0].ntProBNP / lastTwo[1].ntProBNP
       if (ratio > 2) {
         alerts.push({
-          id: 'bnp-rising', severity: 'high', category: 'Monitoring',
-          title: 'NT-proBNP Rising Sharply',
-          detail: `NT-proBNP doubled: ${lastTwo[1].ntProBNP} → ${lastTwo[0].ntProBNP} pg/mL`,
-          action: 'Assess for decompensation. Intensify diuresis. Review medication adherence. Consider early admission.',
+          id: 'bnp-rising',
+          severity: 'high',
+          category: 'Monitoring',
+          title: 'Clinical Review Required: Significant NT-proBNP Elevation',
+          detail: `NT-proBNP rose from ${lastTwo[1].ntProBNP} pg/mL (${lastTwo[1].visitDate}) to ${lastTwo[0].ntProBNP} pg/mL (${lastTwo[0].visitDate}).`,
+          action: 'Clinical evaluation recommended: Evaluate for subclinical or overt congestion, medication non-adherence, acute ischemia, or renal worsening. Adjust diuretic regimen as clinically indicated.',
+          evidence: 'Class IIa-B, ESC 2023',
+          guidelineVersion: 'ESC 2023 Heart Failure Guidelines (Monitoring Section)',
+          recordedDate: lastTwo[0].visitDate,
+          measuredValue: `${lastTwo[0].ntProBNP} pg/mL`,
+          checklist: [
+            'Assess for clinical signs of systemic or pulmonary congestion',
+            'Review patient medication adherence and dietary sodium intake',
+            'Check renal function and electrolyte stability',
+          ],
         })
       }
     }
-  }
-
-  if (visit.ntProBNP && visit.ntProBNP > 5000 && visit.nyha && ['III', 'IV'].includes(visit.nyha)) {
-    alerts.push({
-      id: 'bnp-very-high', severity: 'high', category: 'Monitoring',
-      title: 'Very High NT-proBNP with NYHA III/IV',
-      detail: `NT-proBNP ${visit.ntProBNP} pg/mL with NYHA ${visit.nyha}`,
-      action: 'High-risk status. Consider hospital admission. Review diuretic regimen.',
-    })
   }
 
   if (visit.rhythm === 'AF' || visit.rhythm === 'Atrial Flutter') {
@@ -571,11 +740,23 @@ export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits
       const cha2 = calculateCHA2DS2VASc(patient, visit)
       if (cha2.score >= 2) {
         alerts.push({
-          id: 'af-no-oac', severity: 'critical', category: 'Safety',
-          title: 'AF Without Anticoagulation',
-          detail: `CHA₂DS₂-VASc ${cha2.score} — ${cha2.strokeRiskPctPerYear.toFixed(1)}%/yr stroke risk. No OAC prescribed.`,
-          action: 'Initiate NOAC immediately unless absolute contraindication. Document decision.',
+          id: 'af-no-oac',
+          severity: 'critical',
+          category: 'Safety',
+          title: 'Clinical Review Required: AF Without Anticoagulation',
+          detail: `CHA₂DS₂-VASc score ${cha2.score} (${cha2.strokeRiskPctPerYear.toFixed(1)}%/yr thromboembolic risk) documented on ${visitDate}. No oral anticoagulation active.`,
+          action: 'Clinical evaluation recommended: Assess thromboembolic risk vs bleeding risk (HAS-BLED). Consider initiation of direct oral anticoagulant (DOAC) or VKA unless contraindication documented. Require clinical acknowledgement.',
           evidence: 'Class I-A, ESC 2023',
+          guidelineVersion: 'ESC 2020/2023 Guidelines for the Diagnosis and Management of Atrial Fibrillation',
+          recordedDate: visitDate,
+          measuredValue: `CHA₂DS₂-VASc ${cha2.score} (${visit.rhythm})`,
+          checklist: [
+            'Calculate HAS-BLED score for modifiable bleeding risk factors',
+            'Verify renal function (eGFR) for DOAC dosing eligibility',
+            'Check for active bleeding, severe thrombocytopenia, or recent intracranial hemorrhage',
+            'Document clinical decision and patient counseling',
+          ],
+          requiresAcknowledgement: true,
         })
       }
     }
@@ -585,11 +766,21 @@ export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits
     const ironDeficient = visit.ferritin < 100 || (visit.ferritin < 300 && visit.transferrinSat < 20)
     if (ironDeficient && visit.ivIron?.prescribed !== 'Yes') {
       alerts.push({
-        id: 'iron-deficiency', severity: 'medium', category: 'GDMT',
-        title: 'Iron Deficiency — IV Iron Not Prescribed',
-        detail: `Hb ${visit.hb} g/dL, Ferritin ${visit.ferritin}, TSAT ${visit.transferrinSat}%`,
-        action: 'Consider IV ferric carboxymaltose. AFFIRM-AHF: reduced HF rehospitalisation by 26%.',
+        id: 'iron-deficiency',
+        severity: 'medium',
+        category: 'GDMT',
+        title: 'Clinical Review: Absolute or Functional Iron Deficiency',
+        detail: `Hb ${visit.hb} g/dL, Ferritin ${visit.ferritin} µg/L, TSAT ${visit.transferrinSat}% recorded on ${visitDate}.`,
+        action: 'Clinical evaluation recommended: Assess candidate for intravenous iron repletion (ferric carboxymaltose / ferric derisomaltose) to improve functional capacity and reduce heart failure hospitalization.',
         evidence: 'Class IIa-A, ESC 2023',
+        guidelineVersion: 'ESC 2023 Focused Update on Heart Failure Guidelines',
+        recordedDate: visitDate,
+        measuredValue: `Ferritin ${visit.ferritin} µg/L, TSAT ${visit.transferrinSat}%, Hb ${visit.hb} g/dL`,
+        checklist: [
+          'Verify serum ferritin <100 µg/L or ferritin 100–299 µg/L with TSAT <20%',
+          'Check for occult GI bleeding or other causes of anemia',
+          'Calculate iron deficit using Ganzoni formula or weight-based dosing chart',
+        ],
       })
     }
   }
