@@ -21,6 +21,7 @@ const TITLES: Record<string, string> = {
   '/admin':          'Administration',
   '/settings':       'Settings',
   '/languages':      'Language Master',
+  '/deo':            'DEO Data Entry Portal',
 }
 
 const BREADCRUMBS: Record<string, string[]> = {
@@ -35,6 +36,7 @@ const BREADCRUMBS: Record<string, string[]> = {
   '/alerts':         ['Home', 'Registry Tools', 'Clinical Alerts'],
   '/admin':          ['Home', 'Admin'],
   '/languages':      ['Home', 'Admin', 'Language Master'],
+  '/deo':            ['Home', 'Operator', 'DEO Portal'],
 }
 
 interface TopBarProps {

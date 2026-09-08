@@ -16,6 +16,7 @@ const NAV = [
     section: 'Clinical Workspace',
     items: [
       { href: '/',            label: 'Dashboard',             icon: LayoutDashboard },
+      { href: '/deo',         label: 'DEO Data Entry Desk',   icon: ClipboardList },
       { href: '/registry-home', label: 'Registry Home',       icon: LayoutGrid },
       { href: '/patients',    label: 'Patients Database',     icon: Users },
       { href: '/appointments', label: 'Appointments & Consents', icon: Calendar },
