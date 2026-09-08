@@ -467,28 +467,22 @@ export default function PatientDetailPage() {
             <CardHeader><CardTitle>Demographics</CardTitle></CardHeader>
             <CardBody className="space-y-2 text-sm">
               {([
-                ['Full Name', `${patient.firstName} ${patient.lastName}`],
-                ['Hospital ID (Column D)', (patient.mrn && patient.mrn !== '—') ? patient.mrn : 'Not Documented in Sheet'],
-                ['Registry Serial No. (Column A)', patient.srNo ? `Sr. No. ${patient.srNo}` : '—'],
-                ['ABHA ID', patient.abhaId ?? '—'],
-                ['Date of Birth', formatDate(patient.dob)],
+                ['Full Name', `${patient.firstName} ${patient.lastName}`.trim() || '—'],
+                ['Hospital ID (HID)', (patient.mrn && patient.mrn !== '—') ? patient.mrn : '—'],
+                ['Serial No.', patient.srNo ? String(patient.srNo) : '—'],
+                ['ABHA ID', patient.abhaId || '—'],
+                ['Date of Birth', patient.dob ? formatDate(patient.dob) : '—'],
                 ['Age', age ? `${age} years` : '—'],
-                ['Sex', patient.sex],
-                ['Occupation', patient.occupation ?? '—'],
-                ['Registry Enrollment', patient.registryId ? (REGISTRY_MAP[patient.registryId] || patient.registryId) : 'None (Unassigned)'],
+                ['Sex', patient.sex || '—'],
+                ['Occupation', patient.occupation || '—'],
+                ['Registry Enrollment', patient.registryId ? (REGISTRY_MAP[patient.registryId] || patient.registryId) : '—'],
                 ['Index Date', patient.indexDate ? formatDate(patient.indexDate) : '—'],
-                patient.registryId === 'hf' ? ['Index Etiology', [...(patient.indexEtiology || []), patient.indexEtiologyOther].filter(Boolean).join(', ') || '—'] : null,
-                ['Family History', [
-                  patient.familyHistoryPrematureCVD && 'Premature CVD',
-                  patient.familyHistorySuddenDeath && 'Sudden Cardiac Death',
-                  patient.familyHistoryCardiomyopathy && 'Cardiomyopathy',
-                  patient.familyHistoryGeneticHeart && 'Genetic Heart Disease'
-                ].filter(Boolean).join(', ') || 'None reported'],
-                ['Consent status', patient.consentStatus ?? 'Pending'],
-                ['Contact', patient.contact ?? '—'],
-                ['Email', patient.email ?? '—'],
-                ['Comorbidities', Array.isArray(patient.comorbidities) && patient.comorbidities.length > 0 ? patient.comorbidities.join(' · ') : 'None documented'],
-                ['Allergies', patient.allergies ?? '—'],
+                patient.registryId === 'hf' ? ['Index Etiology', (patient.indexEtiology && patient.indexEtiology.length > 0) ? patient.indexEtiology.join(', ') : '—'] : null,
+                ['Consent Status', patient.consentStatus || '—'],
+                ['Contact', patient.contact || '—'],
+                ['Email', patient.email || '—'],
+                ['Comorbidities', Array.isArray(patient.comorbidities) && patient.comorbidities.length > 0 ? patient.comorbidities.join(' · ') : '—'],
+                ['Allergies', patient.allergies || '—'],
               ].filter(Boolean) as [string, string][]).map(([k, v]) => (
                 <div key={k} className="flex justify-between py-1.5 border-b border-blue-500/5">
                   <span className="text-gray-500">{k}</span>
