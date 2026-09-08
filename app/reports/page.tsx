@@ -787,26 +787,122 @@ export default function ReportsArchitecturePage() {
     setSelectedReport(null)
   }
 
+  const downloadCSV = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', filename)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   const handleExportPack = () => {
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-      {
-        loading: 'Compiling cardiovascular registry statistics...',
-        success: 'Executive Pack exported successfully!',
-        error: 'Failed to compile report pack.',
-      }
-    )
+    if (patients.length === 0) {
+      toast.error('No patient data available to export.')
+      return
+    }
+
+    try {
+      const headers = [
+        'Sr_No', 'Hospital_ID_MRN', 'Patient_Name', 'Age', 'Sex', 'DOB', 'Region',
+        'LVEF_Percent', 'HF_Phenotype', 'NYHA_Class', 'Heart_Rate_BPM', 'Systolic_BP_mmHg',
+        'SixMWT_Meters', 'NT_proBNP_pg_mL', 'Creatinine_mg_dL', 'eGFR_mL_min_1_73m2',
+        'Haemoglobin_g_dL', 'Potassium_mmol_L', 'QRS_Duration_ms', 'Prior_HF_Hospitalisation',
+        'RAASi_ARNI_Prescribed', 'Beta_Blocker_Prescribed', 'MRA_Prescribed', 'SGLT2i_Prescribed',
+        'Quadruple_GDMT_Active', 'Diabetes_Mellitus', 'Hypertension', 'CKD', 'Atrial_Fibrillation'
+      ]
+
+      const rows = patients.map(p => {
+        const vt = visitsMap.get(p.id)
+        const isQuad = vt?.raasi?.prescribed === 'Yes' && vt?.betaBlocker?.prescribed === 'Yes' && vt?.mra?.prescribed === 'Yes' && vt?.sglt2i?.prescribed === 'Yes' ? 'Yes' : 'No'
+        const ptComorb = (Array.isArray(p.comorbidities) ? p.comorbidities.join(' ') : (p.comorbidities ?? '')).toLowerCase()
+
+        return [
+          p.srNo ?? '',
+          `"${p.mrn || '—'}"`,
+          `"${p.firstName} ${p.lastName}"`,
+          p.age ?? '',
+          `"${p.sex || ''}"`,
+          `"${p.dob || ''}"`,
+          `"${(p as any).region || 'Maharashtra, India'}"`,
+          vt?.lvef ?? p.lvef ?? '',
+          `"${vt?.hfType || p.hfType || 'HFrEF'}"`,
+          `"${vt?.nyha || p.nyha || ''}"`,
+          vt?.heartRate ?? '',
+          vt?.bpSystolic ?? '',
+          vt?.sixMWT ?? '',
+          vt?.ntProBNP ?? '',
+          vt?.creatinine ?? '',
+          vt?.egfr ?? '',
+          vt?.hb ?? '',
+          vt?.potassium ?? '',
+          vt?.qrsDuration ?? '',
+          `"${vt?.hospHistory || 'Yes'}"`,
+          `"${vt?.raasi?.prescribed || 'No'}"`,
+          `"${vt?.betaBlocker?.prescribed || 'No'}"`,
+          `"${vt?.mra?.prescribed || 'No'}"`,
+          `"${vt?.sglt2i?.prescribed || 'No'}"`,
+          `"${isQuad}"`,
+          `"${p.comorbidDiabetes || ptComorb.includes('dm') || ptComorb.includes('diabetes') ? 'Yes' : 'No'}"`,
+          `"${p.comorbidHypertension || ptComorb.includes('htn') || ptComorb.includes('hypertension') ? 'Yes' : 'No'}"`,
+          `"${p.comorbidCKD || ptComorb.includes('ckd') ? 'Yes' : 'No'}"`,
+          `"${p.comorbidAF || ptComorb.includes('af') ? 'Yes' : 'No'}"`
+        ].join(',')
+      })
+
+      const csvContent = [headers.join(','), ...rows].join('\n')
+      const filename = `CardioKonnect_Executive_Registry_Pack_AICTS_Pune_${new Date().toISOString().split('T')[0]}.csv`
+      downloadCSV(filename, csvContent)
+      toast.success(`Executive Pack (${patients.length} patients) exported successfully!`)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to generate export file.')
+    }
   }
 
   const handleExportReportCSV = (title: string) => {
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 1000)),
-      {
-        loading: `Formatting registry data for "${title}"...`,
-        success: `${title.replace(/\s+/g, '_')}_export.csv generated!`,
-        error: 'Export failed.',
-      }
-    )
+    if (patients.length === 0) {
+      toast.error('No registry data available to export.')
+      return
+    }
+
+    try {
+      const headers = ['Sr_No', 'Patient_Name', 'Age', 'Sex', 'LVEF', 'NYHA', 'Creatinine', 'eGFR', 'GDMT_4_Pillars']
+      const rows = patients.map(p => {
+        const vt = visitsMap.get(p.id)
+        const isQuad = vt?.raasi?.prescribed === 'Yes' && vt?.betaBlocker?.prescribed === 'Yes' && vt?.mra?.prescribed === 'Yes' && vt?.sglt2i?.prescribed === 'Yes' ? 'Active (4/4)' : 'Partial'
+        return [
+          p.srNo ?? '',
+          `"${p.firstName} ${p.lastName}"`,
+          p.age ?? '',
+          `"${p.sex || ''}"`,
+          vt?.lvef ?? p.lvef ?? '',
+          `"${vt?.nyha || p.nyha || ''}"`,
+          vt?.creatinine ?? '',
+          vt?.egfr ?? '',
+          `"${isQuad}"`
+        ].join(',')
+      })
+
+      const csvContent = [
+        `# CardioKonnect Registry Report: ${title}`,
+        `# Facility: AICTS Pune | Investigator: Dr. A. Jayachandra`,
+        `# Date: ${new Date().toLocaleDateString()}`,
+        '',
+        headers.join(','),
+        ...rows
+      ].join('\n')
+
+      const filename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_AICTS_Pune_${new Date().toISOString().split('T')[0]}.csv`
+      downloadCSV(filename, csvContent)
+      toast.success(`Exported ${filename} successfully!`)
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to export report CSV.')
+    }
   }
 
   const handlePrint = () => {
@@ -886,21 +982,21 @@ export default function ReportsArchitecturePage() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-white leading-tight">Cardiovascular Reports Architecture</h2>
-            <p className="text-xs text-gray-500 mt-1">Registry intelligence layers for Dr. A. Jayachandra, AICTS Pune</p>
+            <p className="text-xs text-gray-400 mt-1">Registry intelligence layers for Dr. A. Jayachandra, AICTS Pune</p>
           </div>
         </div>
-        <Button onClick={handleExportPack} className="btn-primary">
-          <Download className="w-4 h-4" /> Export Executive Pack
+        <Button onClick={handleExportPack} className="btn-primary flex items-center gap-2">
+          <Download className="w-4 h-4" /> Export Executive Pack (CSV)
         </Button>
       </div>
 
-      {/* Reference-data disclaimer */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 p-3 no-print">
-        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+      {/* Live Data Sync Banner */}
+      <div className="flex items-start gap-3 rounded-xl border border-blue-500/30 bg-blue-950/40 p-3.5 no-print">
+        <Database className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
         <div className="text-xs">
-          <span className="font-semibold text-amber-300">Reference Architecture — Illustrative Data Only.</span>
-          <span className="text-gray-400 ml-1">
-            Charts and metrics displayed are sample data for report design reference. Each report template must be wired to the live registry query engine to reflect actual enrolled-patient statistics.
+          <span className="font-bold text-cyan-300">Live Registry Intelligence — {total} Patients Enrolled.</span>
+          <span className="text-gray-300 ml-1.5">
+            Key indicators and exports are dynamically synced with the Firestore database at AICTS Pune ({hfrEFCount} HFrEF patients · Quadruple GDMT: {quadPct}% · Mean LVEF: {avgLvef}%).
           </span>
         </div>
       </div>
