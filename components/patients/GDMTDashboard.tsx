@@ -30,19 +30,19 @@ export default function GDMTDashboard({ patient, visits }: Props) {
     if (!latestVisit) return []
     const medSummary = {
       raasi: latestVisit.raasi?.prescribed === 'Yes'
-        ? { type: latestVisit.raasi.type, dose: latestVisit.raasi.dose }
+        ? { type: latestVisit.raasi.type, dose: latestVisit.raasi.dose, formulation: latestVisit.raasi.formulation, frequency: latestVisit.raasi.frequency }
         : undefined,
       betaBlocker: latestVisit.betaBlocker?.prescribed === 'Yes'
-        ? { type: latestVisit.betaBlocker.type, dose: latestVisit.betaBlocker.dose }
+        ? { type: latestVisit.betaBlocker.type, dose: latestVisit.betaBlocker.dose, formulation: latestVisit.betaBlocker.formulation, frequency: latestVisit.betaBlocker.frequency }
         : undefined,
       mra: latestVisit.mra?.prescribed === 'Yes'
-        ? { type: latestVisit.mra.type, dose: latestVisit.mra.dose }
+        ? { type: latestVisit.mra.type, dose: latestVisit.mra.dose, formulation: latestVisit.mra.formulation, frequency: latestVisit.mra.frequency }
         : undefined,
       sglt2i: latestVisit.sglt2i?.prescribed === 'Yes'
-        ? { type: latestVisit.sglt2i.type, dose: latestVisit.sglt2i.dose }
+        ? { type: latestVisit.sglt2i.type, dose: latestVisit.sglt2i.dose, formulation: latestVisit.sglt2i.formulation, frequency: latestVisit.sglt2i.frequency }
         : undefined,
       ivabradine: latestVisit.ivabradine?.prescribed === 'Yes'
-        ? { type: latestVisit.ivabradine.type, dose: latestVisit.ivabradine.dose }
+        ? { type: latestVisit.ivabradine.type, dose: latestVisit.ivabradine.dose, formulation: latestVisit.ivabradine.formulation, frequency: latestVisit.ivabradine.frequency }
         : undefined,
     }
     return targetDoseFromVisit(medSummary)
@@ -252,10 +252,10 @@ export default function GDMTDashboard({ patient, visits }: Props) {
         <div className="gradient-card bg-gradient-to-br from-blue-950/20 to-indigo-950/10 p-5 rounded-2xl border border-blue-500/15 flex items-center justify-between">
           <div className="space-y-2">
             <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">
-              {phenotype.isFourPillarsMandatory ? '4-Pillar GDMT Count' : 'SGLT2i & Core Therapy'}
+              {phenotype.isFourPillarsMandatory ? '4-Pillar HFrEF Target' : 'Core Class I Evidence-Based Therapy'}
             </p>
             <h4 className="text-3xl font-extrabold text-white">
-              {phenotype.isFourPillarsMandatory ? `${prescribedCount} / 4` : `${latestVisit.sglt2i?.prescribed === 'Yes' ? 'Active' : 'Missing'}`}
+              {phenotype.isFourPillarsMandatory ? `${prescribedCount} / 4` : `${latestVisit.sglt2i?.prescribed === 'Yes' ? 'SGLT2i Active' : 'SGLT2i Missing'}`}
             </h4>
             <p className="text-[11px] text-gray-400">
               {phenotype.isFourPillarsMandatory
@@ -263,17 +263,21 @@ export default function GDMTDashboard({ patient, visits }: Props) {
                   ? 'All 4 foundational pillars prescribed! 🎉'
                   : `${4 - prescribedCount} missing or documented contraindications`
                 : latestVisit.sglt2i?.prescribed === 'Yes'
-                ? 'SGLT2i prescribed (Class I in HFmrEF/HFpEF)'
-                : 'Consider SGLT2i for CV death / HF hospitalization reduction'}
+                ? 'Foundational Class I therapy active (ACC/AHA/HFSA)'
+                : 'Evaluate SGLT2i to reduce CV death & HF hospitalization'}
             </p>
           </div>
           <div className="relative w-16 h-16 flex items-center justify-center">
             <svg className="w-full h-full transform -rotate-90">
               <circle cx="32" cy="32" r="28" stroke="rgba(59, 130, 246, 0.1)" strokeWidth="5" fill="transparent" />
               <circle cx="32" cy="32" r="28" stroke="#3b82f6" strokeWidth="5" fill="transparent"
-                strokeDasharray={175} strokeDashoffset={175 - (prescribedCount / 4) * 175} />
+                strokeDasharray={175}
+                strokeDashoffset={175 - (phenotype.isFourPillarsMandatory ? (prescribedCount / 4) : (latestVisit.sglt2i?.prescribed === 'Yes' ? 1 : 0)) * 175}
+              />
             </svg>
-            <span className="absolute text-xs font-extrabold text-white font-mono">{(prescribedCount / 4) * 100}%</span>
+            <span className="absolute text-xs font-extrabold text-white font-mono">
+              {phenotype.isFourPillarsMandatory ? `${Math.round((prescribedCount / 4) * 100)}%` : `${latestVisit.sglt2i?.prescribed === 'Yes' ? '100' : '0'}%`}
+            </span>
           </div>
         </div>
 
@@ -312,60 +316,71 @@ export default function GDMTDashboard({ patient, visits }: Props) {
           <div className="space-y-1">
             <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Clinical Guideline Status</p>
             <h4 className="text-sm font-bold text-white">
-              {prescribedCount === 4
-                ? 'Optimal Guideline Adherence'
-                : phenotype.isFourPillarsMandatory
-                ? 'GDMT Optimization Target'
-                : 'Phenotype Protocol Active'}
+              {phenotype.isFourPillarsMandatory
+                ? (prescribedCount === 4 ? 'Optimal Guideline Adherence' : 'GDMT Optimization Target')
+                : (latestVisit.sglt2i?.prescribed === 'Yes' ? 'Class I Guideline Concordant' : 'SGLT2i Review Recommended')}
             </h4>
             <p className="text-[10px] text-gray-400 leading-normal">
               {phenotype.isFourPillarsMandatory
                 ? prescribedCount === 4
                   ? 'Excellent work. Maintain patient on target doses and audit regularly.'
                   : 'Titrate pillars up to target doses to improve long-term survival.'
-                : 'Tailor therapy to volume status, comorbidities, and SGLT2i coverage.'}
+                : 'HFmrEF/HFpEF: SGLT2i is Class 1. RAASi/MRA/BB are Class 2b / comorbidity-directed.'}
             </p>
           </div>
         </div>
 
       </div>
 
-      {/* The 4 Pillars Checklist Grid */}
+      {/* The Pillars / Medications Checklist Grid */}
       <div>
         <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-1.5">
           <Zap className="w-4 h-4 text-blue-400" />
-          {phenotype.isFourPillarsMandatory ? 'The 4 Pillars of HFrEF Therapy Checklist' : 'Medication & Decongestion Checklist'}
+          {phenotype.isFourPillarsMandatory ? 'The 4 Pillars of HFrEF Therapy Checklist' : 'Heart Failure Medication & Decongestion Checklist'}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {pillars.map(p => {
             const isPrescribed = p.entry?.prescribed === 'Yes'
             const isContraindicated = p.entry?.prescribed === 'No' && p.entry?.reason
             const isMissing = !isPrescribed && !isContraindicated
+            
+            // In HFmrEF/HFpEF, only SGLT2i is Class 1 mandatory. Others are Class 2b or comorbidity-specific.
+            const isMandatoryForPatient = phenotype.isFourPillarsMandatory || p.id === 'sglt2i'
 
             return (
               <div key={p.id} className={cn(
                 "p-4 rounded-xl border flex flex-col justify-between space-y-3 transition-all",
                 isPrescribed && "bg-emerald-950/5 border-emerald-500/20",
                 isContraindicated && "bg-amber-950/5 border-amber-500/20",
-                isMissing && "bg-rose-950/5 border-rose-500/20"
+                isMissing && isMandatoryForPatient && "bg-rose-950/5 border-rose-500/20",
+                isMissing && !isMandatoryForPatient && "bg-slate-900/30 border-blue-500/10"
               )}>
                 
                 {/* Header & Status Badge */}
                 <div className="flex justify-between items-start gap-4">
                   <div>
-                    <h4 className="text-sm font-bold text-white">{p.label}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-white">{p.label}</h4>
+                      {!isMandatoryForPatient && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-medium">
+                          Class 2b Consideration
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-gray-500 mt-0.5">{p.desc}</p>
                   </div>
                   <span className={cn(
                     "badge text-[9px] uppercase font-extrabold flex items-center gap-1",
                     isPrescribed && "badge-green",
                     isContraindicated && "badge-amber",
-                    isMissing && "badge-red"
+                    isMissing && isMandatoryForPatient && "badge-red",
+                    isMissing && !isMandatoryForPatient && "badge-gray"
                   )}>
                     {isPrescribed && <CheckCircle2 className="w-3 h-3" />}
                     {isContraindicated && <AlertTriangle className="w-3 h-3" />}
-                    {isMissing && <XCircle className="w-3 h-3" />}
-                    {isPrescribed ? 'Prescribed' : isContraindicated ? 'Contraindicated' : 'Missing'}
+                    {isMissing && isMandatoryForPatient && <XCircle className="w-3 h-3" />}
+                    {isMissing && !isMandatoryForPatient && <Info className="w-3 h-3" />}
+                    {isPrescribed ? 'Prescribed' : isContraindicated ? 'Contraindicated' : isMandatoryForPatient ? 'Missing' : 'Not Mandated'}
                   </span>
                 </div>
 
@@ -374,11 +389,15 @@ export default function GDMTDashboard({ patient, visits }: Props) {
                   {isPrescribed ? (
                     <div className="space-y-1">
                       <div className="flex justify-between font-semibold flex-wrap gap-1">
-                        <span className="text-blue-400 font-mono">{p.entry?.formulation || p.entry?.type || 'Generic molecule active'}</span>
-                        <span className="text-white font-mono">{p.entry?.dose || '—'} {p.entry?.frequency ? `(${p.entry.frequency})` : ''}</span>
+                        <span className="text-blue-400 font-mono">
+                          {p.entry?.formulation || p.entry?.genericDrug || p.entry?.type || 'Generic molecule active'}
+                        </span>
+                        <span className="text-white font-mono">
+                          {p.entry?.dose || '—'} {p.entry?.frequency ? `(${p.entry.frequency})` : ''} {p.entry?.route ? `· ${p.entry.route}` : ''}
+                        </span>
                       </div>
                       {p.achievement && (
-                        <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+                        <div className="flex justify-between text-[10px] text-gray-400 mt-1">
                           <span>Target: {p.achievement.targetDrugLabel}</span>
                           <span className={cn(
                             "font-bold font-mono",
@@ -394,13 +413,22 @@ export default function GDMTDashboard({ patient, visits }: Props) {
                         {p.entry?.reason}
                       </p>
                     </div>
-                  ) : (
+                  ) : isMandatoryForPatient ? (
                     <div className="space-y-1 text-rose-300">
                       <p className="font-semibold flex items-center gap-1">
                         <ShieldAlert className="w-3.5 h-3.5" /> High priority clinical gap!
                       </p>
                       <p className="text-[10px] text-gray-400 leading-normal">
-                        No documented prescription or contraindication. Evaluate for initiation of this pillar.
+                        No documented prescription or contraindication. Evaluate for initiation of this foundational pillar.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-gray-400">
+                      <p className="font-semibold text-gray-300 flex items-center gap-1">
+                        <Info className="w-3.5 h-3.5 text-blue-400" /> Non-mandatory for {phenotype.type}
+                      </p>
+                      <p className="text-[10px] text-gray-400 leading-normal">
+                        Class 2b consideration (ACC/AHA/HFSA). Not a mandatory deficit unless hypertension, CAD, or arrhythmia warrant initiation.
                       </p>
                     </div>
                   )}
@@ -411,8 +439,8 @@ export default function GDMTDashboard({ patient, visits }: Props) {
                   <div className="flex items-start gap-2 bg-rose-500/5 p-2 rounded-lg border border-rose-500/10 text-[10px] text-rose-300">
                     <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
                     <p>
-                      Dose is below 50% target (current: {p.entry?.dose} vs target: {p.achievement.targetDailyDoseMg}mg/day).
-                      Consider uptitration every 2 weeks if tolerated (check blood pressure, heart rate, and serum chemistries).
+                      Dose is below 50% target (current: {p.entry?.formulation || p.entry?.dose} vs {p.achievement.targetDrugLabel}).
+                      Consider uptitration every 2 weeks if tolerated (monitor blood pressure, heart rate, and serum chemistries).
                     </p>
                   </div>
                 )}

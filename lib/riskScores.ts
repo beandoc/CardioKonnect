@@ -41,9 +41,11 @@ export interface MAGGICInput {
 export interface MAGGICResult {
   score: number
   oneYearMortality: number    // fraction 0-1
-  threeYearMortality: number
-  fiveYearMortality: number   // approximated from published data
+  threeYearMortality: number  // fraction 0-1
+  fiveYearMortality?: number  // Deprecated/removed: unvalidated mathematical extrapolation
   riskCategory: 'Low' | 'Intermediate' | 'High'
+  isExternallyValidatedInIndia: boolean
+  validationDisclaimer: string
 }
 
 /**
@@ -164,11 +166,6 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
   const row = mortalityTable.find((r) => finalScore <= r.maxScore)!
   const { oneYr, threeYr } = row
 
-  // 5-year mortality estimated via exponential decay continuity
-  // from 3-year rate (used in absence of direct published 5yr table)
-  const lambda = -Math.log(1 - threeYr) / 3
-  const fiveYr = Math.min(0.99, 1 - Math.exp(-lambda * 5))
-
   const riskCategory: MAGGICResult['riskCategory'] =
     finalScore <= 20 ? 'Low' :
     finalScore <= 35 ? 'Intermediate' : 'High'
@@ -177,8 +174,9 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
     score: finalScore,
     oneYearMortality: parseFloat(oneYr.toFixed(3)),
     threeYearMortality: parseFloat(threeYr.toFixed(3)),
-    fiveYearMortality: parseFloat(fiveYr.toFixed(3)),
     riskCategory,
+    isExternallyValidatedInIndia: false,
+    validationDisclaimer: 'Published trial cohort derivation (Pocock et al. 2013). Not externally calibrated for Indian heart failure populations. Mathematical 5-year extrapolations are unvalidated and excluded from prediction.',
   }
 }
 
@@ -203,6 +201,8 @@ export interface CHARMResult {
   score: number
   category: 'Low' | 'Medium' | 'High'
   estimatedOneYearEventRate: number  // CV death or HF hospitalisation, fraction
+  isExternallyValidatedInIndia: boolean
+  validationDisclaimer: string
 }
 
 /**
@@ -258,6 +258,8 @@ export function calculateCHARM(input: CHARMInput): CHARMResult {
     score,
     category,
     estimatedOneYearEventRate: eventRate[category],
+    isExternallyValidatedInIndia: false,
+    validationDisclaimer: 'Derived from Western clinical trial cohort (CHARM, Pocock et al. 2006). Not externally calibrated for Indian heart failure cohorts.',
   }
 }
 
@@ -543,11 +545,11 @@ export function calculateTargetDoseAchievement(
  * Pass the MedEntry fields from a Visit.
  */
 export interface VisitMedSummary {
-  raasi?: { type?: string; dose?: string }    // type = drug name, dose = "X mg"
-  betaBlocker?: { type?: string; dose?: string }
-  mra?: { type?: string; dose?: string }
-  sglt2i?: { type?: string; dose?: string }
-  ivabradine?: { type?: string; dose?: string }
+  raasi?: { type?: string; dose?: string; formulation?: string; frequency?: string }
+  betaBlocker?: { type?: string; dose?: string; formulation?: string; frequency?: string }
+  mra?: { type?: string; dose?: string; formulation?: string; frequency?: string }
+  sglt2i?: { type?: string; dose?: string; formulation?: string; frequency?: string }
+  ivabradine?: { type?: string; dose?: string; formulation?: string; frequency?: string }
 }
 
 export function targetDoseFromVisit(
@@ -555,10 +557,34 @@ export function targetDoseFromVisit(
 ): TargetDoseResult[] {
   const inputs: MedicationDoseInput[] = []
 
-  const parseDose = (doseStr?: string): number => {
-    if (!doseStr) return 0
-    const match = doseStr.match(/(\d+(\.\d+)?)/)
-    return match ? parseFloat(match[1]) : 0
+  const parseDose = (med?: { type?: string; dose?: string; formulation?: string; frequency?: string }, drugClass?: DrugClass): number => {
+    if (!med) return 0
+    const str = `${med.formulation || ''} ${med.dose || ''}`.trim().toLowerCase()
+    if (!str) return 0
+
+    // Frequency multiplier: default 1 unless specified
+    const freq = (med.frequency || '').toUpperCase()
+    const mult = (freq === 'BD' || freq === 'BID' || str.includes('bd') || str.includes('bid')) ? 2
+      : (freq === 'TDS' || freq === 'TID' || str.includes('tds') || str.includes('tid')) ? 3
+      : 1
+
+    // ARNI (Sacubitril / Valsartan) dual formulation safety
+    if (drugClass === 'ARNI' || str.includes('sacubitril') || str.includes('entresto')) {
+      if (str.includes('97/103') || str.includes('97') || str.includes('200')) {
+        return (mult === 2 || !med.frequency) ? 400 : 200
+      }
+      if (str.includes('49/51') || str.includes('49') || str.includes('100')) {
+        return (mult === 2 || !med.frequency) ? 200 : 100
+      }
+      if (str.includes('24/26') || str.includes('24') || str.includes('50')) {
+        return (mult === 2 || !med.frequency) ? 100 : 50
+      }
+    }
+
+    const match = str.match(/(\d+(\.\d+)?)/)
+    const baseDose = match ? parseFloat(match[1]) : 0
+    // If user entered e.g. "Carvedilol 12.5 mg BD", total daily dose is 12.5 * 2 = 25 mg
+    return (freq === 'BD' || freq === 'BID') ? baseDose * 2 : baseDose
   }
 
   const inferClass = (type?: string): DrugClass => {
@@ -570,38 +596,39 @@ export function targetDoseFromVisit(
   }
 
   if (meds.raasi?.type) {
+    const dClass = inferClass(meds.raasi.type)
     inputs.push({
-      drugClass: inferClass(meds.raasi.type),
+      drugClass: dClass,
       drugName: meds.raasi.type,
-      currentDailyDoseMg: parseDose(meds.raasi.dose),
+      currentDailyDoseMg: parseDose(meds.raasi, dClass),
     })
   }
   if (meds.betaBlocker?.type) {
     inputs.push({
       drugClass: 'BetaBlocker',
       drugName: meds.betaBlocker.type,
-      currentDailyDoseMg: parseDose(meds.betaBlocker.dose),
+      currentDailyDoseMg: parseDose(meds.betaBlocker, 'BetaBlocker'),
     })
   }
   if (meds.mra?.type) {
     inputs.push({
       drugClass: 'MRA',
       drugName: meds.mra.type,
-      currentDailyDoseMg: parseDose(meds.mra.dose),
+      currentDailyDoseMg: parseDose(meds.mra, 'MRA'),
     })
   }
   if (meds.sglt2i?.type) {
     inputs.push({
       drugClass: 'SGLT2i',
       drugName: meds.sglt2i.type,
-      currentDailyDoseMg: parseDose(meds.sglt2i.dose),
+      currentDailyDoseMg: parseDose(meds.sglt2i, 'SGLT2i'),
     })
   }
   if (meds.ivabradine?.type) {
     inputs.push({
       drugClass: 'Ivabradine',
       drugName: meds.ivabradine.type,
-      currentDailyDoseMg: parseDose(meds.ivabradine.dose),
+      currentDailyDoseMg: parseDose(meds.ivabradine, 'Ivabradine'),
     })
   }
 

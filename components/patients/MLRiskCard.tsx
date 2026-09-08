@@ -75,9 +75,12 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
       <div className={cn('rounded-xl border p-3 flex items-center gap-3', colors.bg, colors.border)}>
         <Activity className={cn('w-5 h-5 flex-shrink-0', colors.text)} />
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-400">MAGGIC 1-Yr Mortality</p>
+          <p className="text-xs text-gray-400">Research Exploratory Risk</p>
           <p className={cn('text-sm font-bold', colors.text)}>{oneYrPct}% · {risk.riskCategory} Risk</p>
         </div>
+        <span className="text-[9px] bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded px-1.5 py-0.5 font-medium">
+          Research Only
+        </span>
         {criticalAlerts.length > 0 && (
           <span className="flex-shrink-0 text-[10px] bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-full px-2 py-0.5 font-semibold">
             {criticalAlerts.length} Critical
@@ -89,7 +92,7 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
 
   return (
     <div className="space-y-4">
-      {/* ── MAGGIC Heart Failure Prognosis Panel ─────────────────── */}
+      {/* ── Research-Only Exploratory Risk Summary Panel ─────────────────── */}
       <div className={cn('rounded-xl border p-5 shadow-lg relative overflow-hidden', colors.bg, colors.border)}>
         {/* Subtle background glow */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
@@ -100,15 +103,18 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
               <Activity className={cn('w-5 h-5', colors.text)} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-bold text-gray-300 uppercase tracking-wider">MAGGIC Heart Failure Risk</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs font-bold text-gray-300 uppercase tracking-wider">Research-Only Exploratory Risk Summary</p>
+                <span className="text-[9px] font-mono text-amber-300 bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-500/30 font-semibold">
+                  Research Use Only
+                </span>
                 <span className="text-[10px] font-mono text-gray-400 bg-slate-900/80 px-1.5 py-0.5 rounded border border-gray-700/40">
-                  {maggic.score} pts
+                  MAGGIC {maggic.score} pts
                 </span>
               </div>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className={cn('text-2xl font-extrabold', colors.text)}>{oneYrPct}%</span>
-                <span className="text-xs text-gray-400">1-year mortality</span>
+                <span className="text-xs text-gray-400">1-year trial mortality</span>
                 <span className="text-gray-600">·</span>
                 <span className="text-sm font-bold text-gray-300">{threeYrPct}%</span>
                 <span className="text-xs text-gray-400">3-year</span>
@@ -123,7 +129,7 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
             )}>
               {risk.riskCategory} Risk
             </span>
-            <p className="text-[10px] text-gray-400 mt-1.5 font-mono">Pocock et al. Eur Heart J</p>
+            <p className="text-[10px] text-amber-300/80 mt-1.5 font-mono">Uncalibrated in India</p>
           </div>
         </div>
 
@@ -143,16 +149,16 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
         {/* Validation Footnote & Full Suite Link */}
         <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-blue-500/10 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-            <p className="text-[11px] text-gray-400">
-              Validated Meta-Analysis Global Group in Chronic HF (MAGGIC) integer model
+            <Info className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+            <p className="text-[11px] text-amber-300/80">
+              Research-only exploratory summary (Pocock 2013). Not externally calibrated for Indian heart failure cohorts.
             </p>
           </div>
           <Link
             href={`/risk?patientId=${patient.id}&visitId=${visit.id}`}
             className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 transition-colors hover:underline"
           >
-            Open 10-Score Suite <ChevronRight className="w-3.5 h-3.5" />
+            Open Risk Suite <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>

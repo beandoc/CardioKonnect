@@ -385,38 +385,24 @@ function RiskCalculatorContent() {
     })
   }, [maggicAge, maggicLvef, maggicSbp, maggicBmi, maggicCr, crUnit, maggicNyha, maggicSex, maggicDiabetes, maggicSmoker, maggicCopd, maggicHfYears])
 
-  // Generate Kaplan-Meier survival curves
+  // Validated MAGGIC published endpoints (Pocock 2013 Table 3: 1-year and 3-year mortality)
+  // Mathematical 2, 4, 5-year interpolations and decay extrapolations are unvalidated and removed
   const survivalCurveData = useMemo(() => {
     return [
       {
-        year: 'Yr 0',
+        year: 'Baseline',
         current: 100,
         optimized: 100,
       },
       {
-        year: 'Yr 1',
+        year: '1-Year (Pub)',
         current: Math.round((1 - maggicResult.oneYearMortality) * 100),
         optimized: Math.round((1 - maggicResultOpt.oneYearMortality) * 100),
       },
       {
-        year: 'Yr 2',
-        current: Math.round(((1 - maggicResult.oneYearMortality) + (1 - maggicResult.threeYearMortality)) / 2 * 100),
-        optimized: Math.round(((1 - maggicResultOpt.oneYearMortality) + (1 - maggicResultOpt.threeYearMortality)) / 2 * 100),
-      },
-      {
-        year: 'Yr 3',
+        year: '3-Year (Pub)',
         current: Math.round((1 - maggicResult.threeYearMortality) * 100),
         optimized: Math.round((1 - maggicResultOpt.threeYearMortality) * 100),
-      },
-      {
-        year: 'Yr 4',
-        current: Math.round(((1 - maggicResult.threeYearMortality) + (1 - maggicResult.fiveYearMortality)) / 2 * 100),
-        optimized: Math.round(((1 - maggicResultOpt.threeYearMortality) + (1 - maggicResultOpt.fiveYearMortality)) / 2 * 100),
-      },
-      {
-        year: 'Yr 5',
-        current: Math.round((1 - maggicResult.fiveYearMortality) * 100),
-        optimized: Math.round((1 - maggicResultOpt.fiveYearMortality) * 100),
       },
     ]
   }, [maggicResult, maggicResultOpt])
@@ -1424,13 +1410,22 @@ function RiskCalculatorContent() {
 
                   <div className="grid grid-cols-2 gap-3 text-center text-xs border-t border-blue-500/5 pt-3">
                     <div className="bg-slate-900/40 p-2 rounded border border-gray-800/40">
-                      <p className="text-[10px] text-gray-500">Current 3-Yr Mortality</p>
+                      <p className="text-[10px] text-gray-400">Current 3-Yr Mortality</p>
                       <p className="text-sm font-bold text-violet-400">{(maggicResult.threeYearMortality * 100).toFixed(1)}%</p>
                     </div>
                     <div className="bg-slate-900/40 p-2 rounded border border-gray-800/40">
-                      <p className="text-[10px] text-gray-500">Optimized 3-Yr Mortality</p>
+                      <p className="text-[10px] text-gray-400">Optimized 3-Yr Mortality</p>
                       <p className="text-sm font-bold text-emerald-400">{(maggicResultOpt.threeYearMortality * 100).toFixed(1)}%</p>
                     </div>
+                  </div>
+
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-200 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5 text-amber-300">
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" /> Research Reference (Uncalibrated in India)
+                    </p>
+                    <p className="text-gray-300 leading-normal">
+                      The MAGGIC model reflects historic Western trial cohorts (Pocock et al. 2013). This model has not undergone external prospective calibration in Indian ADHF or chronic HF cohorts, and only validates 1-year and 3-year endpoints. Mathematical 5-year extrapolations are unvalidated and excluded.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1474,18 +1469,14 @@ function RiskCalculatorContent() {
                     <p className="text-3xl font-extrabold text-white mt-1">{hfapeffResult.score} <span className="text-sm font-normal text-gray-400">/ 6</span></p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] uppercase text-gray-400">Probability Group</p>
-                    <span className={cn(
-                      "badge mt-1 text-[11px]",
-                      hfapeffResult.score >= 5 ? 'badge-red' : hfapeffResult.score >= 2 ? 'badge-amber' : 'badge-green'
-                    )}>
-                      {hfapeffResult.score >= 5 ? 'High Probability' : hfapeffResult.score >= 2 ? 'Intermediate' : 'Low Probability'}
+                    <p className="text-[10px] uppercase text-gray-400">Echocardiographic & Biomarker Domain</p>
+                    <span className="badge badge-blue mt-1 text-[11px]">
+                      {hfapeffResult.score >= 5 ? 'High (Rule In)' : hfapeffResult.score <= 1 ? 'Low (Rule Out)' : 'Intermediate (Step 3)'}
                     </span>
                   </div>
                 </div>
 
-                <div className="space-y-3 bg-slate-900/30 p-4 rounded-xl border border-blue-500/10 text-xs text-gray-300 space-y-2">
-                  <p className="font-semibold text-white uppercase tracking-wider text-[10px] mb-2 border-b border-gray-800 pb-1">Domain Points Breakdown</p>
+                <div className="p-3 bg-slate-900/60 rounded-xl border border-blue-500/10 text-xs space-y-1.5 text-gray-300">
                   <div className="flex justify-between py-0.5">
                     <span>Functional Domain (E/e', e', GLS, RVSP)</span>
                     <span className="font-bold text-white">{hfapeffResult.functionalPoints} / 2 pts</span>
@@ -1543,6 +1534,15 @@ function RiskCalculatorContent() {
                   <div className="progress-track">
                     <div className="progress-fill bg-rose-500" style={{ width: `${charmResult.estimatedOneYearEventRate * 100}%` }} />
                   </div>
+                </div>
+
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-200 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-300">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" /> Research Reference (Uncalibrated in India)
+                  </p>
+                  <p className="text-gray-300 leading-normal">
+                    {charmResult.validationDisclaimer}
+                  </p>
                 </div>
               </div>
             )}

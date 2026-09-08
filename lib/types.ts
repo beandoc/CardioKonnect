@@ -54,14 +54,16 @@ export interface SocioeconomicData {
 
 export interface MedEntry {
   prescribed: Prescribed
+  genericDrug?: string            // e.g., Sacubitril/Valsartan, Dapagliflozin, Bisoprolol
   type?: string
-  formulation?: string // e.g., Sacubitril 24mg + Valsartan 26mg (50mg)
+  formulation?: string            // e.g., Sacubitril 24mg + Valsartan 26mg (50mg salt), Metoprolol succinate ER
   dose?: string
   frequency?: 'OD' | 'BD' | 'TDS' | 'QID' | 'PRN' | string
   route?: 'Oral' | 'IV' | 'Subcutaneous' | 'Inhaled' | string
   reason?: NonPrescriptionReason  // reason if not prescribed
   startDate?: string
   stopDate?: string
+  changeDate?: string
   changeReason?: string
   certainty?: DataCertainty
 }
