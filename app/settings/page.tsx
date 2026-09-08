@@ -20,8 +20,8 @@ interface ProviderRow {
 
 const INITIAL_PROVIDERS: ProviderRow[] = [
   { id: '1', name: 'Dr. A. Jayachandra', email: 'jayachandra.a@aicts.in', role: 'RegistryOwner', status: 'Active', addedOn: '01/01/2026' },
-  { id: '2', name: 'Dr. Srinivas Murthy', email: 's.murthy@aicts.in', role: 'Provider', status: 'Active', addedOn: '15/02/2026' },
-  { id: '3', name: 'Dr. K. Raghavan', email: 'k.raghavan@aicts.in', role: 'Provider', status: 'Active', addedOn: '10/03/2026' }
+  { id: '2', name: 'Dr. Nitin Sharma', email: 'nitin.sharma@aicts.in', role: 'Provider', status: 'Active', addedOn: '15/01/2026' },
+  { id: '3', name: 'Dr. Arshdeep', email: 'arshdeep@aicts.in', role: 'Senior Resident', status: 'Active', addedOn: '01/02/2026' }
 ]
 
 // Types and data from Logs list
