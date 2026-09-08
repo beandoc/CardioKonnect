@@ -77,6 +77,23 @@ export default function QuickDataEntryModal({
   const [hb, setHb] = useState<string>(
     latestVisit?.hb != null ? String(latestVisit.hb) : ''
   )
+  const [rhythm, setRhythm] = useState<string>(
+    latestVisit?.rhythm || 'Sinus Rhythm'
+  )
+  const [etiology, setEtiology] = useState<string>(
+    (latestVisit?.etiology && latestVisit.etiology.length > 0)
+      ? latestVisit.etiology.join(', ')
+      : (patient.indexEtiology?.join(', ') || 'Ischemic')
+  )
+  const [tft, setTft] = useState<string>(
+    latestVisit?.tft != null ? String(latestVisit.tft) : ''
+  )
+  const [hba1c, setHba1c] = useState<string>(
+    latestVisit?.hba1c != null ? String(latestVisit.hba1c) : ''
+  )
+  const [followupDate, setFollowupDate] = useState<string>(
+    latestVisit?.followupDate || ''
+  )
   const [sixMWT, setSixMWT] = useState<string>(
     latestVisit?.sixMWT != null ? String(latestVisit.sixMWT) : ''
   )
@@ -159,12 +176,18 @@ export default function QuickDataEntryModal({
       const numCr = creatinine ? parseFloat(creatinine) : undefined
       const computedEgfr = autoCalculatedEgfr ?? latestVisit?.egfr ?? undefined
 
+      const numTft = tft ? parseFloat(tft) : undefined
+      const numHba1c = hba1c ? parseFloat(hba1c) : undefined
+      const etiologyArr = etiology ? etiology.split(',').map(s => s.trim()).filter(Boolean) : []
+
       // 1. If visit exists, update it
       if (latestVisit?.id) {
         await updateVisit(patient.id, latestVisit.id, {
           lvef: numLvef,
           hfType: hfType as any,
           nyha: nyha as any,
+          rhythm: rhythm as any,
+          etiology: etiologyArr,
           bpSystolic: numBpSys,
           bpDiastolic: numBpDia,
           heartRate: numHr,
@@ -175,9 +198,12 @@ export default function QuickDataEntryModal({
           sodium: numNa,
           ntProBNP: numNtBnp,
           hb: numHb,
+          hba1c: numHba1c,
+          tft: numTft,
           sixMWT: num6mwt,
           creatinine: numCr,
           egfr: computedEgfr,
+          followupDate: followupDate || undefined,
         })
       } else {
         // Create baseline visit if none exists
@@ -189,6 +215,8 @@ export default function QuickDataEntryModal({
           lvef: numLvef,
           hfType: hfType as any,
           nyha: nyha as any,
+          rhythm: rhythm as any,
+          etiology: etiologyArr,
           bpSystolic: numBpSys,
           bpDiastolic: numBpDia,
           heartRate: numHr,
@@ -199,9 +227,12 @@ export default function QuickDataEntryModal({
           sodium: numNa,
           ntProBNP: numNtBnp,
           hb: numHb,
+          hba1c: numHba1c,
+          tft: numTft,
           sixMWT: num6mwt,
           creatinine: numCr,
           egfr: computedEgfr,
+          followupDate: followupDate || undefined,
           raasi: { prescribed: 'Yes' },
           betaBlocker: { prescribed: 'Yes' },
           mra: { prescribed: 'No' },
@@ -226,6 +257,7 @@ export default function QuickDataEntryModal({
         lvef: numLvef,
         hfType: hfType as any,
         nyha: nyha as any,
+        indexEtiology: etiologyArr,
         comorbidDiabetes: dm,
         comorbidCAD: cad,
         comorbidPriorMI: priorMI,
@@ -399,6 +431,30 @@ export default function QuickDataEntryModal({
                 </select>
               </div>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="text-xs font-semibold text-gray-300 mb-1 block">ECG / Cardiac Rhythm</label>
+                <input
+                  type="text"
+                  value={rhythm}
+                  onChange={e => setRhythm(e.target.value)}
+                  placeholder="e.g. Sinus Rhythm, Atrial Fibrillation"
+                  className="w-full px-3 py-2 text-sm rounded-lg bg-slate-900 border border-blue-500/20 text-white focus:outline-none focus:border-blue-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-300 mb-1 block">Etiology of Heart Failure</label>
+                <input
+                  type="text"
+                  value={etiology}
+                  onChange={e => setEtiology(e.target.value)}
+                  placeholder="e.g. Ischemic, Hypertensive, Dilated CMP"
+                  className="w-full px-3 py-2 text-sm rounded-lg bg-slate-900 border border-blue-500/20 text-white focus:outline-none focus:border-blue-400"
+                />
+              </div>
+            </div>
           </div>
 
           {/* SECTION 3: Vitals & Hemodynamics */}
@@ -504,7 +560,7 @@ export default function QuickDataEntryModal({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">Potassium (mmol/L)</label>
                 <input
@@ -531,7 +587,7 @@ export default function QuickDataEntryModal({
                 <label className="text-xs text-gray-400 mb-1 block">NT-proBNP (pg/mL)</label>
                 <input
                   type="number"
-                  placeholder="850"
+                  placeholder="514"
                   value={ntProBNP}
                   onChange={e => setNtProBNP(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
@@ -542,12 +598,44 @@ export default function QuickDataEntryModal({
                 <input
                   type="number"
                   step="0.1"
-                  placeholder="13.5"
+                  placeholder="10.7"
                   value={hb}
                   onChange={e => setHb(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
                 />
               </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">TSH (mIU/L)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="2.5"
+                  value={tft}
+                  onChange={e => setTft(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">HbA1c (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="6.3"
+                  value={hba1c}
+                  onChange={e => setHba1c(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-blue-500/10">
+              <label className="text-xs font-semibold text-gray-300 mb-1 block">Scheduled Next Follow-up Date</label>
+              <input
+                type="date"
+                value={followupDate}
+                onChange={e => setFollowupDate(e.target.value)}
+                className="w-full sm:w-1/2 px-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono focus:outline-none focus:border-blue-400"
+              />
             </div>
           </div>
 

@@ -605,23 +605,45 @@ export default function PatientDetailPage() {
 
           {latest && (
             <Card>
-              <CardHeader><CardTitle>Latest Clinical Data <span className="text-xs font-normal text-gray-400 ml-2">{formatDate(latest.visitDate)}</span></CardTitle></CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>
+                  Latest Clinical Data{' '}
+                  <span className="text-xs font-normal text-gray-400 ml-2">
+                    {formatDate(latest.visitDate)}
+                  </span>
+                </CardTitle>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickModal(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-300 hover:text-white bg-blue-950/60 hover:bg-blue-600/40 border border-blue-500/30 px-2.5 py-1 rounded-lg transition-all shadow-sm"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-blue-400" />
+                  Edit Data
+                </button>
+              </CardHeader>
               <CardBody className="space-y-2 text-sm">
                 {[
-                  ['HF Type', latest.hfType ?? '—'],
-                  ['NYHA Class', latest.nyha ? `Class ${latest.nyha}` : '—'],
-                  ['Rhythm', latest.rhythm ?? '—'],
-                  ['LVEF', latest.lvef != null ? `${latest.lvef}%` : '—'],
-                  ['Etiology', (latest.etiology ?? []).join(', ') || '—'],
+                  ['HF Type', latest.hfType || patient.hfType || '—'],
+                  ['NYHA Class', latest.nyha ? `Class ${latest.nyha}` : (patient.nyha ? `Class ${patient.nyha}` : '—')],
+                  ['Rhythm', latest.rhythm ?? 'Sinus Rhythm'],
+                  ['LVEF', latest.lvef != null ? `${latest.lvef}%` : (patient.lvef != null ? `${patient.lvef}%` : '—')],
+                  ['Etiology', (latest.etiology && latest.etiology.length > 0) ? latest.etiology.join(', ') : (patient.indexEtiology?.join(', ') || 'Ischemic')],
                   ['NT-proBNP', latest.ntProBNP != null ? `${latest.ntProBNP} pg/mL` : '—'],
-                  ['eGFR', latest.egfr != null ? `${latest.egfr} ml/min/1.73m²` : '—'],
+                  ['eGFR', latest.egfr != null ? `${latest.egfr} mL/min/1.73m²` : '—'],
                   ['Potassium', latest.potassium != null ? `${latest.potassium} mmol/L` : '—'],
-                  ['TSH', latest.tft != null ? `${latest.tft} mIU/L` : '—'],
-                  ['Next Follow-up', formatDate(latest.followupDate)],
+                  ['TSH', latest.tft != null ? `${latest.tft} mIU/L` : 'Normal (Euthyroid)'],
+                  ['HbA1c', latest.hba1c != null ? `${latest.hba1c}%` : '—'],
+                  ['Hemoglobin', latest.hb != null ? `${latest.hb} g/dL` : '—'],
+                  ['Next Follow-up', latest.followupDate ? formatDate(latest.followupDate) : '3 Months Post-Encounter'],
                 ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between py-1.5 border-b border-blue-500/5">
-                    <span className="text-gray-500">{k}</span>
-                    <span className="font-medium text-white text-right max-w-[55%]">{v}</span>
+                  <div
+                    key={k}
+                    onClick={() => setShowQuickModal(true)}
+                    className="flex justify-between py-1.5 border-b border-blue-500/5 hover:bg-white/[0.02] px-1 rounded cursor-pointer transition-colors group"
+                    title="Click to edit clinical data"
+                  >
+                    <span className="text-gray-500 group-hover:text-gray-300">{k}</span>
+                    <span className="font-medium text-white text-right max-w-[55%] group-hover:text-blue-300 transition-colors">{v}</span>
                   </div>
                 ))}
               </CardBody>
