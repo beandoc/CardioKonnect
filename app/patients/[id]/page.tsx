@@ -632,9 +632,9 @@ export default function PatientDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowQuickModal(true)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-300 hover:text-white bg-blue-950/60 hover:bg-blue-600/40 border border-blue-500/30 px-2.5 py-1 rounded-lg transition-all shadow-sm"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-600/40 border border-blue-200 dark:border-blue-500/30 px-2.5 py-1 rounded-lg transition-all shadow-sm"
                 >
-                  <Edit3 className="w-3.5 h-3.5 text-blue-400" />
+                  <Edit3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   Edit Data
                 </button>
               </CardHeader>
@@ -656,11 +656,11 @@ export default function PatientDetailPage() {
                   <div
                     key={k}
                     onClick={() => setShowQuickModal(true)}
-                    className="flex justify-between py-1.5 border-b border-blue-500/5 hover:bg-white/[0.02] px-1 rounded cursor-pointer transition-colors group"
+                    className="flex justify-between py-1.5 border-b border-slate-100 dark:border-blue-500/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] px-1 rounded cursor-pointer transition-colors group"
                     title="Click to edit clinical data"
                   >
-                    <span className="text-gray-500 group-hover:text-gray-300">{k}</span>
-                    <span className="font-medium text-white text-right max-w-[55%] group-hover:text-blue-300 transition-colors">{v}</span>
+                    <span className="text-slate-600 dark:text-gray-400 font-medium group-hover:text-slate-900 dark:group-hover:text-gray-300">{k}</span>
+                    <span className="font-bold text-slate-900 dark:text-white text-right max-w-[55%] group-hover:text-blue-600 dark:group-hover:text-blue-300 transition-colors">{v}</span>
                   </div>
                 ))}
               </CardBody>
@@ -683,25 +683,25 @@ export default function PatientDetailPage() {
                     { label: 'IV Iron', med: latest.ivIron },
                   ].map(({ label, med }) => (
                     <div key={label} className={cn(
-                      'p-3 rounded-lg border text-xs bg-gray-800/40 border-blue-500/10'
+                      'p-3.5 rounded-xl border text-xs bg-slate-50 dark:bg-gray-800/40 border-slate-200 dark:border-blue-500/10 shadow-sm transition-all hover:border-blue-400/40'
                     )}>
-                      <p className="font-semibold text-white">{label}</p>
+                      <p className="font-bold text-slate-900 dark:text-white text-xs">{label}</p>
                       {med?.prescribed === 'Yes' ? (
                         <>
-                          {med.type && <p className="text-gray-400 mt-0.5">{med.type}</p>}
-                          {med.dose && <p className="font-semibold text-blue-400 mt-1">{med.dose}</p>}
-                          {med.startDate && <p className="text-[10px] text-gray-500 mt-1">Start: {formatDate(med.startDate)}</p>}
-                          {med.changeReason && <p className="text-[10px] text-amber-400 mt-0.5 italic">Note: {med.changeReason}</p>}
+                          {med.type && <p className="text-slate-700 dark:text-gray-300 font-medium mt-1 text-[11px]">{med.type}</p>}
+                          {med.dose && <p className="font-bold text-blue-700 dark:text-blue-400 mt-1 text-xs">{med.dose}</p>}
+                          {med.startDate && <p className="text-[10px] text-slate-500 dark:text-gray-400 mt-1 font-medium">Start: {formatDate(med.startDate)}</p>}
+                          {med.changeReason && <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5 italic">Note: {med.changeReason}</p>}
                         </>
                       ) : med?.prescribed === 'No' ? (
                         <>
-                          <p className="text-gray-500 mt-1">Not prescribed</p>
-                          {med.reason && <p className="text-[10px] text-amber-500 mt-0.5">Reason: {med.reason}</p>}
-                          {med.stopDate && <p className="text-[10px] text-gray-500 mt-1">Stop: {formatDate(med.stopDate)}</p>}
-                          {med.changeReason && <p className="text-[10px] text-amber-400 mt-0.5 italic">Note: {med.changeReason}</p>}
+                          <p className="text-slate-500 dark:text-gray-400 mt-1 font-medium">Not prescribed</p>
+                          {med.reason && <p className="text-[10px] text-amber-700 dark:text-amber-500 mt-0.5">Reason: {med.reason}</p>}
+                          {med.stopDate && <p className="text-[10px] text-slate-500 dark:text-gray-400 mt-1">Stop: {formatDate(med.stopDate)}</p>}
+                          {med.changeReason && <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5 italic">Note: {med.changeReason}</p>}
                         </>
                       ) : (
-                        <p className="text-gray-600 mt-1">Not recorded</p>
+                        <p className="text-slate-400 dark:text-gray-500 mt-1">Not recorded</p>
                       )}
                     </div>
                   ))}

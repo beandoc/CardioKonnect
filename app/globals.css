@@ -165,19 +165,21 @@ body.light main .avatar * {
 }
 
 /* ── Preserve Dark containers (forces light text inside dark-background elements in light theme) ── */
+body.light main .preserve-dark,
 body.light main .preserve-dark h1,
 body.light main .preserve-dark h2,
 body.light main .preserve-dark h3,
 body.light main .preserve-dark h4,
+body.light main .preserve-dark p,
+body.light main .preserve-dark span,
+body.light main .preserve-dark div,
 body.light main .preserve-dark .text-white {
   color: #ffffff !important;
 }
-body.light main .preserve-dark p,
-body.light main .preserve-dark span,
-body.light main .preserve-dark li,
+body.light main .preserve-dark .text-white\/80,
 body.light main .preserve-dark .text-gray-300,
 body.light main .preserve-dark .text-gray-400 {
-  color: rgba(255, 255, 255, 0.90) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
 }
 
 /* ── Custom hero gradient for dashboard ── */

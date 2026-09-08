@@ -188,7 +188,7 @@ function CompletionRing({ pct, color }: { pct: number; color: string }) {
   const dash = (pct / 100) * circ
   return (
     <svg width="88" height="88" viewBox="0 0 88 88" className="flex-shrink-0">
-      <circle cx="44" cy="44" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+      <circle cx="44" cy="44" r={r} fill="none" stroke="currentColor" className="text-slate-200 dark:text-white/10" strokeWidth="6" />
       <circle
         cx="44" cy="44" r={r}
         fill="none"
@@ -199,20 +199,20 @@ function CompletionRing({ pct, color }: { pct: number; color: string }) {
         transform="rotate(-90 44 44)"
         style={{ filter: `drop-shadow(0 0 4px ${color}88)` }}
       />
-      <text x="44" y="40" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">{pct}%</text>
-      <text x="44" y="54" textAnchor="middle" fill="rgba(148,163,184,0.65)" fontSize="8">Complete</text>
+      <text x="44" y="40" textAnchor="middle" className="fill-slate-900 dark:fill-white font-extrabold text-[15px]">{pct}%</text>
+      <text x="44" y="54" textAnchor="middle" className="fill-slate-600 dark:fill-slate-400 text-[9px] font-bold">Complete</text>
     </svg>
   )
 }
 
 function StatusBadge({ status }: { status: RegistryCard['status'] }) {
   const styles: Record<string, string> = {
-    Active:    'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
-    Enrolling: 'bg-blue-500/15 text-blue-400 border-blue-500/25',
-    Suspended: 'bg-red-500/15 text-red-400 border-red-500/25',
+    Active:    'bg-emerald-500/20 text-emerald-100 border-emerald-400/40 font-bold',
+    Enrolling: 'bg-blue-500/20 text-blue-100 border-blue-400/40 font-bold',
+    Suspended: 'bg-slate-900/40 text-white/90 border-white/20 font-bold',
   }
   return (
-    <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-medium', styles[status])}>
+    <span className={cn('text-[10px] px-2 py-0.5 rounded-full border shadow-sm backdrop-blur-sm', styles[status])}>
       {status}
     </span>
   )
@@ -411,10 +411,10 @@ export default function RegistryHomePage() {
             style={{ border: `1px solid ${reg.borderColor}` }}
           >
             {/* Card header gradient strip */}
-            <div className="px-5 py-4 flex items-center justify-between" style={{ background: reg.gradient }}>
+            <div className="px-5 py-4 flex items-center justify-between preserve-dark shadow-sm" style={{ background: reg.gradient }}>
               <div className="min-w-0">
-                <p className="text-sm font-bold text-white truncate">{reg.name}</p>
-                <p className="text-[11px] mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.75)' }}>{reg.shortDesc}</p>
+                <p className="text-sm font-bold text-white truncate drop-shadow-sm">{reg.name}</p>
+                <p className="text-[11px] mt-0.5 truncate text-white/90 font-medium">{reg.shortDesc}</p>
               </div>
               <StatusBadge status={reg.status} />
             </div>
@@ -428,13 +428,13 @@ export default function RegistryHomePage() {
                   {reg.categories.map(cat => (
                     <div key={cat.name} className="space-y-0.5">
                       <div className="flex justify-between items-center">
-                        <span className="text-[10px] text-gray-400 truncate">{cat.name}</span>
-                        <span className="text-[10px] font-medium text-white ml-2">{cat.pct}%</span>
+                        <span className="text-[10px] text-slate-600 dark:text-gray-400 font-medium truncate">{cat.name}</span>
+                        <span className="text-[10px] font-bold text-slate-800 dark:text-white ml-2">{cat.pct}%</span>
                       </div>
-                      <div className="h-1 rounded-full bg-white/[0.07] overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-white/[0.07] overflow-hidden border border-slate-200/50 dark:border-transparent">
                         <div
                           className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${cat.pct}%`, background: reg.ringColor, opacity: cat.pct < 70 ? 0.7 : 1 }}
+                          style={{ width: `${cat.pct}%`, background: reg.ringColor, opacity: cat.pct < 70 ? 0.8 : 1 }}
                         />
                       </div>
                     </div>
@@ -443,32 +443,32 @@ export default function RegistryHomePage() {
               </div>
 
               {/* Quick stats row */}
-              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/[0.05]">
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-white/[0.05]">
                 {reg.quickStats.map(qs => (
                   <div key={qs.label} className="text-center">
-                    <p className="text-sm font-bold text-white">{qs.value}</p>
-                    <p className="text-[9px] text-gray-500 leading-tight mt-0.5">{qs.label}</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{qs.value}</p>
+                    <p className="text-[9px] text-slate-500 dark:text-gray-400 font-medium leading-tight mt-0.5">{qs.label}</p>
                   </div>
                 ))}
               </div>
 
               {/* Footer row */}
-              <div className="flex items-center justify-between pt-1 border-t border-white/[0.05]">
-                <div className="flex items-center gap-3 text-[10px] text-gray-500">
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-white/[0.05]">
+                <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-gray-400 font-medium">
                   <span className="flex items-center gap-1">
-                    <Users size={11} /> {reg.patients.toLocaleString()} pts
+                    <Users size={11} className="text-slate-400 dark:text-gray-500" /> {reg.patients.toLocaleString()} pts
                   </span>
                   <span className="flex items-center gap-1">
-                    <Clock size={11} /> {lastEntryLabel(reg.lastEntryDaysAgo)}
+                    <Clock size={11} className="text-slate-400 dark:text-gray-500" /> {lastEntryLabel(reg.lastEntryDaysAgo)}
                   </span>
-                  <span className="flex items-center gap-1 text-emerald-500/70">
-                    <TrendingUp size={11} /> +{reg.newThisMonth} this month
+                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <TrendingUp size={11} /> +{reg.newThisMonth}
                   </span>
                 </div>
                 <Link
                   href={`/registry-home/${reg.id}`}
-                  className="flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 rounded-lg transition-all"
-                  style={{ background: `${reg.ringColor}20`, color: reg.ringColor, border: `1px solid ${reg.ringColor}30` }}
+                  className="flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                  style={{ background: `${reg.ringColor}15`, color: reg.ringColor, border: `1px solid ${reg.ringColor}40` }}
                 >
                   Analytics <ArrowRight size={11} />
                 </Link>
