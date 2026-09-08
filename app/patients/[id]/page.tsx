@@ -293,10 +293,10 @@ export default function PatientDetailPage() {
             <h2 className="text-2xl font-bold text-white mb-1">
               {patient.firstName} {patient.lastName}
             </h2>
-            <p className="text-xs font-semibold text-slate-700 dark:text-gray-300">
+            <p className="text-xs font-semibold text-gray-300">
               {(patient.mrn && patient.mrn !== '—') ? `HID: ${patient.mrn}` : (patient.srNo ? `Sr. No. ${patient.srNo}` : 'HID: —')} &bull; {age ? `${age} years` : '—'} &bull; {patient.sex} &bull; DOB: {formatDate(patient.dob)}
             </p>
-            <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1 uppercase tracking-wider font-bold">
+            <p className="text-[11px] text-gray-400 mt-1 uppercase tracking-wider font-bold">
               Region: Maharashtra, India
             </p>
             <div className="flex gap-2 mt-3 flex-wrap justify-center md:justify-start">
@@ -372,7 +372,7 @@ export default function PatientDetailPage() {
             size="sm"
             variant="outline"
             onClick={handleDeletePatient}
-            className="btn-outline text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:border-rose-400"
+            className="btn-outline text-rose-400 hover:text-rose-300 hover:border-rose-400"
           >
             <Trash2 className="w-3.5 h-3.5" />
             Delete Patient
@@ -386,7 +386,7 @@ export default function PatientDetailPage() {
           <ShieldAlert className="w-5 h-5 flex-shrink-0 text-amber-500 mt-0.5" />
           <div>
             <p className="font-bold">Regulatory Consent Required</p>
-            <p className="text-slate-600 dark:text-gray-400 mt-1">
+            <p className="text-gray-300 mt-1">
               Data capture is disabled because this patient's consent status is currently <strong>{consentStatus}</strong>.
               Go to "Edit Profile" or register patient consent status as "Granted" to record clinical visits.
             </p>
@@ -434,16 +434,16 @@ export default function PatientDetailPage() {
               <div
                 key={m.label}
                 onClick={() => setShowQuickModal(true)}
-                className="glass-card p-4 text-center hover:border-blue-500/50 transition-all cursor-pointer group"
+                className="glass-card p-4 text-center hover:border-blue-500/50 transition-all cursor-pointer group shadow-lg"
                 title="Click to view or edit clinical data"
               >
-                <p className="text-[10px] text-slate-600 dark:text-gray-400 uppercase tracking-wider font-bold mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-300 transition-colors">{m.label}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1 group-hover:text-blue-400 transition-colors">{m.label}</p>
                 {m.value != null
-                  ? <p className={cn('text-xl font-extrabold', m.warn(Number(m.value)) ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white')}>
+                  ? <p className={cn('text-2xl font-extrabold tracking-tight', m.warn(Number(m.value)) ? 'text-rose-400' : 'text-white')}>
                       {m.value}
                     </p>
-                  : <p className="text-slate-400 dark:text-gray-500 text-xl font-bold">—</p>}
-                <p className="text-[10px] text-slate-500 dark:text-gray-400 font-medium mt-0.5">{m.unit}</p>
+                  : <p className="text-gray-500 text-2xl font-bold">—</p>}
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5">{m.unit}</p>
               </div>
             ))}
           </div>

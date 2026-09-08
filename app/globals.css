@@ -145,6 +145,16 @@ body.light main .text-gray-600 {
 body.light main .text-gray-700 {
   color: #1e293b !important;
 }
+body.light main text.fill-white,
+body.light main .fill-white {
+  fill: #0f2444 !important;
+}
+body.light main text.fill-gray-400,
+body.light main .fill-gray-400,
+body.light main text.fill-gray-500,
+body.light main .fill-gray-500 {
+  fill: #475569 !important;
+}
 
 /* Ensure saturated action buttons and avatars ALWAYS retain pure white text in light mode */
 body.light main .btn-primary,

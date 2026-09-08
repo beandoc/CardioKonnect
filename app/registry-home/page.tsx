@@ -188,7 +188,7 @@ function CompletionRing({ pct, color }: { pct: number; color: string }) {
   const dash = (pct / 100) * circ
   return (
     <svg width="88" height="88" viewBox="0 0 88 88" className="flex-shrink-0">
-      <circle cx="44" cy="44" r={r} fill="none" stroke="currentColor" className="text-slate-200 dark:text-white/10" strokeWidth="6" />
+      <circle cx="44" cy="44" r={r} fill="none" stroke="currentColor" className="text-white/15" strokeWidth="6" />
       <circle
         cx="44" cy="44" r={r}
         fill="none"
@@ -199,8 +199,8 @@ function CompletionRing({ pct, color }: { pct: number; color: string }) {
         transform="rotate(-90 44 44)"
         style={{ filter: `drop-shadow(0 0 4px ${color}88)` }}
       />
-      <text x="44" y="40" textAnchor="middle" className="fill-slate-900 dark:fill-white font-extrabold text-[15px]">{pct}%</text>
-      <text x="44" y="54" textAnchor="middle" className="fill-slate-600 dark:fill-slate-400 text-[9px] font-bold">Complete</text>
+      <text x="44" y="40" textAnchor="middle" className="fill-white font-extrabold text-[15px]">{pct}%</text>
+      <text x="44" y="54" textAnchor="middle" className="fill-gray-400 text-[9px] font-bold">Complete</text>
     </svg>
   )
 }
