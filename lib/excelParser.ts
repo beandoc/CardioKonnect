@@ -47,6 +47,30 @@ function cleanUndefined(obj: any): any {
   return res
 }
 
+function cleanMilitaryRanks(rawName: string): string {
+  if (!rawName) return '';
+  let str = String(rawName).trim();
+  str = str.replace(/\b(?:M\/O|F\/O|W\/O|S\/O|D\/O|SELF|EX|EX-|NCE)\b/gi, ' ');
+  const militaryPatterns = [
+    /\bMAJOR\s+GENERAL\b/gi, /\bMAJ\s+GEN\b/gi, /\bLIEUTENANT\s+COLONEL\b/gi, /\bLT\s+COL\b/gi,
+    /\bBRIGADIER\b/gi, /\bBRIG\b/gi, /\bCOLONEL\b/gi, /\bCOL\b/gi, /\bMAJOR\b/gi, /\bMAJ\b/gi,
+    /\bCAPTAIN\b/gi, /\bCAPT\b/gi, /\bLIEUTENANT\b/gi, /\bLT\b/gi, /\bSUBEDAR\s+MAJOR\b/gi,
+    /\bSUB\s+MAJ\b/gi, /\bNAIB\s+SUBEDAR\b/gi, /\bNB\s+SUB\b/gi, /\bSUBEDAR\b/gi, /\bSUB\b/gi,
+    /\bHAVILDAR\b/gi, /\bHAVALDAR\b/gi, /\bHAV\b/gi, /\bNAIK\b/gi, /\bNK\b/gi, /\bSEPOY\b/gi,
+    /\bSEP\b/gi, /\bJCO\b/gi, /\bNCO\b/gi, /\bAIR\s+COMMODORE\b/gi, /\bWING\s+COMMANDER\b/gi,
+  ];
+  for (const pattern of militaryPatterns) {
+    str = str.replace(pattern, ' ');
+  }
+  if (str.includes('-')) {
+    const parts = str.split('-').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 2 && parts[1].length > 2) {
+      str = parts[1] + ' ' + parts[0].replace(/^[A-Z]\s+[A-Z]\s+/, '');
+    }
+  }
+  return str.replace(/[.\-_]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCount: number; patients: Patient[]; visits: Visit[] } {
   let patientsCount = 0;
   let visitsCount = 0;
@@ -57,7 +81,8 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     const srNo = row['SR. NO.'];
     if (!srNo) continue;
 
-    const nameVal = String(row['NAME'] || '').trim();
+    const rawName = String(row['NAME'] || '').trim();
+    const nameVal = cleanMilitaryRanks(rawName);
     if (!nameVal || nameVal.toLowerCase() === 'unknown' || nameVal.toLowerCase() === 'nil' || nameVal === '-') {
       continue;
     }
@@ -353,9 +378,9 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     // Generate a local unique patient ID (no Firestore needed)
     const patientId = 'p-' + Math.random().toString(36).substr(2, 9) + '-' + (patientsCount + 1);
 
-    // Extract Column D (HID NO.)
+    // Extract Column D (HID NO.) strictly - do NOT substitute Serial Number
     const rawHid = String(row['HID NO.'] || row['HID NO'] || row['HID'] || row['MRN'] || '').trim();
-    const mrn = rawHid ? rawHid : (srNo ? `HID-${srNo}` : `MRN-${1000 + patientsCount + 1}`);
+    const mrn = (rawHid && rawHid !== 'undefined' && rawHid !== 'null' && rawHid !== '-') ? rawHid : '—';
 
     // Build Patient document data
     const patientInput: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -364,6 +389,7 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
       dob,
       sex,
       mrn,
+      srNo: typeof srNo === 'number' ? srNo : parseInt(srNo, 10) || undefined,
       contact,
       address,
       comorbidities,

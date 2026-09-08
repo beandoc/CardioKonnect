@@ -274,7 +274,7 @@ export default function PatientDetailPage() {
               {patient.firstName} {patient.lastName}
             </h2>
             <p className="text-xs text-gray-400">
-              {patient.mrn} &bull; {age ? `${age} years` : '—'} &bull; {patient.sex} &bull; DOB: {formatDate(patient.dob)}
+              {(patient.mrn && patient.mrn !== '—') ? `HID: ${patient.mrn}` : (patient.srNo ? `Sr. No. ${patient.srNo}` : 'HID: —')} &bull; {age ? `${age} years` : '—'} &bull; {patient.sex} &bull; DOB: {formatDate(patient.dob)}
             </p>
             <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider font-semibold">
               Region: Maharashtra, India
@@ -468,7 +468,8 @@ export default function PatientDetailPage() {
             <CardBody className="space-y-2 text-sm">
               {([
                 ['Full Name', `${patient.firstName} ${patient.lastName}`],
-                ['HID', patient.mrn ?? '—'],
+                ['Hospital ID (Column D)', (patient.mrn && patient.mrn !== '—') ? patient.mrn : 'Not Documented in Sheet'],
+                ['Registry Serial No. (Column A)', patient.srNo ? `Sr. No. ${patient.srNo}` : '—'],
                 ['ABHA ID', patient.abhaId ?? '—'],
                 ['Date of Birth', formatDate(patient.dob)],
                 ['Age', age ? `${age} years` : '—'],

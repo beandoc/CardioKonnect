@@ -19,7 +19,8 @@ export interface Patient {
   lastName: string
   dob: string          // ISO date: YYYY-MM-DD
   sex: 'Male' | 'Female'
-  mrn?: string         // Medical record number
+  mrn?: string         // Medical record number / Hospital ID (Column D)
+  srNo?: number        // Registry Serial Number (Column A)
   contact?: string
   email?: string
   status?: 'Active' | 'Inactive' | 'Pending'
