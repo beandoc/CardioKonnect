@@ -41,6 +41,7 @@ export interface Patient {
   // HF Registry demographics
   registryId?: string
   indianCitizen?: boolean
+  ethnicity?: 'Indian' | string
   studyConsented?: boolean
   hfConfirmationDate?: string
   educationYears?: number

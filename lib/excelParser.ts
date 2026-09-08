@@ -371,6 +371,7 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
       consentStatus: 'Granted',
       studyConsented: true,
       indianCitizen: true,
+      ethnicity: 'Indian',
       registryId: 'hf',
       hfConfirmationDate: doa,
       hfType,
