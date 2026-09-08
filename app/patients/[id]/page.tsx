@@ -385,28 +385,43 @@ export default function PatientDetailPage() {
       )}
 
       {/* Latest key metrics */}
-      {latest && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          {[
-            { label: 'NT-proBNP', value: latest.ntProBNP, unit: 'pg/mL', warn: (v: number) => v > 2000 },
-            { label: 'eGFR', value: latest.egfr, unit: 'ml/min', warn: (v: number) => v < 45 },
-            { label: 'BP', value: latest.bpSystolic && latest.bpDiastolic ? `${latest.bpSystolic}/${latest.bpDiastolic}` : null, unit: 'mmHg', warn: (_v: number) => false },
-            { label: 'HR', value: latest.heartRate, unit: 'bpm', warn: (_v: number) => false },
-            { label: '6MWT', value: latest.sixMWT, unit: 'm', warn: (_v: number) => false },
-            { label: 'Potassium', value: latest.potassium, unit: 'mmol/L', warn: (v: number) => v > 5.5 || v < 3.5 },
-          ].map(m => (
-            <div key={m.label} className="glass-card p-4 text-center hover:border-blue-500/30 transition-all">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1">{m.label}</p>
-              {m.value != null
-                ? <p className={cn('text-xl font-extrabold', m.warn(Number(m.value)) ? 'text-rose-400' : 'text-white')}>
-                    {m.value}
-                  </p>
-                : <p className="text-gray-600 text-xl font-bold">—</p>}
-              <p className="text-[10px] text-gray-500 mt-0.5">{m.unit}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {latest && (() => {
+        const latestBnp = visits.find(v => v.ntProBNP != null)?.ntProBNP ?? latest.ntProBNP
+        const latestEgfr = visits.find(v => v.egfr != null)?.egfr ?? latest.egfr
+        const latestBpVisit = visits.find(v => v.bpSystolic != null && v.bpDiastolic != null)
+        const latestBp = latestBpVisit ? `${latestBpVisit.bpSystolic}/${latestBpVisit.bpDiastolic}` : (latest.bpSystolic && latest.bpDiastolic ? `${latest.bpSystolic}/${latest.bpDiastolic}` : null)
+        const latestHr = visits.find(v => v.heartRate != null)?.heartRate ?? latest.heartRate
+        const latest6mwt = visits.find(v => v.sixMWT != null)?.sixMWT ?? latest.sixMWT
+        const latestK = visits.find(v => v.potassium != null)?.potassium ?? latest.potassium
+
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            {[
+              { label: 'NT-proBNP', value: latestBnp, unit: 'pg/mL', warn: (v: number) => v > 2000 },
+              { label: 'eGFR', value: latestEgfr, unit: 'mL/min/1.73m²', warn: (v: number) => v < 45 },
+              { label: 'BP', value: latestBp, unit: 'mmHg', warn: (_v: any) => false },
+              { label: 'HR', value: latestHr, unit: 'bpm', warn: (v: number) => v > 100 || v < 55 },
+              { label: '6MWT', value: latest6mwt, unit: 'm', warn: (_v: any) => false },
+              { label: 'Potassium', value: latestK, unit: 'mmol/L', warn: (v: number) => v > 5.5 || v < 3.5 },
+            ].map(m => (
+              <div
+                key={m.label}
+                onClick={() => setShowQuickModal(true)}
+                className="glass-card p-4 text-center hover:border-blue-500/50 hover:bg-white/[0.03] transition-all cursor-pointer group"
+                title="Click to view or edit clinical data"
+              >
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-1 group-hover:text-blue-300 transition-colors">{m.label}</p>
+                {m.value != null
+                  ? <p className={cn('text-xl font-extrabold', m.warn(Number(m.value)) ? 'text-rose-400' : 'text-white')}>
+                      {m.value}
+                    </p>
+                  : <p className="text-gray-600 text-xl font-bold group-hover:text-gray-400">—</p>}
+                <p className="text-[10px] text-gray-500 mt-0.5">{m.unit}</p>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Tabs */}
       <div className="flex border-b border-blue-500/10 mb-5 gap-4">
