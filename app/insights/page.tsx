@@ -110,7 +110,7 @@ export default function InsightsPage() {
       tab: 'gdmt' as const,
     },
     {
-      label: 'Unanticipatulated AF',
+      label: 'Unanticoagulated AF',
       value: mlSummary.unticoagulatedAFCount,
       total: data.length,
       icon: Heart,
