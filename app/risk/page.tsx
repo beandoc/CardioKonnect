@@ -648,13 +648,10 @@ function RiskCalculatorContent() {
                   — Manual Simulation Mode (Enter custom parameters) —
                 </option>
                 {selectablePatients.map((p) => {
-                  const vt = allVisitsMap.get(p.id)
-                  const lvefTxt = vt?.lvef != null ? ` • LVEF ${vt.lvef}%` : (p.lvef != null ? ` • LVEF ${p.lvef}%` : '')
-                  const nyhaTxt = vt?.nyha ? ` • NYHA ${vt.nyha}` : ''
-                  const srTxt = p.srNo ? `[SR-${p.srNo}] ` : ''
+                  const hidTxt = p.mrn && p.mrn !== '—' ? ` (HID: ${p.mrn})` : ' (HID: —)'
                   return (
                     <option key={p.id} value={p.id} className="text-white">
-                      {srTxt}{p.firstName} {p.lastName}{lvefTxt}{nyhaTxt}
+                      {p.firstName} {p.lastName}{hidTxt}
                     </option>
                   )
                 })}
