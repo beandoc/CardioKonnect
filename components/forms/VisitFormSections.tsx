@@ -244,11 +244,11 @@ export const LabsSection = memo(function LabsSection({
       <div>
         <p className="section-heading">Renal Function</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          <FieldWrap label="eGFR (ml/min)">
-            <Input type="number" {...register('egfr')} placeholder="e.g. 65" />
+          <FieldWrap label="eGFR (ml/min/1.73m² — Auto-computed)">
+            <Input type="number" step="0.1" {...register('egfr')} placeholder="Auto-calculated" />
           </FieldWrap>
-          <FieldWrap label="Creatinine (mg/dL)">
-            <Input type="number" step="0.01" {...register('creatinine')} placeholder="e.g. 1.2" />
+          <FieldWrap label="Serum Creatinine (mg/dL)">
+            <Input type="number" step="0.01" {...register('creatinine')} placeholder="e.g. 1.10" />
           </FieldWrap>
           <FieldWrap label="Cystatin C (mg/L)">
             <Input type="number" step="0.01" {...register('cystatinC')} placeholder="e.g. 1.1" />

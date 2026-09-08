@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { getPatient } from '@/lib/firestore'
 import type { VisitInput, Patient } from '@/lib/types'
 import { calculateCHADSVASc, calculateHASBLED } from '@/lib/riskScores'
+import { calculateCKDEPI_eGFR, calculateBMI } from '@/lib/clinicalCalculations'
 import { ChevronRight, ChevronLeft, ShieldAlert, Award, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { MedicationsSection, LabsSection, EchocardiographySection } from './VisitFormSections'
@@ -842,6 +843,36 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
       hasbledCategory: hasbledRes.riskCategory
     }
   }, [patient, rhythm, bpSystolic, creatinine, hb, aspirinPrescribed])
+
+  const weight = watch('weight')
+  const height = watch('height')
+
+  // Auto-calculate eGFR via 2021 CKD-EPI Formula
+  useEffect(() => {
+    if (creatinine && Number(creatinine) > 0) {
+      const age = patient?.dob ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) : (patient?.age || 60)
+      const sex = patient?.sex || 'Male'
+      const res = calculateCKDEPI_eGFR({
+        age,
+        sex,
+        creatinine: Number(creatinine),
+        unit: 'mg/dL',
+      })
+      if (res) {
+        setValue('egfr', res.egfr, { shouldDirty: true })
+      }
+    }
+  }, [creatinine, patient, setValue])
+
+  // Auto-calculate BMI
+  useEffect(() => {
+    if (weight && height && Number(weight) > 0 && Number(height) > 0) {
+      const bmiRes = calculateBMI(Number(weight), Number(height))
+      if (bmiRes) {
+        setValue('bmi', bmiRes.bmi, { shouldDirty: true })
+      }
+    }
+  }, [weight, height, setValue])
 
   const handleFormSubmit = async (data: FormValues) => {
     clearDraft()

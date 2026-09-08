@@ -17,8 +17,10 @@ import PatientForm from '@/components/forms/PatientForm'
 import GDMTDashboard from '@/components/patients/GDMTDashboard'
 import type { PatientTrends } from '@/lib/types'
 import { toast } from 'sonner'
-import { PlusCircle, Edit2, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList } from 'lucide-react'
+import { PlusCircle, Edit2, Edit3, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList, Sparkles } from 'lucide-react'
 import MLRiskCard from '@/components/patients/MLRiskCard'
+import DataCompletenessCard from '@/components/patients/DataCompletenessCard'
+import QuickDataEntryModal from '@/components/patients/QuickDataEntryModal'
 
 const EVENT_TYPES: EventType[] = [
   'All-cause death', 'CV death', 'HF hospitalisation', 'Urgent HF visit', 'LVAD implant',
@@ -51,6 +53,7 @@ export default function PatientDetailPage() {
   const [addingEvent, setAddingEvent] = useState(false)
   const [savingEvent, setSavingEvent] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends' | 'outcomes' | 'gdmt'>('overview')
+  const [showQuickModal, setShowQuickModal] = useState(false)
 
   // Outcome Event Form State
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0])
@@ -312,7 +315,14 @@ export default function PatientDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            size="sm"
+            onClick={() => setShowQuickModal(true)}
+            className="btn-primary"
+          >
+            <Sparkles className="w-4 h-4" /> Enter Missing Data
+          </Button>
           {isConsentGated ? (
             <button
               disabled
@@ -418,17 +428,25 @@ export default function PatientDetailPage() {
 
       {/* Overview tab */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* AI Risk Card — shown when at least one visit exists */}
-          {visits.length > 0 && (
-            <div className="lg:col-span-2">
-              <MLRiskCard
-                patient={patient}
-                visit={visits.sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0]}
-                allVisits={visits}
-              />
-            </div>
-          )}
+        <div className="space-y-5">
+          {/* Data Completeness Audit & In-place quick entry */}
+          <DataCompletenessCard
+            patient={patient}
+            latestVisit={latest}
+            onRefresh={load}
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* AI Risk Card — shown when at least one visit exists */}
+            {visits.length > 0 && (
+              <div className="lg:col-span-2">
+                <MLRiskCard
+                  patient={patient}
+                  visit={visits.sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0]}
+                  allVisits={visits}
+                />
+              </div>
+            )}
           <Card>
             <CardHeader><CardTitle>Demographics</CardTitle></CardHeader>
             <CardBody className="space-y-2 text-sm">
@@ -643,6 +661,7 @@ export default function PatientDetailPage() {
               </CardBody>
             </Card>
           )}
+          </div>
         </div>
       )}
 
@@ -882,6 +901,14 @@ export default function PatientDetailPage() {
           </div>
         </div>
       )}
+      {/* Quick Data Entry Modal */}
+      <QuickDataEntryModal
+        isOpen={showQuickModal}
+        onClose={() => setShowQuickModal(false)}
+        patient={patient}
+        latestVisit={latest}
+        onSaved={load}
+      />
     </div>
   )
 }
