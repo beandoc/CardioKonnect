@@ -120,8 +120,8 @@ export default function InsightsPage() {
       tab: 'high-risk' as const,
     },
     {
-      label: 'ICD Eligible',
-      value: mlSummary.icdEligibleCount,
+      label: 'CRT Candidates',
+      value: mlSummary.crtEligibleCount,
       total: data.length,
       icon: Zap,
       color: 'text-violet-400',
@@ -294,7 +294,7 @@ export default function InsightsPage() {
                     { label: `${mlSummary.gdmtGapCount} patients missing ≥1 GDMT pillar`, color: 'text-amber-400', icon: Pill },
                     { label: `Most missing drug: ${mlSummary.topMissingMedication}`, color: 'text-orange-400', icon: Pill },
                     { label: `${mlSummary.unticoagulatedAFCount} AF patients without anticoagulation`, color: 'text-rose-400', icon: Heart },
-                    { label: `${mlSummary.icdEligibleCount} patients may meet ICD/CRT criteria`, color: 'text-violet-400', icon: Zap },
+                    { label: `${mlSummary.crtEligibleCount} CRT candidates (LBBB / QRS ≥130ms + LVEF <35%)`, color: 'text-violet-400', icon: Zap },
                     { label: `${mlSummary.ironDeficiencyCount} iron-deficient patients — IV iron gap`, color: 'text-cyan-400', icon: Activity },
                   ].map((item, i) => (
                     <div key={i} className="flex items-center gap-2.5 text-xs">

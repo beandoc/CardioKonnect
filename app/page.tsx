@@ -141,6 +141,16 @@ export default function DashboardPage() {
       }, 0))
     : 0
 
+  const crtCandidates = rows.filter(r => {
+    const ef = r.latest?.lvef ?? r.patient?.lvef
+    const qrs = r.latest?.qrsDuration
+    const bbb = r.latest?.bbb || (r.patient as any)?.bbb
+    const dev = (r.latest?.device || (r.patient as any)?.device || [])
+    const hasCRT = dev.includes('CRT-D') || dev.includes('CRT-P')
+    // Criterion: (LBBB OR QRS in ECG >= 130ms) AND Ejection Fraction on 2D Echo < 35%
+    return (ef != null && ef < 35) && (bbb === 'LBBB' || (qrs != null && qrs >= 130)) && !hasCRT
+  }).length
+
   const kpis = [
     {
       label: 'Total Patients',
@@ -509,7 +519,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { title: '4-Pillar Candidates',    desc: 'HFrEF eligible for full GDMT', value: hfrEF, color: '#3b82f6' },
-            { title: 'CRT Candidates',         desc: 'LBBB / QRS ≥130ms + LVEF <35%', value: '—',   color: '#8b5cf6' },
+            { title: 'CRT Candidates',         desc: 'LBBB / QRS ≥130ms + LVEF <35%', value: crtCandidates, color: '#8b5cf6' },
             { title: 'Iron Deficiency',        desc: 'Ferritin <100 µg/L documented',  value: '—',   color: '#10b981' },
             { title: 'NYHA III/IV High Risk',  desc: 'Advanced symptoms — urgent review', value: nyha34, color: '#f43f5e' },
             { title: 'AF + No Anticoagulation',desc: 'AF not on NOAC/VKI',             value: '—',   color: '#f59e0b' },

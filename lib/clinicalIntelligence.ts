@@ -522,13 +522,17 @@ export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits
     }
   }
 
-  if (lvef && lvef <= 35 && qrs && qrs >= 150 && hasBBB === 'LBBB') {
+  const hasLBBB = hasBBB === 'LBBB'
+  const qrsDur = qrs || visit.qrsDuration
+  const isCRTEligible = (lvef != null && lvef < 35) && (hasLBBB || (qrsDur != null && qrsDur >= 130))
+
+  if (isCRTEligible && !(visit.device ?? []).includes('CRT-D') && !(visit.device ?? []).includes('CRT-P')) {
     alerts.push({
       id: 'crt-eligible', severity: 'high', category: 'Device',
-      title: 'CRT Eligibility Criteria Met',
-      detail: `LVEF ${lvef}%, LBBB, QRS ${qrs} ms — strong CRT indication`,
-      action: 'Refer for CRT-D implantation. Expected LVEF improvement 10–15% and mortality reduction.',
-      evidence: 'Class I-A, ESC 2023',
+      title: 'CRT Candidate Criteria Met',
+      detail: `LVEF ${lvef}%, ${hasLBBB ? 'LBBB' : `QRS ${qrsDur} ms`} — meets criteria for Cardiac Resynchronization Therapy (LBBB / QRS ≥130ms + LVEF <35%)`,
+      action: 'Refer for CRT-D/CRT-P implantation and optimization. Expected LVEF improvement and mortality reduction.',
+      evidence: 'Class I-A, ESC 2023 / ACC 2022',
     })
   }
 
@@ -858,6 +862,7 @@ export interface PopulationMLSummary {
   ironDeficiencyCount: number
   unticoagulatedAFCount: number
   icdEligibleCount: number
+  crtEligibleCount: number
   avgDataCompleteness: number
   topMissingMedication: string
 }
@@ -871,6 +876,7 @@ export function summarisePopulationML(
   let ironDeficiencyCount = 0
   let unticoagulatedAFCount = 0
   let icdEligibleCount = 0
+  let crtEligibleCount = 0
   let totalCompleteness = 0
   const missingMedCounts: Record<string, number> = {}
 
@@ -908,6 +914,14 @@ export function summarisePopulationML(
       icdEligibleCount++
     }
 
+    // CRT Candidates: (LBBB or QRS in ECG >= 130ms) AND LVEF on 2D Echo < 35%
+    const hasLBBB = latest.bbb === 'LBBB' || ((latest as any).ecgNotes ?? '').toUpperCase().includes('LBBB')
+    const qrsDur = latest.qrsDuration
+    const isCRTCandidate = (latest.lvef != null && latest.lvef < 35) && (hasLBBB || (qrsDur != null && qrsDur >= 130))
+    if (isCRTCandidate && !latest.device?.includes('CRT-D') && !latest.device?.includes('CRT-P')) {
+      crtEligibleCount++
+    }
+
     const completeness = scoreDataCompleteness(latest)
     totalCompleteness += completeness.overallPct
   }
@@ -921,6 +935,7 @@ export function summarisePopulationML(
     ironDeficiencyCount,
     unticoagulatedAFCount,
     icdEligibleCount,
+    crtEligibleCount,
     avgDataCompleteness: patients.length > 0
       ? Math.round(totalCompleteness / patients.length)
       : 0,
