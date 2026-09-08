@@ -59,10 +59,18 @@ export default function PatientDetailPage() {
   // Outcome Event Form State
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0])
   const [eventType, setEventType] = useState<EventType>('HF hospitalisation')
+  const [eventEncounterType, setEventEncounterType] = useState<'Inpatient Index' | 'Readmission' | 'Emergency Visit' | 'Out-of-Hospital Event'>('Readmission')
+  const [eventAdmissionDate, setEventAdmissionDate] = useState('')
+  const [eventDischargeDate, setEventDischargeDate] = useState('')
+  const [eventIvDiuretic, setEventIvDiuretic] = useState(true)
+  const [eventInotrope, setEventInotrope] = useState(false)
+  const [eventNIV, setEventNIV] = useState(false)
+  const [eventVent, setEventVent] = useState(false)
   const [eventDesc, setEventDesc] = useState('')
-  const [eventHosp, setEventHosp] = useState('')
+  const [eventHosp, setEventHosp] = useState('AICTS Pune')
   const [eventAdjudicated, setEventAdjudicated] = useState(true)
   const [eventAdjudicator, setEventAdjudicator] = useState('Dr. A. Jayachandra')
+  const [eventAdjudicationStatus, setEventAdjudicationStatus] = useState<'Pending Review' | 'Adjudicated - Confirmed' | 'Adjudicated - Reclassified' | 'Adjudicated - Rejected'>('Adjudicated - Confirmed')
 
   useEffect(() => {
     if (tabParam === 'overview' || tabParam === 'timeline' || tabParam === 'trends' || tabParam === 'outcomes' || tabParam === 'gdmt') {
@@ -135,7 +143,8 @@ export default function PatientDetailPage() {
   const handleAddEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingEvent(true)
-    const toastId = toast.loading('Recording outcome event...')
+    const toastId = toast.loading('Recording structured endpoint...')
+
     const timeoutId = setTimeout(() => {
       toast.warning('Database response is taking longer than expected. Please check your connection.', {
         id: toastId,
@@ -147,23 +156,34 @@ export default function PatientDetailPage() {
       const input: OutcomeEventInput = {
         patientId: id,
         eventDate,
+        encounterType: eventEncounterType,
+        admissionDate: eventAdmissionDate || undefined,
+        dischargeDate: eventDischargeDate || undefined,
         eventType,
         description: eventDesc,
         hospitalName: eventHosp,
+        interventions: {
+          ivLoopDiuretics: eventIvDiuretic,
+          ivInotropesOrVasopressors: eventInotrope,
+          nonInvasiveVentilation: eventNIV,
+          invasiveMechanicalVentilation: eventVent,
+        },
         adjudicated: eventAdjudicated,
+        adjudicationStatus: eventAdjudicationStatus,
         adjudicatedBy: eventAdjudicator
       }
       await addOutcomeEvent(id, input)
       clearTimeout(timeoutId)
-      toast.success('Outcome event recorded successfully', { id: toastId })
+      toast.success('Structured endpoint recorded successfully', { id: toastId })
       setAddingEvent(false)
       setEventDesc('')
-      setEventHosp('')
+      setEventAdmissionDate('')
+      setEventDischargeDate('')
       load()
     } catch (err) {
       clearTimeout(timeoutId)
       console.error('Add event error:', err)
-      toast.error('Failed to add outcome event. Please check database configuration/security rules.', { id: toastId })
+      toast.error('Failed to add outcome event.', { id: toastId })
     } finally {
       setSavingEvent(false)
     }
@@ -864,30 +884,79 @@ export default function PatientDetailPage() {
 
           {addingEvent && (
             <Card>
-              <CardHeader><CardTitle>Record Outcome Event</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Record Structured Endpoint / Outcome Event</CardTitle></CardHeader>
               <CardBody>
                 <form onSubmit={handleAddEventSubmit} className="space-y-4 text-xs">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FieldWrap label="Event Date" required>
                       <Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} required />
                     </FieldWrap>
-                    <FieldWrap label="Event Endpoint Type" required>
+                    <FieldWrap label="Encounter Type" required>
+                      <Select value={eventEncounterType} onChange={e => setEventEncounterType(e.target.value as any)}>
+                        <option value="Readmission">Hospital Readmission</option>
+                        <option value="Emergency Visit">Emergency HF Visit</option>
+                        <option value="Inpatient Index">Inpatient Index Episode</option>
+                        <option value="Out-of-Hospital Event">Out-of-Hospital Event / Mortality</option>
+                      </Select>
+                    </FieldWrap>
+                    <FieldWrap label="Endpoint Classification" required>
                       <Select value={eventType} onChange={e => setEventType(e.target.value as EventType)}>
                         {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </Select>
                     </FieldWrap>
+                    <FieldWrap label="Admission Date (if hospitalized)">
+                      <Input type="date" value={eventAdmissionDate} onChange={e => setEventAdmissionDate(e.target.value)} />
+                    </FieldWrap>
+                    <FieldWrap label="Discharge Date (if applicable)">
+                      <Input type="date" value={eventDischargeDate} onChange={e => setEventDischargeDate(e.target.value)} />
+                    </FieldWrap>
                     <FieldWrap label="Facility / Hospital">
                       <Input value={eventHosp} onChange={e => setEventHosp(e.target.value)} placeholder="e.g. AICTS Pune" />
                     </FieldWrap>
-                    <FieldWrap label="Adjudicated By (Investigator)">
+                  </div>
+
+                  {/* Acute Inpatient Interventions Checklist */}
+                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-blue-500/15 space-y-2">
+                    <p className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">Acute Inpatient Interventions Used During Event</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-300">
+                        <input type="checkbox" checked={eventIvDiuretic} onChange={e => setEventIvDiuretic(e.target.checked)} className="rounded text-blue-500" />
+                        <span>IV Loop Diuretics</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-300">
+                        <input type="checkbox" checked={eventInotrope} onChange={e => setEventInotrope(e.target.checked)} className="rounded text-blue-500" />
+                        <span>IV Inotropes / Pressors</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-300">
+                        <input type="checkbox" checked={eventNIV} onChange={e => setEventNIV(e.target.checked)} className="rounded text-blue-500" />
+                        <span>NIV (CPAP/BiPAP)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-300">
+                        <input type="checkbox" checked={eventVent} onChange={e => setEventVent(e.target.checked)} className="rounded text-blue-500" />
+                        <span>Invasive Ventilation</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FieldWrap label="Adjudication Status">
+                      <Select value={eventAdjudicationStatus} onChange={e => setEventAdjudicationStatus(e.target.value as any)}>
+                        <option value="Adjudicated - Confirmed">Adjudicated - Confirmed</option>
+                        <option value="Pending Review">Pending Central Review</option>
+                        <option value="Adjudicated - Reclassified">Adjudicated - Reclassified</option>
+                        <option value="Adjudicated - Rejected">Adjudicated - Rejected</option>
+                      </Select>
+                    </FieldWrap>
+                    <FieldWrap label="Adjudicated By (Principal Investigator)">
                       <Input value={eventAdjudicator} onChange={e => setEventAdjudicator(e.target.value)} placeholder="Dr. A. Jayachandra" />
                     </FieldWrap>
-                    <FieldWrap label="Details / Description" className="md:col-span-2">
-                      <Textarea value={eventDesc} onChange={e => setEventDesc(e.target.value)} placeholder="Clinical notes, clinical classification..." />
+                    <FieldWrap label="Clinical Notes / Supporting Record Details" className="md:col-span-2">
+                      <Textarea value={eventDesc} onChange={e => setEventDesc(e.target.value)} placeholder="Primary clinical reason, ICD-10 code, discharge summary reference..." />
                     </FieldWrap>
                   </div>
+
                   <div className="flex justify-end gap-2 pt-2">
-                    <Button type="submit" loading={savingEvent}>Save Endpoint</Button>
+                    <Button type="submit" loading={savingEvent}>Save Structured Endpoint</Button>
                   </div>
                 </form>
               </CardBody>
@@ -901,9 +970,9 @@ export default function PatientDetailPage() {
                   <tr>
                     <th>Event Date</th>
                     <th>Endpoint Type</th>
-                    <th>Facility</th>
-                    <th>Details</th>
-                    <th>Adjudicated By</th>
+                    <th>Encounter &amp; Facility</th>
+                    <th>Interventions &amp; Details</th>
+                    <th>Adjudication</th>
                     <th className="text-right">Actions</th>
                   </tr>
                 </thead>
@@ -917,7 +986,7 @@ export default function PatientDetailPage() {
                   ) : (
                     outcomeEvents.map(ev => (
                       <tr key={ev.id}>
-                        <td className="font-mono text-white">{formatDate(ev.eventDate)}</td>
+                        <td className="font-mono text-white whitespace-nowrap">{formatDate(ev.eventDate)}</td>
                         <td>
                           <span className={cn('badge text-[10px] font-bold',
                             ev.eventType.includes('death') ? 'badge-red' :
@@ -926,9 +995,30 @@ export default function PatientDetailPage() {
                             {ev.eventType}
                           </span>
                         </td>
-                        <td className="text-gray-300">{ev.hospitalName || '—'}</td>
-                        <td className="text-gray-400 max-w-xs whitespace-normal">{ev.description || '—'}</td>
-                        <td className="text-gray-300 font-semibold">{ev.adjudicatedBy || '—'}</td>
+                        <td className="text-gray-300">
+                          <p className="font-semibold text-white">{ev.hospitalName || 'AICTS Pune'}</p>
+                          <p className="text-[10px] text-gray-400">{ev.encounterType || 'Readmission'}</p>
+                        </td>
+                        <td className="text-gray-400 max-w-xs whitespace-normal">
+                          <p className="text-gray-300">{ev.description || '—'}</p>
+                          {ev.interventions && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {ev.interventions.ivLoopDiuretics && <span className="badge badge-blue text-[8px]">IV Diuretics</span>}
+                              {ev.interventions.ivInotropesOrVasopressors && <span className="badge badge-amber text-[8px]">Inotropes</span>}
+                              {ev.interventions.nonInvasiveVentilation && <span className="badge badge-gray text-[8px]">NIV</span>}
+                              {ev.interventions.invasiveMechanicalVentilation && <span className="badge badge-red text-[8px]">Invasive Vent</span>}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className={cn(
+                            "badge text-[9px] font-bold",
+                            ev.adjudicationStatus?.includes('Confirmed') ? 'badge-green' : 'badge-amber'
+                          )}>
+                            {ev.adjudicationStatus || (ev.adjudicated ? 'Confirmed' : 'Pending')}
+                          </span>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{ev.adjudicatedBy || '—'}</p>
+                        </td>
                         <td>
                           <div className="flex justify-end">
                             <button

@@ -93,59 +93,36 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
 
   // ── Systolic BP points ───────────────────────────────────────────────────
   const sbp = input.systolicBP
-  if (sbp < 110) {
-    points += efBelow30 ? 5 : 3
-  } else if (sbp < 120) {
-    points += efBelow30 ? 4 : 2
-  } else if (sbp < 130) {
-    points += efBelow30 ? 3 : 1
-  } else if (sbp < 140) {
-    points += efBelow30 ? 2 : 1
-  } else if (sbp < 150) {
-    points += 0
-  } else {
-    points += 0
-  }
+  if (sbp < 110)      points += 5
+  else if (sbp < 120) points += 4
+  else if (sbp < 130) points += 3
+  else if (sbp < 140) points += 2
+  else if (sbp < 150) points += 1
+  // >=150: 0 points
 
-  // ── BMI points ───────────────────────────────────────────────────────────
-  if (input.bmi < 15) {
-    points += 6
-  } else if (input.bmi < 20) {
-    points += 5
-  } else if (input.bmi < 25) {
-    points += 3
-  } else if (input.bmi < 30) {
-    points += 1
-  } else {
-    points += 0
-  }
+  // ── BMI (kg/m²) — obesity paradox ─────────────────────────────────────────
+  const bmi = input.bmi
+  if (bmi < 15)      points += 6
+  else if (bmi < 20) points += 5
+  else if (bmi < 25) points += 3
+  else if (bmi < 30) points += 2
+  // >=30: 0 points
 
-  // ── Creatinine points (µmol/L) ───────────────────────────────────────────
-  const cr = input.creatinine * 88.4
-  if (cr < 90) {
-    points += 0
-  } else if (cr < 110) {
-    points += 1
-  } else if (cr < 130) {
-    points += 2
-  } else if (cr < 150) {
-    points += 3
-  } else if (cr < 170) {
-    points += 4
-  } else if (cr < 210) {
-    points += 5
-  } else if (cr < 250) {
-    points += 6
-  } else {
-    points += 8
-  }
+  // ── Serum creatinine (mg/dL) ──────────────────────────────────────────────
+  const cr = input.creatinine
+  if (cr < 0.90)      points += 0
+  else if (cr < 1.13) points += 1
+  else if (cr < 1.36) points += 2
+  else if (cr < 1.58) points += 3
+  else if (cr < 1.81) points += 4
+  else if (cr < 2.04) points += 5
+  else if (cr < 2.26) points += 6
+  else if (cr < 2.49) points += 7
+  else                points += 8
 
-  // ── NYHA class points ─────────────────────────────────────────────────────
+  // ── NYHA class ────────────────────────────────────────────────────────────
   const nyhaPoints: Record<NYHAClass, number> = { I: 0, II: 2, III: 6, IV: 8 }
-  points += nyhaPoints[input.nyha]
-
-  // ── Male sex ──────────────────────────────────────────────────────────────
-  if (input.sex === 'Male') points += 1
+  points += nyhaPoints[input.nyha] ?? 0
 
   // ── Current smoker ───────────────────────────────────────────────────────
   if (input.currentSmoker) points += 1
@@ -170,8 +147,7 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
   const finalScore = Math.max(0, points)
 
   // ── Mortality look-up table (Pocock 2013, Figure 3 / Table 3) ────────────
-  // 1-year and 3-year mortality rates by integer score band
-  // Values interpolated from the published nomogram / Table 3.
+  // Published 1-year and 3-year mortality rates by integer score band
   const mortalityTable: Array<{ maxScore: number; oneYr: number; threeYr: number }> = [
     { maxScore: 10,  oneYr: 0.02,  threeYr: 0.06  },
     { maxScore: 15,  oneYr: 0.04,  threeYr: 0.11  },

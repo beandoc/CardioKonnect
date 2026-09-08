@@ -172,6 +172,35 @@ export default function GDMTDashboard({ patient, visits }: Props) {
     }
   }, [latestVisit])
 
+  // Standardized HF Phenotype classification
+  const phenotype = useMemo(() => {
+    const ef = latestVisit?.lvef ?? patient.lvef ?? null
+    const rawType = latestVisit?.hfType || patient.hfType || ''
+    
+    let type: 'HFrEF' | 'HFmrEF' | 'HFpEF' | 'HFimpEF' = 'HFrEF'
+    if (rawType === 'HFimpEF' || (latestVisit?.priorLvef && latestVisit.priorLvef <= 40 && ef && ef > 40)) {
+      type = 'HFimpEF'
+    } else if (ef !== null) {
+      if (ef <= 40) type = 'HFrEF'
+      else if (ef <= 49) type = 'HFmrEF'
+      else type = 'HFpEF'
+    } else if (rawType === 'HFmrEF') {
+      type = 'HFmrEF'
+    } else if (rawType === 'HFpEF') {
+      type = 'HFpEF'
+    }
+
+    return {
+      type,
+      ef,
+      isHFrEF: type === 'HFrEF',
+      isHFmrEF: type === 'HFmrEF',
+      isHFpEF: type === 'HFpEF',
+      isHFimpEF: type === 'HFimpEF',
+      isFourPillarsMandatory: type === 'HFrEF' || type === 'HFimpEF',
+    }
+  }, [latestVisit, patient])
+
   if (!latestVisit) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center bg-slate-900/40 rounded-2xl border border-blue-500/10">
@@ -186,6 +215,35 @@ export default function GDMTDashboard({ patient, visits }: Props) {
 
   return (
     <div className="space-y-6 text-gray-300">
+
+      {/* Phenotype Guidance Banner */}
+      <div className={cn(
+        "p-4 rounded-xl border flex items-start gap-3",
+        phenotype.isHFrEF || phenotype.isHFimpEF
+          ? "bg-blue-950/30 border-blue-500/25 text-blue-200"
+          : "bg-emerald-950/20 border-emerald-500/25 text-emerald-200"
+      )}>
+        <Info className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-400" />
+        <div className="text-xs space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-white uppercase tracking-wider">
+              Phenotype: {phenotype.type} {phenotype.ef !== null ? `(LVEF ${phenotype.ef}%)` : ''}
+            </span>
+            <span className="badge badge-blue text-[9px] font-extrabold uppercase">
+              {phenotype.isFourPillarsMandatory ? '4-Pillar GDMT Target' : 'Phenotype-Specific Management'}
+            </span>
+          </div>
+          <p className="text-gray-300 leading-relaxed">
+            {phenotype.isHFrEF
+              ? 'HFrEF (LVEF ≤40%): Quadruple foundational therapy (ARNI/RAASi, Beta-Blocker, MRA, SGLT2i) is Class I-A guideline mandated to reduce mortality and hospitalization.'
+              : phenotype.isHFimpEF
+              ? 'HFimpEF (Improved EF >40% after prior ≤40%): Maintain full 4-pillar GDMT indefinitely to prevent relapse and left ventricular remodelling.'
+              : phenotype.isHFmrEF
+              ? 'HFmrEF (LVEF 41–49%): SGLT2 inhibitors and loop diuretics represent foundational Class I therapies. RAASi, MRA, and Beta-blockers carry Class IIb/IIa recommendations.'
+              : 'HFpEF (LVEF ≥50%): SGLT2 inhibitors (Class I-A) and loop diuretics for congestion represent core evidence-based therapies. Full 4-pillar therapy is not mandated unless hypertension, CAD, or specific comorbidities warrant.'}
+          </p>
+        </div>
+      </div>
       
       {/* Adherence Score Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -193,12 +251,20 @@ export default function GDMTDashboard({ patient, visits }: Props) {
         {/* Core Pillars Gauge */}
         <div className="gradient-card bg-gradient-to-br from-blue-950/20 to-indigo-950/10 p-5 rounded-2xl border border-blue-500/15 flex items-center justify-between">
           <div className="space-y-2">
-            <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">GDMT Core Pillar Count</p>
-            <h4 className="text-3xl font-extrabold text-white">{prescribedCount} / 4</h4>
+            <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">
+              {phenotype.isFourPillarsMandatory ? '4-Pillar GDMT Count' : 'SGLT2i & Core Therapy'}
+            </p>
+            <h4 className="text-3xl font-extrabold text-white">
+              {phenotype.isFourPillarsMandatory ? `${prescribedCount} / 4` : `${latestVisit.sglt2i?.prescribed === 'Yes' ? 'Active' : 'Missing'}`}
+            </h4>
             <p className="text-[11px] text-gray-400">
-              {prescribedCount === 4
-                ? 'All 4 foundational pillars prescribed! 🎉'
-                : `${4 - prescribedCount} missing or contraindicated`}
+              {phenotype.isFourPillarsMandatory
+                ? prescribedCount === 4
+                  ? 'All 4 foundational pillars prescribed! 🎉'
+                  : `${4 - prescribedCount} missing or documented contraindications`
+                : latestVisit.sglt2i?.prescribed === 'Yes'
+                ? 'SGLT2i prescribed (Class I in HFmrEF/HFpEF)'
+                : 'Consider SGLT2i for CV death / HF hospitalization reduction'}
             </p>
           </div>
           <div className="relative w-16 h-16 flex items-center justify-center">
@@ -246,12 +312,18 @@ export default function GDMTDashboard({ patient, visits }: Props) {
           <div className="space-y-1">
             <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Clinical Guideline Status</p>
             <h4 className="text-sm font-bold text-white">
-              {prescribedCount === 4 ? 'Optimal Guideline Adherence' : 'GDMT Optimization Needed'}
+              {prescribedCount === 4
+                ? 'Optimal Guideline Adherence'
+                : phenotype.isFourPillarsMandatory
+                ? 'GDMT Optimization Target'
+                : 'Phenotype Protocol Active'}
             </h4>
             <p className="text-[10px] text-gray-400 leading-normal">
-              {prescribedCount === 4
-                ? 'Excellent work. Maintain patient on target doses and audit regularly.'
-                : 'Titrate pillars up to target doses to improve long-term survival.'}
+              {phenotype.isFourPillarsMandatory
+                ? prescribedCount === 4
+                  ? 'Excellent work. Maintain patient on target doses and audit regularly.'
+                  : 'Titrate pillars up to target doses to improve long-term survival.'
+                : 'Tailor therapy to volume status, comorbidities, and SGLT2i coverage.'}
             </p>
           </div>
         </div>
@@ -262,7 +334,7 @@ export default function GDMTDashboard({ patient, visits }: Props) {
       <div>
         <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-1.5">
           <Zap className="w-4 h-4 text-blue-400" />
-          The 4 Pillars of HFrEF Therapy Checklist
+          {phenotype.isFourPillarsMandatory ? 'The 4 Pillars of HFrEF Therapy Checklist' : 'Medication & Decongestion Checklist'}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {pillars.map(p => {
@@ -301,24 +373,26 @@ export default function GDMTDashboard({ patient, visits }: Props) {
                 <div className="text-xs bg-slate-900/30 p-2.5 rounded-lg border border-gray-800/40 min-h-[50px] flex flex-col justify-center">
                   {isPrescribed ? (
                     <div className="space-y-1">
-                      <div className="flex justify-between font-semibold">
-                        <span className="text-blue-400">{p.entry?.type || 'Not specified'}</span>
-                        <span className="text-white">{p.entry?.dose || '—'}</span>
+                      <div className="flex justify-between font-semibold flex-wrap gap-1">
+                        <span className="text-blue-400 font-mono">{p.entry?.formulation || p.entry?.type || 'Generic molecule active'}</span>
+                        <span className="text-white font-mono">{p.entry?.dose || '—'} {p.entry?.frequency ? `(${p.entry.frequency})` : ''}</span>
                       </div>
                       {p.achievement && (
                         <div className="flex justify-between text-[10px] text-gray-500 mt-1">
                           <span>Target: {p.achievement.targetDrugLabel}</span>
                           <span className={cn(
-                            "font-bold",
+                            "font-bold font-mono",
                             p.achievement.percentage < 50 ? "text-rose-400" : "text-emerald-400"
-                          )}>{p.achievement.percentage}% of Target</span>
+                          )}>{p.achievement.percentage}% of Target Dose</span>
                         </div>
                       )}
                     </div>
                   ) : isContraindicated ? (
-                    <div>
-                      <span className="text-amber-400 font-semibold">Documented Reason:</span>
-                      <p className="text-gray-400 mt-0.5 font-mono">{p.entry?.reason}</p>
+                    <div className="space-y-1">
+                      <span className="text-amber-400 font-semibold text-[11px]">Documented Clinical / Economic Reason:</span>
+                      <p className="text-gray-300 font-medium text-xs bg-amber-950/20 border border-amber-500/20 px-2 py-1 rounded">
+                        {p.entry?.reason}
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-1 text-rose-300">

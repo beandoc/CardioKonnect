@@ -1,19 +1,77 @@
 // ─── Shared primitives ──────────────────────────────────────────────────────
 export type Prescribed = 'Yes' | 'No' | ''
 
+export type DataCertainty = 
+  | 'measured'       // Directly measured / tested in current encounter
+  | 'reported'       // Patient / caregiver verbal report
+  | 'not_done'       // Intentionally not done / unavailable at site
+  | 'unknown'        // Requested or checked but inconclusive / unknown
+  | 'not_applicable' // Not applicable for this patient phenotype
+
+export type IndianEtiology =
+  | 'Ischaemic CAD'
+  | 'Rheumatic Heart Disease'
+  | 'Hypertensive Heart Disease'
+  | 'Dilated / Non-ischaemic Cardiomyopathy'
+  | 'Peripartum Cardiomyopathy'
+  | 'Myocarditis'
+  | 'Tachycardia-mediated Cardiomyopathy'
+  | 'Congenital Heart Disease'
+  | 'Infiltrative / Amyloidosis'
+  | 'Endomyocardial Fibrosis'
+  | 'Alcohol / Toxic Cardiomyopathy'
+  | 'Chemotherapy / Cardio-oncology'
+  | 'CKD / Cardiorenal / Uremic'
+  | 'Pulmonary / Cor Pulmonale / Right HF'
+  | 'Unknown / Cryptogenic'
+
+export type NonPrescriptionReason =
+  | 'Hypotension (SBP <90–100 mmHg)'
+  | 'Severe Renal Impairment / AKI'
+  | 'Hyperkalaemia (K+ >5.5 mmol/L)'
+  | 'Bradycardia / Conduction Block'
+  | 'Allergy / Intolerance'
+  | 'Cost / Financial Unavailability'
+  | 'Patient / Family Refusal'
+  | 'Clinician Clinical Decision'
+  | 'Not Indicated for Phenotype'
+  | string
+
+export interface SocioeconomicData {
+  facilityType?: 'Public / Government Medical College' | 'Private Corporate' | 'Trust / Charitable' | 'Military / Armed Forces / ECHS'
+  state?: string
+  district?: string
+  residenceType?: 'Urban' | 'Peri-Urban' | 'Rural'
+  insuranceScheme?: 'PMJAY (Ayushman Bharat)' | 'CGHS' | 'ECHS' | 'State Scheme (e.g. MPJAY)' | 'Private Commercial Insurance' | 'Out-of-pocket / Self-funded' | 'Charity / Concession'
+  outOfPocketCostCategory?: '< ₹3,000/mo' | '₹3,000 - ₹10,000/mo' | '> ₹10,000/mo'
+  travelDistanceKm?: number
+  travelTimeHours?: number
+  drugAvailabilitySource?: 'Jan Aushadhi Kendra (Generic)' | 'Hospital / Govt Free Pharmacy' | 'Retail Chemist' | 'Home Delivery'
+  caregiverPhoneAccess?: 'Dedicated Patient Phone' | 'Caregiver Phone Available' | 'No Direct Phone'
+  educationLevel?: 'No formal education' | 'Primary school' | 'Secondary / High school' | 'Graduate / Higher'
+  primaryLanguage?: string
+}
+
 export interface MedEntry {
   prescribed: Prescribed
   type?: string
+  formulation?: string // e.g., Sacubitril 24mg + Valsartan 26mg (50mg)
   dose?: string
-  reason?: string  // reason if not prescribed
+  frequency?: 'OD' | 'BD' | 'TDS' | 'QID' | 'PRN' | string
+  route?: 'Oral' | 'IV' | 'Subcutaneous' | 'Inhaled' | string
+  reason?: NonPrescriptionReason  // reason if not prescribed
   startDate?: string
   stopDate?: string
   changeReason?: string
+  certainty?: DataCertainty
 }
 
-// ─── Patient (demographics — relatively static) ──────────────────────────────
+// ─── Patient (demographics & cohort definition) ──────────────────────────────
 export interface Patient {
   id: string
+  // Cohort Classification (ADHF vs Chronic OPD separation)
+  cohortType?: 'ADHF_Inpatient' | 'Chronic_OPD'
+  
   // Demographics
   firstName: string
   lastName: string
@@ -29,17 +87,19 @@ export interface Patient {
   comorbidities?: string[]
   allergies?: string
   indexDate?: string    // ISO date of diagnosis / enrollment
+  
   // Cached latest visit indicators
-  hfType?: string
+  hfType?: 'HFrEF' | 'HFmrEF' | 'HFpEF' | 'HFimpEF' | string
   nyha?: string
   lvef?: number
+  
   // Meta
   createdAt: string    // ISO timestamp
   updatedAt: string
   visitCount?: number
   lastVisitDate?: string
 
-  // HF Registry demographics
+  // HF Registry demographics & Indian Hierarchy
   registryId?: string
   indianCitizen?: boolean
   ethnicity?: 'Indian' | string
@@ -48,12 +108,16 @@ export interface Patient {
   educationYears?: number
   abhaId?: string
   occupation?: string
-  indexEtiology?: string[]
+  indexEtiology?: (IndianEtiology | string)[]
   indexEtiologyOther?: string
   familyHistoryPrematureCVD?: boolean
   familyHistorySuddenDeath?: boolean
   familyHistoryCardiomyopathy?: boolean
   familyHistoryGeneticHeart?: boolean
+  
+  // Socio-Economic & Health Equity Matrix
+  socioeconomic?: SocioeconomicData
+  
   addressHouse?: string
   addressStreet?: string
   addressPost?: string
@@ -79,10 +143,13 @@ export interface Patient {
   excludeTerminalIllness?: boolean
   excludeNonCompliance?: boolean
 
-  // Mortality / vital status
-  vitalStatus?: 'Alive' | 'Dead'
+  // Mortality / vital status & fixed follow-up tracking
+  vitalStatus?: 'Alive' | 'Dead' | 'Lost to Follow-Up'
   dateOfDeath?: string              // ISO date
   deathCauseCategory?: 'Cardiovascular' | 'Non-cardiovascular' | 'Unknown'
+  lastKnownAliveDate?: string       // ISO date for Kaplan-Meier / censoring
+  vitalStatusSource?: 'In-Person Visit' | 'Phone Call (Patient)' | 'Phone Call (Caregiver)' | 'Hospital Record' | 'Civil Registry'
+  lostToFollowUpReason?: string
 
   // Additional registry variables
   age?: number
@@ -151,6 +218,10 @@ export interface Visit {
 
   // ── Echocardiography ────────────────────────────────────────────────────────
   lvef?: number        // %
+  priorLvef?: number   // prior documented LVEF (for HFimpEF determination)
+  lvefMethod?: 'Biplane Simpson (2D)' | '3D Echo' | 'Automated Strain' | 'Visual Eyeballing' | string
+  lvefModality?: 'TTE' | 'TEE' | 'CMR' | 'MUGA' | string
+  echoImageAvailability?: 'DICOM Archived' | 'Report Only' | 'None' | string
   echoDate?: string
   lvdd?: number        // mm
   lvsd?: number        // mm
@@ -795,13 +866,49 @@ export type EventType =
 export interface OutcomeEvent {
   id: string
   patientId: string
+  encounterType?: 'Inpatient Index' | 'Readmission' | 'Emergency Visit' | 'Out-of-Hospital Event'
   eventDate: string
+  admissionDate?: string
+  dischargeDate?: string
+  lengthOfStayDays?: number
+  
   eventType: EventType
-  description?: string
+  primaryReasonDescription?: string
+  hfConfirmationCriteriaMet?: boolean
+  
+  // Acute Inpatient Interventions Used
+  interventions?: {
+    ivLoopDiuretics?: boolean
+    ivInotropesOrVasopressors?: boolean
+    inotropesUsed?: ('Dobutamine' | 'Milrinone' | 'Noradrenaline' | 'Dopamine' | 'Levosimendan')[]
+    nonInvasiveVentilation?: boolean // CPAP / BiPAP
+    invasiveMechanicalVentilation?: boolean
+    ultrafiltrationOrRRT?: boolean
+    mechanicalCirculatorySupport?: boolean // IABP / ECMO / Impella
+  }
+  
+  // Facility Context
   hospitalName?: string
-  daysFromIndex?: number  // days from first visit
+  facilityType?: 'Public/Government' | 'Private/Corporate' | 'Trust/Charitable' | 'Military/ECHS'
+  
+  // Death Documentation & Certainty (if event is Death)
+  deathDetails?: {
+    causeCategory?: 'Cardiovascular - Pump Failure' | 'Cardiovascular - Sudden Death' | 'Cardiovascular - Acute MI' | 'Cardiovascular - Stroke' | 'Non-Cardiovascular - Sepsis' | 'Non-Cardiovascular - Renal Failure' | 'Non-Cardiovascular - Malignancy' | 'Non-Cardiovascular - Other' | 'Undetermined'
+    causeCertainty?: 'Definite' | 'Probable' | 'Possible'
+    deathSource?: 'Hospital Death Summary' | 'Death Certificate' | 'Verbal Autopsy from Family' | 'Municipal Civil Records'
+    placeOfDeath?: 'In-Hospital (Enrolled Centre)' | 'In-Hospital (Other Centre)' | 'At Home' | 'En Route / Transit'
+  }
+  
+  supportingDocumentRef?: string
+  description?: string
+  daysFromIndex?: number  // days from index admission
+  
+  // Central Adjudication Tracking
   adjudicated: boolean
+  adjudicationStatus?: 'Pending Review' | 'Adjudicated - Confirmed' | 'Adjudicated - Reclassified' | 'Adjudicated - Rejected'
   adjudicatedBy?: string
+  adjudicationDate?: string
+  adjudicationNotes?: string
   createdAt: string
 }
 

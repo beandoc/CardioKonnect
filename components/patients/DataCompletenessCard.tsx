@@ -42,8 +42,8 @@ export default function DataCompletenessCard({
               {report.overallScore}%
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white">Registry Data Completeness</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-white">Tier 1 Core CRF Completeness</h3>
                 <span
                   className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider"
                   style={{
@@ -54,9 +54,15 @@ export default function DataCompletenessCard({
                 >
                   Grade {report.grade}
                 </span>
+                <span className="text-[10px] bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2 py-0.5 rounded font-mono">
+                  Follow-up: {report.followUpScore}%
+                </span>
+                <span className="text-[10px] bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded font-mono">
+                  Research Modules: {report.optionalResearchScore}%
+                </span>
               </div>
               <p className="text-xs text-gray-400 mt-0.5">
-                {report.completedFields} of {report.totalFields} key registry parameters documented
+                {report.completedFields} of {report.totalFields} core mandatory parameters documented (Core quality target: 100%)
               </p>
             </div>
           </div>

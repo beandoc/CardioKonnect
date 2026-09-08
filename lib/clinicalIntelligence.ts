@@ -84,19 +84,22 @@ export interface CompletenessReport {
   dataGrade: 'A' | 'B' | 'C' | 'D'
 }
 
-// ─── ML Risk Profile ─────────────────────────────────────────────────────────
-// Phase 1: computed from validated risk scores + rules
-// Phase 2: replace with TF.js model output
+// ─── Research-Only Exploratory Risk Summary ──────────────────────────────────
+// Note: Statistical composite summary for research exploration.
+// Uncalibrated for direct clinical decision-making until formal Indian multi-centre validation.
 
-export interface MLRiskProfile {
-  oneYearEventProbability: number   // 0–1
+export interface ExploratoryRiskSummary {
+  oneYearEventProbability: number   // 0–1 (exploratory baseline)
   riskCategory: 'Low' | 'Intermediate' | 'High' | 'Very High'
   primaryDriver: string
   topFactors: { label: string; direction: 'risk' | 'protective'; magnitude: number }[]
-  modelSource: 'rules+maggic' | 'tfjs-v1' | 'tfjs-v2'
+  modelSource: 'rules+maggic' | 'exploratory-statistical-v1'
   confidence: string
   lastUpdated: string
+  exploratoryDisclaimer: string
 }
+
+export type MLRiskProfile = ExploratoryRiskSummary
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CHA₂DS₂-VASc Score (AF patients only)
@@ -946,7 +949,8 @@ export function computeMLRiskProfile(
     topFactors: factors.slice(0, 6),
     modelSource: 'rules+maggic',
     confidence,
-    lastUpdated: new Date().toISOString(),
+    lastUpdated: new Date().toISOString().split('T')[0],
+    exploratoryDisclaimer: 'Research-only exploratory risk summary (Statistical baseline model; uncalibrated in Indian ADHF populations without local external validation).',
   }
 }
 
