@@ -458,8 +458,6 @@ export default function PatientDetailPage() {
                 ['Date of Birth', formatDate(patient.dob)],
                 ['Age', age ? `${age} years` : '—'],
                 ['Sex', patient.sex],
-                ['Ethnicity', patient.ethnicity || 'Indian'],
-                ['Indian Citizen', patient.indianCitizen !== false ? 'Yes (Verified)' : 'No'],
                 ['Occupation', patient.occupation ?? '—'],
                 ['Registry Enrollment', patient.registryId ? (REGISTRY_MAP[patient.registryId] || patient.registryId) : 'None (Unassigned)'],
                 ['Index Date', patient.indexDate ? formatDate(patient.indexDate) : '—'],
