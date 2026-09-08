@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
 import { calculateMAGGIC, calculateH2FPEF, calculateHFAPEFF, calculateCHARM, calculateCHADSVASc, calculateHASBLED, calculateMACERisk, calculateContrastNephropathyRisk, calculateReadmissionRisk, calculateASCVDRisk } from '@/lib/riskScores'
 import type { KillipClass, TIMIFlow, CulpritVessel, ASCVDRace } from '@/lib/riskScores'
-import { getPatient, getVisits, updateVisit } from '@/lib/firestore'
+import { getPatient, getVisits, updateVisit, getPatients, getAllLatestVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import { toast } from 'sonner'
 
@@ -153,113 +153,179 @@ function RiskCalculatorContent() {
   const [ascvdSmoker, setAscvdSmoker] = useState(false)
   const [ascvdLDL, setAscvdLDL] = useState(130)
 
+  const [allPatients, setAllPatients] = useState<Patient[]>([])
+  const [allVisitsMap, setAllVisitsMap] = useState<Map<string, Visit>>(new Map())
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(patientId || '')
+
   const [saving, setSaving] = useState(false)
 
-  // Fetch patient and visit details if query parameters are provided
+  // Populate all calculators from a given patient and visit
+  const populateFromPatientAndVisit = (pt: Patient, vt?: Visit | null) => {
+    setConnectedPatient(pt)
+    if (vt) setConnectedVisit(vt)
+
+    // Age calculation
+    let age = 65
+    if (pt.dob) {
+      age = Math.floor((Date.now() - new Date(pt.dob).getTime()) / (365.25 * 86400000))
+    } else if (pt.age) {
+      age = pt.age
+    }
+
+    // BMI calculation
+    let bmi = 24
+    if (vt?.weight && vt?.height) {
+      bmi = +(vt.weight / ((vt.height / 100) * (vt.height / 100))).toFixed(1)
+    } else if (vt?.bmi) {
+      bmi = vt.bmi
+    }
+
+    // Comorbidities check
+    const ptComorbidities = (Array.isArray(pt.comorbidities) ? pt.comorbidities.join(' ') : (pt.comorbidities ?? '')).toLowerCase()
+    const hasDiabetes = Boolean(pt.comorbidDiabetes || ptComorbidities.includes('diabetes') || ptComorbidities.includes('dm'))
+    const hasHTN = Boolean(pt.comorbidHypertension || ptComorbidities.includes('hypertension') || ptComorbidities.includes('htn') || (vt?.bpSystolic != null && vt.bpSystolic > 140))
+    const hasCKD = Boolean(pt.comorbidCKD || ptComorbidities.includes('ckd') || ptComorbidities.includes('renal'))
+    const hasAF = Boolean(pt.comorbidAF || ptComorbidities.includes('af') || ptComorbidities.includes('fibrillation') || vt?.rhythm === 'AF' || vt?.rhythm === 'Atrial Flutter')
+    const hasCOPD = Boolean(pt.comorbidCOPD || ptComorbidities.includes('copd') || ptComorbidities.includes('asthma'))
+    const isSmoker = Boolean((pt as any).currentSmoker || ptComorbidities.includes('smok') || ptComorbidities.includes('tobacco'))
+    const hasStroke = Boolean(ptComorbidities.includes('stroke') || ptComorbidities.includes('cva') || ptComorbidities.includes('tia') || vt?.eventStroke)
+    const hasVascular = Boolean(ptComorbidities.includes('vascular') || ptComorbidities.includes('mi') || ptComorbidities.includes('cad') || ptComorbidities.includes('pci') || ptComorbidities.includes('cabg') || vt?.eventMI)
+
+    // 1. MAGGIC
+    setMaggicAge(age)
+    if (vt?.lvef != null) setMaggicLvef(vt.lvef)
+    else if (pt.lvef != null) setMaggicLvef(pt.lvef)
+    if (vt?.bpSystolic != null) setMaggicSbp(vt.bpSystolic)
+    setMaggicBmi(bmi)
+    if (vt?.creatinine != null) setMaggicCr(vt.creatinine)
+    if (vt?.nyha && ['I', 'II', 'III', 'IV'].includes(vt.nyha)) setMaggicNyha(vt.nyha as any)
+    else if (pt.nyha && ['I', 'II', 'III', 'IV'].includes(pt.nyha)) setMaggicNyha(pt.nyha as any)
+    setMaggicSex(pt.sex === 'Female' ? 'Female' : 'Male')
+    setMaggicDiabetes(hasDiabetes)
+    setMaggicSmoker(isSmoker)
+    setMaggicCopd(hasCOPD)
+    setMaggicBb(vt?.betaBlocker?.prescribed === 'Yes')
+    setMaggicAce(vt?.raasi?.prescribed === 'Yes')
+
+    // 2. H2FPEF
+    setH2Bmi(bmi)
+    setH2Af(hasAF)
+    if (vt?.rvsp != null) setH2Pap(vt.rvsp)
+    setH2Age(age)
+    if (vt?.eEPrime != null) setH2EEPrime(vt.eEPrime)
+
+    // 3. HFA-PEFF
+    if (vt?.septalEPrime != null) setHfaSeptalEPrime(vt.septalEPrime)
+    if (vt?.lateralEPrime != null) setHfaLateralEPrime(vt.lateralEPrime)
+    if (vt?.gls != null) setHfaGls(vt.gls)
+    if (vt?.laVolumeIndex != null) setHfaLaVolumeIndex(vt.laVolumeIndex)
+    if (vt?.lvMassIndex != null) setHfaLvMassIndex(vt.lvMassIndex)
+    if (vt?.relativeWallThickness != null) setHfaRelativeWallThickness(vt.relativeWallThickness)
+    if (vt?.ntProBNP != null) setHfaNtProBNP(vt.ntProBNP)
+    if (vt?.bnp != null) setHfaBNP(vt.bnp)
+
+    // 4. CHARM
+    setCharmAge(age)
+    if (vt?.nyha && ['I', 'II', 'III', 'IV'].includes(vt.nyha)) setCharmNyha(vt.nyha as any)
+    if (vt?.lvef != null) setCharmLvef(vt.lvef)
+    if (vt?.creatinine != null) setCharmCr(vt.creatinine)
+    if (vt?.sodium != null) setCharmSodium(vt.sodium)
+    setCharmDiabetes(hasDiabetes)
+    setCharmCopd(hasCOPD)
+    setCharmSmoker(isSmoker)
+
+    // 5. CHA2DS2-VASc
+    setChadsAge(age)
+    setChadsSex(pt.sex === 'Female' ? 'Female' : 'Male')
+    setChadsCHF(true)
+    setChadsHTN(hasHTN)
+    setChadsDiabetes(hasDiabetes)
+    setChadsStroke(hasStroke)
+    setChadsVascular(hasVascular)
+
+    // 6. HAS-BLED
+    setHasbledAge(age)
+    setHasbledHTN(vt?.bpSystolic != null && vt.bpSystolic > 160)
+    setHasbledRenal(hasCKD || (vt?.creatinine != null && vt.creatinine > 2.26))
+    setHasbledLiver(ptComorbidities.includes('cirrhosis') || ptComorbidities.includes('liver') || ptComorbidities.includes('hepatic'))
+    setHasbledStroke(hasStroke)
+    setHasbledBleeding(ptComorbidities.includes('bleeding') || (vt?.hb != null && vt.hb < 11))
+    setHasbledDrugs(vt?.aspirin?.prescribed === 'Yes' || ptComorbidities.includes('aspirin') || ptComorbidities.includes('nsaid'))
+
+    // 7. MACE Risk (ACS)
+    setMaceAge(age)
+    if (vt?.lvef != null) setMaceLvef(vt.lvef)
+    setMaceDiabetes(hasDiabetes)
+    setMacePriorMI(hasVascular)
+
+    // 8. Contrast Nephropathy
+    setCinAge(age)
+    if (vt?.egfr != null) setCinEGFR(vt.egfr)
+    if (vt?.creatinine != null) setCinCreatinine(vt.creatinine)
+    setCinDiabetes(hasDiabetes)
+    setCinHF(true)
+    setCinHypotension(vt?.bpSystolic != null && vt.bpSystolic < 90)
+
+    // 9. Readmission Risk
+    if (vt?.lvef != null) setReadLvef(vt.lvef)
+    setReadAge(age)
+    setReadBetaBlocker(vt?.betaBlocker?.prescribed === 'Yes')
+    setReadRaas(vt?.raasi?.prescribed === 'Yes')
+    setReadDiabetes(hasDiabetes)
+    setReadRenal(hasCKD)
+    setReadCopd(hasCOPD)
+    setReadPriorHosp(vt?.hospHistory === 'Yes')
+
+    // 10. ASCVD Risk
+    setAscvdAge(age)
+    setAscvdSex(pt.sex === 'Female' ? 'Female' : 'Male')
+    if (vt?.bpSystolic != null) setAscvdSBP(vt.bpSystolic)
+    setAscvdHTNTx(hasHTN)
+    setAscvdDiabetes(hasDiabetes)
+    setAscvdSmoker(isSmoker)
+
+    toast.success(`Loaded clinical registry data for ${pt.firstName} ${pt.lastName}`)
+  }
+
+  // Load patient list and map on mount
   useEffect(() => {
-    async function loadConnectedData() {
-      if (patientId && visitId) {
-        try {
-          const pt = await getPatient(patientId)
-          const vts = await getVisits(patientId)
-          const vt = vts.find(v => v.id === visitId)
+    async function loadAllRegistryData() {
+      try {
+        const [pts, vmap] = await Promise.all([getPatients(), getAllLatestVisits()])
+        setAllPatients(pts)
+        setAllVisitsMap(vmap)
 
-          if (pt && vt) {
-            setConnectedPatient(pt)
-            setConnectedVisit(vt)
-            
-            // Age calculation
-            let age = 65
-            if (pt.dob) {
-              age = Math.floor((Date.now() - new Date(pt.dob).getTime()) / (365.25 * 86400000))
-            }
-
-            // BMI calculation
-            let bmi = 24
-            if (vt.weight && vt.height) {
-              bmi = +(vt.weight / ((vt.height / 100) * (vt.height / 100))).toFixed(1)
-            }
-
-            // Check comorbidities for DM
-            const hasDiabetes = (Array.isArray(pt.comorbidities) ? pt.comorbidities.join(' ') : (pt.comorbidities ?? '')).toLowerCase().includes('diabetes') || (Array.isArray(pt.comorbidities) ? pt.comorbidities.join(' ') : (pt.comorbidities ?? '')).toLowerCase().includes('dm') || false
-
-            // Auto-populate MAGGIC
-            setMaggicAge(age)
-            if (vt.lvef != null) setMaggicLvef(vt.lvef)
-            if (vt.bpSystolic != null) setMaggicSbp(vt.bpSystolic)
-            setMaggicBmi(bmi)
-            if (vt.creatinine != null) setMaggicCr(vt.creatinine)
-            if (vt.nyha && ['I', 'II', 'III', 'IV'].includes(vt.nyha)) setMaggicNyha(vt.nyha as any)
-            setMaggicSex(pt.sex === 'Female' ? 'Female' : 'Male')
-            setMaggicDiabetes(hasDiabetes)
-            setMaggicBb(vt.betaBlocker?.prescribed === 'Yes')
-            setMaggicAce(vt.raasi?.prescribed === 'Yes')
-
-            // Auto-populate H2FPEF
-            setH2Bmi(bmi)
-            setH2Af(vt.rhythm === 'AF' || vt.rhythm === 'Atrial Flutter')
-            if (vt.rvsp != null) setH2Pap(vt.rvsp)
-            setH2Age(age)
-            if (vt.eEPrime != null) setH2EEPrime(vt.eEPrime)
-
-            // Auto-populate HFA-PEFF
-            if (vt.septalEPrime != null) setHfaSeptalEPrime(vt.septalEPrime)
-            if (vt.lateralEPrime != null) setHfaLateralEPrime(vt.lateralEPrime)
-            if (vt.gls != null) setHfaGls(vt.gls)
-            if (vt.laVolumeIndex != null) setHfaLaVolumeIndex(vt.laVolumeIndex)
-            if (vt.lvMassIndex != null) setHfaLvMassIndex(vt.lvMassIndex)
-            if (vt.relativeWallThickness != null) setHfaRelativeWallThickness(vt.relativeWallThickness)
-            if (vt.ntProBNP != null) setHfaNtProBNP(vt.ntProBNP)
-            if (vt.bnp != null) setHfaBNP(vt.bnp)
-
-            // Auto-populate CHARM
-            setCharmAge(age)
-            if (vt.nyha && ['I', 'II', 'III', 'IV'].includes(vt.nyha)) setCharmNyha(vt.nyha as any)
-            if (vt.lvef != null) setCharmLvef(vt.lvef)
-            if (vt.creatinine != null) setCharmCr(vt.creatinine)
-            if (vt.sodium != null) setCharmSodium(vt.sodium)
-            setCharmDiabetes(hasDiabetes)
-
-            // Auto-populate CHA2DS2-VASc
-            setChadsAge(age)
-            setChadsSex(pt.sex === 'Female' ? 'Female' : 'Male')
-            setChadsCHF(true) // Defaults to true in heart failure context
-            const ptComorbidities = Array.isArray(pt.comorbidities) ? pt.comorbidities.join(' ') : (pt.comorbidities ?? '')
-            const hasHTN = ptComorbidities.toLowerCase().includes('hypertension') || ptComorbidities.toLowerCase().includes('htn') || (vt.bpSystolic != null && vt.bpSystolic > 140) || (vt.bpDiastolic != null && vt.bpDiastolic > 90) || false
-            setChadsHTN(hasHTN)
-            setChadsDiabetes(hasDiabetes)
-            const hasStroke = ptComorbidities.toLowerCase().includes('stroke') || ptComorbidities.toLowerCase().includes('cva') || ptComorbidities.toLowerCase().includes('tia') || !!vt.eventStroke || false
-            setChadsStroke(hasStroke)
-            const hasVascular = ptComorbidities.toLowerCase().includes('vascular') || ptComorbidities.toLowerCase().includes('mi') || ptComorbidities.toLowerCase().includes('cad') || ptComorbidities.toLowerCase().includes('myocardial') || !!vt.eventMI || false
-            setChadsVascular(hasVascular)
-
-            // Auto-populate HAS-BLED
-            setHasbledAge(age)
-            setHasbledHTN(vt.bpSystolic != null && vt.bpSystolic > 160)
-            const abnormalRenal = ptComorbidities.toLowerCase().includes('dialysis') || ptComorbidities.toLowerCase().includes('renal') || ptComorbidities.toLowerCase().includes('transplant') || (vt.creatinine != null && vt.creatinine > 2.26) || false
-            setHasbledRenal(abnormalRenal)
-            const abnormalLiver = ptComorbidities.toLowerCase().includes('cirrhosis') || ptComorbidities.toLowerCase().includes('liver') || ptComorbidities.toLowerCase().includes('hepatic') || false
-            setHasbledLiver(abnormalLiver)
-            setHasbledStroke(hasStroke)
-            const hasBleeding = ptComorbidities.toLowerCase().includes('bleeding') || ptComorbidities.toLowerCase().includes('hemorrhage') || ptComorbidities.toLowerCase().includes('anaemia') || ptComorbidities.toLowerCase().includes('anemia') || (vt.hb != null && vt.hb < 11) || false
-            setHasbledBleeding(hasBleeding)
-            const labileINR = ptComorbidities.toLowerCase().includes('labile') || ptComorbidities.toLowerCase().includes('inr') || false
-            setHasbledLabileINR(labileINR)
-            const usesDrugs = vt.aspirin?.prescribed === 'Yes' || ptComorbidities.toLowerCase().includes('nsaid') || ptComorbidities.toLowerCase().includes('aspirin') || false
-            setHasbledDrugs(usesDrugs)
-            const alcoholExcess = ptComorbidities.toLowerCase().includes('alcohol') || false
-            setHasbledAlcohol(alcoholExcess)
-
-            toast.success(`Loaded clinical values for ${pt.firstName} ${pt.lastName}`)
+        // If patientId is specified in URL query, load them immediately
+        if (patientId) {
+          const pt = pts.find(p => p.id === patientId)
+          if (pt) {
+            const vt = vmap.get(pt.id) || null
+            populateFromPatientAndVisit(pt, vt)
+            setSelectedPatientId(pt.id)
           }
-        } catch (e) {
-          console.error(e)
-          toast.error('Failed to load connected visit details')
         }
+      } catch (err) {
+        console.error('Failed to load registry patients:', err)
       }
     }
-    loadConnectedData()
-  }, [patientId, visitId])
+    loadAllRegistryData()
+  }, [patientId])
+
+  // Handle patient dropdown change
+  const handleSelectPatient = (id: string) => {
+    setSelectedPatientId(id)
+    if (!id) {
+      setConnectedPatient(null)
+      setConnectedVisit(null)
+      toast.info('Switched to manual simulation mode')
+      return
+    }
+    const pt = allPatients.find(p => p.id === id)
+    if (pt) {
+      const vt = allVisitsMap.get(pt.id) || null
+      populateFromPatientAndVisit(pt, vt)
+    }
+  }
 
   const handleCrUnitChange = (newUnit: 'mg/dL' | 'umol/L') => {
     if (crUnit === newUnit) return;
@@ -505,7 +571,7 @@ function RiskCalculatorContent() {
   return (
     <div className="space-y-6 animate-fade-in text-gray-300">
       
-      {/* Header */}
+      {/* Header & Patient Selector */}
       <div className="flex justify-between items-start flex-wrap gap-4">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-violet-600/10 border border-violet-500/20 flex items-center justify-center text-violet-400 flex-shrink-0">
@@ -519,19 +585,55 @@ function RiskCalculatorContent() {
           </div>
         </div>
 
-        {connectedPatient && (
-          <div className="bg-blue-500/5 border border-blue-500/10 rounded-xl p-3 flex items-center gap-3 text-xs">
-            <User className="w-4 h-4 text-blue-400" />
-            <div>
-              <p className="font-semibold text-white">Patient: {connectedPatient.firstName} {connectedPatient.lastName}</p>
-              <p className="text-[10px] text-gray-500">Visit Date: {connectedVisit?.visitDate}</p>
-            </div>
-            <Button size="sm" onClick={handleSaveToVisit} loading={saving}>
+        {/* Patient Selection Dropdown & Persistence Controls */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="bg-slate-900 border border-blue-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
+            <User className="w-4 h-4 text-blue-400 flex-shrink-0" />
+            <select
+              value={selectedPatientId}
+              onChange={(e) => handleSelectPatient(e.target.value)}
+              className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer pr-2"
+            >
+              <option value="" className="bg-slate-900 text-gray-400">
+                — Manual Simulation Mode —
+              </option>
+              {allPatients.map((p) => {
+                const vt = allVisitsMap.get(p.id)
+                const lvefTxt = vt?.lvef != null ? ` • LVEF ${vt.lvef}%` : (p.lvef != null ? ` • LVEF ${p.lvef}%` : '')
+                const nyhaTxt = vt?.nyha ? ` • NYHA ${vt.nyha}` : ''
+                const srTxt = p.srNo ? `SR-${p.srNo}: ` : ''
+                return (
+                  <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                    {srTxt}{p.firstName} {p.lastName}{lvefTxt}{nyhaTxt}
+                  </option>
+                )
+              })}
+            </select>
+          </div>
+
+          {connectedPatient && (
+            <Button size="sm" onClick={handleSaveToVisit} loading={saving} className="btn-sm flex items-center gap-1.5">
               <Save className="w-3.5 h-3.5" /> Save to Visit
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {connectedPatient && (
+        <div className="bg-blue-950/30 border border-blue-500/20 rounded-xl p-3 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="badge badge-blue text-[10px] uppercase font-bold">Live Registry Sync</span>
+            <span className="font-semibold text-white">{connectedPatient.firstName} {connectedPatient.lastName}</span>
+            <span className="text-gray-400">({connectedPatient.sex || 'Male'}, {connectedPatient.dob ? `${Math.floor((Date.now() - new Date(connectedPatient.dob).getTime()) / (365.25 * 86400000))} yrs` : `${connectedPatient.age || '—'} yrs`})</span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-gray-300 font-mono">
+            <span>LVEF: <b className="text-blue-400">{maggicLvef}%</b></span>
+            <span>SBP: <b className="text-emerald-400">{maggicSbp} mmHg</b></span>
+            <span>Cr: <b className="text-amber-400">{maggicCr} {crUnit}</b></span>
+            <span>GDMT: <b className="text-violet-400">{connectedVisit?.betaBlocker?.prescribed === 'Yes' && connectedVisit?.raasi?.prescribed === 'Yes' ? 'Active' : 'Partial'}</b></span>
+          </div>
+        </div>
+      )}
 
       {/* Calculator Selector Tabs */}
       <div className="flex border-b border-blue-500/10 pb-3 gap-6 flex-wrap">

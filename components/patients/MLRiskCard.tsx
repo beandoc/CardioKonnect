@@ -1,5 +1,6 @@
 'use client'
 import { useMemo } from 'react'
+import Link from 'next/link'
 import {
   Heart, Activity, TrendingUp, TrendingDown, ShieldCheck,
   AlertTriangle, Info, CheckCircle2, ChevronRight, Stethoscope, Sparkles
@@ -139,12 +140,20 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
           Primary clinical driver: <span className="text-white font-semibold">{risk.primaryDriver}</span>
         </p>
 
-        {/* Validation Footnote */}
-        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-blue-500/10">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-          <p className="text-[11px] text-gray-400">
-            Validated Meta-Analysis Global Group in Chronic HF (MAGGIC) integer model
-          </p>
+        {/* Validation Footnote & Full Suite Link */}
+        <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-blue-500/10 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+            <p className="text-[11px] text-gray-400">
+              Validated Meta-Analysis Global Group in Chronic HF (MAGGIC) integer model
+            </p>
+          </div>
+          <Link
+            href={`/risk?patientId=${patient.id}&visitId=${visit.id}`}
+            className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 transition-colors hover:underline"
+          >
+            Open 10-Score Suite <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       </div>
 

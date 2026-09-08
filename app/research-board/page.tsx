@@ -210,8 +210,10 @@ export default function ResearchBoardPage() {
     }
     const mw = (key: keyof Visit) => mannWhitneyTest(vA(key), vB(key)).pValue
     const tt = (key: keyof Visit) => tTest(vA(key), vB(key)).pValue
+    const ageA = byType.HFrEF.map(r => getAge(r.patient.dob)).filter((a): a is number => a != null)
+    const ageB = byType.HFpEF.map(r => getAge(r.patient.dob)).filter((a): a is number => a != null)
     return {
-      age: tt('heartRate'),  // using HR as proxy since age from patient not visit
+      age: tTest(ageA, ageB).pValue,
       lvef: tt('lvef'),
       hr: tt('heartRate'),
       sbp: tt('bpSystolic'),
