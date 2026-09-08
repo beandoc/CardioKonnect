@@ -159,32 +159,32 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
 
       {/* ── Key Prognostic Contributing Factors ──────────────────── */}
       {risk.topFactors.length > 0 && (
-        <div className="bg-slate-900/60 border border-blue-500/15 rounded-xl p-4 space-y-3">
+        <div className="glass-card p-4 rounded-2xl space-y-3">
           <p className="text-xs font-bold text-white flex items-center justify-between">
             <span className="flex items-center gap-1.5">
-              <Info className="w-3.5 h-3.5 text-cyan-400" />
+              <Info className="w-3.5 h-3.5 text-blue-500" />
               Prognostic Drivers & Protective GDMT
             </span>
-            <span className="text-[10px] text-gray-400 font-normal">ESC 2023 Guidelines</span>
+            <span className="text-[10px] text-slate-500 dark:text-gray-400 font-medium">ESC 2023 Guidelines</span>
           </p>
 
           <div className="space-y-2">
             {risk.topFactors.map((f, i) => (
               <div key={i} className="flex items-center gap-2.5 text-xs">
                 {f.direction === 'risk'
-                  ? <TrendingUp className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
-                  : <TrendingDown className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  ? <TrendingUp className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
+                  : <TrendingDown className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                 }
-                <span className={cn('truncate', f.direction === 'risk' ? 'text-rose-300 font-medium' : 'text-emerald-300 font-medium')}>
+                <span className={cn('truncate font-semibold', f.direction === 'risk' ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300')}>
                   {f.label}
                 </span>
-                <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden min-w-[40px]">
+                <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden min-w-[40px]">
                   <div
                     className={cn('h-full rounded-full', f.direction === 'risk' ? 'bg-rose-500' : 'bg-emerald-500')}
                     style={{ width: `${Math.min(100, f.magnitude * 700)}%` }}
                   />
                 </div>
-                <span className="text-gray-400 text-[11px] w-12 text-right font-mono">
+                <span className={cn('text-[11px] w-12 text-right font-mono font-bold', f.direction === 'risk' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
                   {f.direction === 'risk' ? '+Risk' : '−Risk'}
                 </span>
               </div>
@@ -194,17 +194,17 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
       )}
 
       {/* ── GDMT 4-Pillar Quadruple Therapy Card ──────────────────── */}
-      <div className="bg-slate-900/60 border border-blue-500/15 rounded-xl p-4 space-y-3">
+      <div className="glass-card p-4 rounded-2xl space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-bold text-white flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <ShieldCheck className="w-4 h-4 text-emerald-500" />
             4-Pillar GDMT Optimization
           </p>
           <span className={cn(
-            'text-xs font-bold px-2 py-0.5 rounded-full border',
-            gdmt.optimizationScore >= 75 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' :
-            gdmt.optimizationScore >= 50 ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' :
-            'bg-rose-500/15 border-rose-500/30 text-rose-400'
+            'text-xs font-bold px-2.5 py-0.5 rounded-full border',
+            gdmt.optimizationScore >= 75 ? 'badge-green' :
+            gdmt.optimizationScore >= 50 ? 'badge-amber' :
+            'badge-red'
           )}>
             {gdmt.pillarsOnTarget}/4 Pillars Active ({gdmt.optimizationScore}%)
           </span>
@@ -213,32 +213,32 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
         <div className="grid grid-cols-2 gap-2">
           {gdmt.pillars.map(p => (
             <div key={p.drug} className={cn(
-              'flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs border transition-colors',
-              p.status === 'prescribed'     ? 'bg-emerald-950/30 border-emerald-500/25 text-emerald-300' :
-              p.status === 'below-target'   ? 'bg-amber-950/30  border-amber-500/25  text-amber-300'    :
-              p.status === 'missing'        ? 'bg-rose-950/30   border-rose-500/25   text-rose-300'     :
-                                              'bg-slate-950/40  border-gray-800/40   text-gray-400'
+              'flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs border transition-colors',
+              p.status === 'prescribed'     ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-500/25 text-emerald-900 dark:text-emerald-300' :
+              p.status === 'below-target'   ? 'bg-amber-50  dark:bg-amber-950/30  border-amber-300  dark:border-amber-500/25  text-amber-900  dark:text-amber-300'    :
+              p.status === 'missing'        ? 'bg-rose-50   dark:bg-rose-950/30   border-rose-300   dark:border-rose-500/25   text-rose-900   dark:text-rose-300'     :
+                                              'bg-slate-100 dark:bg-slate-950/40  border-slate-200  dark:border-gray-800/40   text-slate-600  dark:text-gray-400'
             )}>
               <div className={cn(
                 'w-2 h-2 rounded-full flex-shrink-0',
-                p.status === 'prescribed'     ? 'bg-emerald-400' :
-                p.status === 'below-target'   ? 'bg-amber-400'   :
-                p.status === 'missing'        ? 'bg-rose-400'    :
-                                                'bg-gray-500'
+                p.status === 'prescribed'     ? 'bg-emerald-500' :
+                p.status === 'below-target'   ? 'bg-amber-500'   :
+                p.status === 'missing'        ? 'bg-rose-500'    :
+                'bg-slate-400'
               )} />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold truncate leading-tight">{p.drug}</p>
-                {p.currentDose && <p className="text-[10px] text-gray-400 truncate mt-0.5">{p.currentDose}</p>}
+                <p className="font-bold truncate leading-tight">{p.drug}</p>
+                {p.currentDose && <p className="text-[10px] text-slate-500 dark:text-gray-400 truncate mt-0.5">{p.currentDose}</p>}
               </div>
             </div>
           ))}
         </div>
 
         {/* Actionable Next Step for the Cardiologist */}
-        <div className="p-2.5 rounded-lg bg-blue-950/40 border border-blue-500/20 text-xs text-blue-200 flex items-start gap-2">
-          <Stethoscope className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+        <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/20 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
+          <Stethoscope className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <span className="font-semibold text-white">Guideline Recommendation: </span>
+            <span className="font-bold text-blue-950 dark:text-white">Guideline Recommendation: </span>
             {gdmt.nextBestAction}
           </p>
         </div>
