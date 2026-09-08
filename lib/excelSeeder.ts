@@ -375,13 +375,17 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     // Generate a local unique patient ID (no Firestore needed)
     const patientId = 'p-' + Math.random().toString(36).substr(2, 9) + '-' + (patientsCount + 1);
 
+    // Extract Column D (HID NO.)
+    const rawHid = String(row['HID NO.'] || row['HID NO'] || row['HID'] || row['MRN'] || '').trim();
+    const mrn = rawHid ? rawHid : (srNo ? `HID-${srNo}` : `MRN-${1000 + patientsCount + 1}`);
+
     // Build Patient document data
     const patientInput: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'> = {
       firstName,
       lastName,
       dob,
       sex,
-      mrn: `MRN-${1000 + srNo}`,
+      mrn,
       contact,
       address,
       comorbidities,
