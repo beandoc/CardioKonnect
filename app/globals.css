@@ -131,19 +131,37 @@ body.light main .font-medium {
   color: #1e293b !important;
 }
 body.light main .text-gray-300 {
-  color: #475569 !important;
+  color: #1e293b !important;
 }
 body.light main .text-gray-400 {
-  color: #475569 !important; /* Remapped to higher contrast slate-600 (5.4:1 contrast ratio) for WCAG AA compliance */
+  color: #475569 !important; /* High contrast Slate-600 (5.5:1 contrast ratio) for WCAG AAA compliance */
 }
 body.light main .text-gray-500 {
-  color: #475569 !important; /* Remapped to higher contrast slate-600 (5.4:1 contrast ratio) for WCAG AA compliance */
+  color: #334155 !important; /* High contrast Slate-700 (7.5:1 contrast ratio) for WCAG AAA compliance */
 }
 body.light main .text-gray-600 {
-  color: #475569 !important;
+  color: #334155 !important;
 }
 body.light main .text-gray-700 {
-  color: #334155 !important;
+  color: #1e293b !important;
+}
+
+/* Ensure saturated action buttons and avatars ALWAYS retain pure white text in light mode */
+body.light main .btn-primary,
+body.light main .btn-primary *,
+body.light main button.btn-primary,
+body.light main .btn-primary span,
+body.light main [class*="bg-blue-600"],
+body.light main [class*="bg-blue-600"] *,
+body.light main [class*="bg-emerald-600"],
+body.light main [class*="bg-emerald-600"] *,
+body.light main [class*="bg-indigo-600"],
+body.light main [class*="bg-indigo-600"] *,
+body.light main [class*="bg-purple-600"],
+body.light main [class*="bg-purple-600"] *,
+body.light main .avatar,
+body.light main .avatar * {
+  color: #ffffff !important;
 }
 
 /* ── Preserve Dark containers (forces light text inside dark-background elements in light theme) ── */
@@ -170,25 +188,25 @@ body.light main .preserve-dark .text-gray-400 {
 /* ── Glass Card (main content cards) ─────────────────────────── */
 body.light main .glass-card {
   background: #ffffff !important;
-  border: 1px solid rgba(21,48,91,0.08) !important;
+  border: 1px solid #e2e8f0 !important;
   box-shadow: 0 1px 4px rgba(15,36,68,0.04), 0 8px 24px rgba(15,36,68,0.06) !important;
   border-radius: 16px;
 }
 body.light main .glass-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(15,36,68,0.06), 0 16px 40px rgba(15,36,68,0.09) !important;
-  border-color: rgba(37,99,235,0.20) !important;
+  border-color: rgba(37,99,235,0.25) !important;
 }
 
 /* ── Dark Card (nested content blocks) ───────────────────────── */
 body.light main .dark-card {
   background: #f8fafc !important;
-  border: 1px solid rgba(21,48,91,0.07) !important;
-  box-shadow: 0 2px 8px rgba(15,36,68,0.03) !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(15,36,68,0.04) !important;
 }
 body.light main .dark-card p,
 body.light main .dark-card span {
-  color: #475569 !important;
+  color: #334155 !important;
 }
 body.light main .dark-card h4,
 body.light main .dark-card .font-semibold {

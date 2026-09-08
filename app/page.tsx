@@ -317,7 +317,7 @@ export default function DashboardPage() {
             <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: kpi.color }}>
               {kpi.label}
             </p>
-            <p className="text-[10px] mt-1" style={{ color: 'rgba(148,163,184,0.45)' }}>{kpi.sub}</p>
+            <p className="text-[10px] mt-1 text-slate-500 dark:text-slate-400 font-medium">{kpi.sub}</p>
           </div>
         ))}
       </div>
@@ -394,7 +394,7 @@ export default function DashboardPage() {
                             <p className="font-medium text-white group-hover:text-blue-300 transition-colors">
                               {p.firstName} {p.lastName}
                             </p>
-                            <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.4)' }}>
+                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                               {p.mrn || p.id.slice(0,8)}
                             </p>
                           </div>
@@ -403,22 +403,22 @@ export default function DashboardPage() {
                       <td>
                         {latest?.hfType
                           ? <span className={`badge ${latest.hfType === 'HFrEF' ? 'badge-red' : latest.hfType === 'HFpEF' ? 'badge-blue' : 'badge-amber'}`}>{latest.hfType}</span>
-                          : <span style={{ color: 'rgba(148,163,184,0.25)' }}>—</span>}
+                          : <span className="text-slate-400 dark:text-slate-500">—</span>}
                       </td>
                       <td>
                         {latest?.nyha
                           ? <span className={`badge ${latest.nyha === 'III' || latest.nyha === 'IV' ? 'badge-red' : 'badge-gray'}`}>Class {latest.nyha}</span>
-                          : <span style={{ color: 'rgba(148,163,184,0.25)' }}>—</span>}
+                          : <span className="text-slate-400 dark:text-slate-500">—</span>}
                       </td>
                       <td>
                         {latest?.lvef != null
                           ? <span className="font-bold text-sm" style={{ color: latest.lvef < 40 ? '#f43f5e' : latest.lvef < 50 ? '#f59e0b' : '#10b981' }}>
                               {latest.lvef}%
                             </span>
-                          : <span style={{ color: 'rgba(148,163,184,0.25)' }}>—</span>}
+                          : <span className="text-slate-400 dark:text-slate-500">—</span>}
                       </td>
                       <td>
-                        <span className="text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                           {latest ? formatDate(latest.visitDate) : 'No visits'}
                         </span>
                       </td>
@@ -461,7 +461,7 @@ export default function DashboardPage() {
                 return (
                   <div key={item.key}>
                     <div className="flex justify-between text-xs mb-1">
-                      <span style={{ color: 'rgba(148,163,184,0.7)' }}>{item.label}</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{item.label}</span>
                       <span className="font-bold" style={{ color: item.color }}>{pct}%</span>
                     </div>
                     <div className="progress-track">
@@ -471,7 +471,7 @@ export default function DashboardPage() {
                 )
               })}
             </div>
-            <p className="text-[10px] mt-3" style={{ color: 'rgba(148,163,184,0.35)' }}>Among HFrEF patients only</p>
+            <p className="text-[11px] mt-3 text-slate-500 dark:text-slate-400">Among HFrEF patients only</p>
           </div>
 
           {/* Quick Actions */}
@@ -489,15 +489,11 @@ export default function DashboardPage() {
                 { href: '/registry',     icon: Database,     label: 'Registry Fields Setup',color: '#06b6d4' },
               ].map(a => (
                 <Link key={a.href} href={a.href} className="block">
-                  <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 text-left group"
-                    style={{ background: 'rgba(15,26,61,0.6)', border: '1px solid rgba(59,130,246,0.1)' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${a.color}40`; (e.currentTarget as HTMLElement).style.background = `${a.color}0d`; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(59,130,246,0.1)'; (e.currentTarget as HTMLElement).style.background = 'rgba(15,26,61,0.6)'; }}
-                  >
-                    <a.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: a.color }} />
-                    <span style={{ color: 'rgba(148,163,184,0.8)' }}>{a.label}</span>
-                    <ChevronRight className="w-3 h-3 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: a.color }} />
-                  </button>
+                  <div className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-200 text-left group dark-card hover:border-blue-500/30 hover:bg-blue-50/60 dark:hover:bg-blue-900/20 cursor-pointer">
+                    <a.icon className="w-4 h-4 flex-shrink-0" style={{ color: a.color }} />
+                    <span className="font-medium text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-300 text-xs">{a.label}</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-400 group-hover:text-blue-500 opacity-60 group-hover:opacity-100 transition-all" />
+                  </div>
                 </Link>
               ))}
             </div>
@@ -512,7 +508,7 @@ export default function DashboardPage() {
             <FlaskConical className="w-4 h-4" style={{ color: '#8b5cf6' }} />
             <h3 className="text-sm font-semibold text-white">Research Cohort Profiles</h3>
           </div>
-          <span className="text-[10px] px-2 py-1 rounded-lg" style={{ background: 'rgba(139,92,246,0.1)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.2)' }}>
+          <span className="text-[10px] px-2 py-1 rounded-lg font-semibold badge-violet">
             Auto-computed from latest visit data
           </span>
         </div>
@@ -525,13 +521,13 @@ export default function DashboardPage() {
             { title: 'AF + No Anticoagulation',desc: 'AF not on NOAC/VKI',             value: '—',   color: '#f59e0b' },
             { title: 'Uncontrolled DM',        desc: 'HbA1c >8% in DM patients',       value: '—',   color: '#06b6d4' },
           ].map(c => (
-            <div key={c.title} className="rounded-xl p-4 transition-all duration-200 hover:transform hover:-translate-y-1"
-              style={{ background: `${c.color}0d`, border: `1px solid ${c.color}25` }}>
+            <div key={c.title} className="rounded-xl p-4 transition-all duration-200 hover:transform hover:-translate-y-1 dark-card border"
+              style={{ borderColor: `${c.color}35` }}>
               <p className="text-2xl font-bold mb-1" style={{ color: c.color, fontFamily: 'Space Grotesk, sans-serif' }}>
                 {loading ? '—' : c.value}
               </p>
-              <p className="text-xs font-semibold text-white mb-1 leading-tight">{c.title}</p>
-              <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.45)' }}>{c.desc}</p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-white mb-1 leading-tight">{c.title}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">{c.desc}</p>
             </div>
           ))}
         </div>
