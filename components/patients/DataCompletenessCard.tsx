@@ -81,17 +81,17 @@ export default function DataCompletenessCard({
 
         {/* Missing Critical items banner if any */}
         {report.missingCritical.length > 0 && (
-          <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-500/30 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="missing-critical-banner p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/30 flex items-start gap-2.5 text-xs text-amber-200">
+            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <span className="font-bold text-amber-950 dark:text-amber-300">Missing Critical Parameters: </span>
-              <span className="text-amber-900 dark:text-amber-200/90 font-medium">
+              <span className="font-bold text-amber-300">Missing Critical Parameters: </span>
+              <span className="text-amber-200/90 font-medium">
                 {report.missingCritical.map(f => f.label).join(' · ')}
               </span>
             </div>
             <button
               onClick={() => setShowModal(true)}
-              className="text-[11px] font-bold text-amber-800 dark:text-amber-300 underline hover:text-amber-950 dark:hover:text-amber-100 whitespace-nowrap ml-2"
+              className="text-[11px] font-bold text-amber-300 underline hover:text-amber-100 whitespace-nowrap ml-2"
             >
               Fill Now →
             </button>
@@ -105,13 +105,16 @@ export default function DataCompletenessCard({
             return (
               <div key={cat.name} className="p-2.5 rounded-xl dark-card space-y-1.5">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-600 dark:text-gray-400 font-semibold truncate">{cat.name}</span>
-                  <span className="font-bold font-mono text-slate-900 dark:text-white">{cat.score}%</span>
+                  <span className="text-gray-400 font-semibold truncate">{cat.name}</span>
+                  <span className="font-bold font-mono text-white">{cat.score}%</span>
                 </div>
-                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${cat.score}%`, backgroundColor: barColor }}
+                    style={{
+                      width: `${cat.score}%`,
+                      backgroundColor: barColor,
+                    }}
                   />
                 </div>
               </div>

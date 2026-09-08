@@ -317,64 +317,50 @@ export default function DashboardPage() {
             <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: kpi.color }}>
               {kpi.label}
             </p>
-            <p className="text-[10px] mt-1 text-slate-500 dark:text-slate-400 font-medium">{kpi.sub}</p>
+            <p className="text-[10px] mt-1 text-gray-400 font-medium">{kpi.sub}</p>
           </div>
         ))}
       </div>
 
-      {/* ── Main Content Grid ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* ── Main content grid: Patient Table + Side Panels ──────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Recent Patients — spans 2 cols */}
-        <div className="lg:col-span-2 glass-card p-0 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
+        {/* Left 2-cols: Recent Patients Table */}
+        <div className="lg:col-span-2 glass-card p-5 space-y-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Users className="w-4 h-4" style={{ color: '#3b82f6' }} />
-              <h3 className="text-sm font-semibold text-white">Recent Registry Entries</h3>
-              {!loading && (
-                <span className="badge badge-blue text-[10px]">{total} total</span>
-              )}
+              <Users className="w-4 h-4 text-blue-400" />
+              <h3 className="text-sm font-semibold text-white">Recent Enrolled Patients</h3>
+              <span className="text-xs text-gray-400 font-mono">({rows.length} total)</span>
             </div>
             <Link href="/patients">
-              <button className="btn-outline btn-sm flex items-center gap-1">
-                View all <ChevronRight className="w-3 h-3" />
+              <button className="btn-ghost btn-sm text-xs flex items-center gap-1">
+                View all <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </Link>
           </div>
 
           {loading ? (
-            <div className="p-5 space-y-3">
-              {[1,2,3,4].map(i => (
-                <div key={i} className="shimmer h-14 rounded-xl" />
+            <div className="space-y-2 py-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-12 rounded-lg bg-slate-800/50 animate-pulse" />
               ))}
             </div>
           ) : rows.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-              <Database className="w-12 h-12 mb-3 text-blue-500/40 animate-pulse" />
-              <p className="text-sm font-bold text-white">No Patients in Registry Yet</p>
-              <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-                Upload your HF.xlsx spreadsheet to import patient records, or add a patient manually.
-              </p>
-              <div className="flex gap-3 justify-center mt-5 flex-wrap">
-                <Link href="/seed">
-                  <button className="btn-primary btn-sm flex items-center gap-1.5">
-                    <Database className="w-3.5 h-3.5" /> Import from Excel
-                  </button>
-                </Link>
-                <Link href="/patients/new">
-                  <button className="btn-outline btn-sm flex items-center gap-1.5">
-                    <PlusCircle className="w-3.5 h-3.5" /> Add Patient
-                  </button>
-                </Link>
-              </div>
+            <div className="text-center py-12">
+              <Users className="w-8 h-8 text-gray-400 mx-auto mb-2 opacity-50" />
+              <p className="text-sm text-gray-400">No patients enrolled yet</p>
+              <Link href="/patients/new">
+                <button className="mt-3 btn-primary btn-sm px-4 py-2 rounded-xl text-xs font-semibold">Add first patient</button>
+              </Link>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="registry-table">
+              <table className="registry-table w-full text-xs">
                 <thead>
                   <tr>
                     <th>Patient</th>
-                    <th>HF Phenotype</th>
+                    <th>HF Type</th>
                     <th>NYHA</th>
                     <th>LVEF</th>
                     <th>Last Visit</th>
@@ -394,7 +380,7 @@ export default function DashboardPage() {
                             <p className="font-medium text-white group-hover:text-blue-300 transition-colors">
                               {p.firstName} {p.lastName}
                             </p>
-                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                            <p className="text-[11px] font-mono text-gray-400">
                               {p.mrn || p.id.slice(0,8)}
                             </p>
                           </div>
@@ -403,22 +389,22 @@ export default function DashboardPage() {
                       <td>
                         {latest?.hfType
                           ? <span className={`badge ${latest.hfType === 'HFrEF' ? 'badge-red' : latest.hfType === 'HFpEF' ? 'badge-blue' : 'badge-amber'}`}>{latest.hfType}</span>
-                          : <span className="text-slate-400 dark:text-slate-500">—</span>}
+                          : <span className="text-gray-500">—</span>}
                       </td>
                       <td>
                         {latest?.nyha
                           ? <span className={`badge ${latest.nyha === 'III' || latest.nyha === 'IV' ? 'badge-red' : 'badge-gray'}`}>Class {latest.nyha}</span>
-                          : <span className="text-slate-400 dark:text-slate-500">—</span>}
+                          : <span className="text-gray-500">—</span>}
                       </td>
                       <td>
                         {latest?.lvef != null
                           ? <span className="font-bold text-sm" style={{ color: latest.lvef < 40 ? '#f43f5e' : latest.lvef < 50 ? '#f59e0b' : '#10b981' }}>
                               {latest.lvef}%
                             </span>
-                          : <span className="text-slate-400 dark:text-slate-500">—</span>}
+                          : <span className="text-gray-500">—</span>}
                       </td>
                       <td>
-                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                        <span className="text-xs font-medium text-gray-300">
                           {latest ? formatDate(latest.visitDate) : 'No visits'}
                         </span>
                       </td>
@@ -437,31 +423,34 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Right Panel */}
-        <div className="space-y-4">
+        {/* Right 1-col: GDMT & Quick Actions */}
+        <div className="space-y-6">
 
-          {/* Guideline Adherence */}
+          {/* GDMT 4-Pillar Adherence Card */}
           <div className="glass-card p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <CheckCircle className="w-4 h-4" style={{ color: '#10b981' }} />
-              <h3 className="text-sm font-semibold text-white">Guideline Adherence</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Heart className="w-4 h-4 text-rose-400" />
+                <h3 className="text-sm font-semibold text-white">GDMT 4-Pillar</h3>
+              </div>
+              <span className="text-xs font-bold text-emerald-400 font-mono">
+                {adherenceScore}% Overall
+              </span>
             </div>
+
             <div className="space-y-3">
               {[
-                { label: 'RAASi',        key: 'raasi',       color: '#3b82f6' },
-                { label: 'Beta Blocker', key: 'betaBlocker', color: '#10b981' },
-                { label: 'MRA',          key: 'mra',         color: '#8b5cf6' },
-                { label: 'SGLT2i',       key: 'sglt2i',      color: '#f59e0b' },
+                { label: 'RAASi / ARNI',  key: 'raasi',       color: '#3b82f6' },
+                { label: 'Beta Blocker',  key: 'betaBlocker', color: '#8b5cf6' },
+                { label: 'MRA',           key: 'mra',         color: '#10b981' },
+                { label: 'SGLT2i',        key: 'sglt2i',      color: '#f59e0b' },
               ].map(item => {
-                const prescribed = rows.filter(r => {
-                  const med = r.latest?.[item.key as keyof Visit] as { prescribed?: string } | undefined
-                  return med?.prescribed === 'Yes'
-                }).length
+                const prescribed = rows.filter(r => r.latest?.hfType === 'HFrEF' && (r.latest?.[item.key as keyof Visit] as { prescribed?: string })?.prescribed === 'Yes').length
                 const pct = hfrEF > 0 ? Math.round((prescribed / hfrEF) * 100) : 0
                 return (
                   <div key={item.key}>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-slate-700 dark:text-slate-300">{item.label}</span>
+                      <span className="font-medium text-gray-300">{item.label}</span>
                       <span className="font-bold" style={{ color: item.color }}>{pct}%</span>
                     </div>
                     <div className="progress-track">
@@ -471,13 +460,13 @@ export default function DashboardPage() {
                 )
               })}
             </div>
-            <p className="text-[11px] mt-3 text-slate-500 dark:text-slate-400">Among HFrEF patients only</p>
+            <p className="text-[11px] mt-3 text-gray-400">Among HFrEF patients only</p>
           </div>
 
           {/* Quick Actions */}
           <div className="glass-card p-5">
             <div className="flex items-center gap-2 mb-4">
-              <Zap className="w-4 h-4" style={{ color: '#f59e0b' }} />
+              <Zap className="w-4 h-4 text-amber-400" />
               <h3 className="text-sm font-semibold text-white">Quick Actions</h3>
             </div>
             <div className="space-y-2">
@@ -489,10 +478,10 @@ export default function DashboardPage() {
                 { href: '/registry',     icon: Database,     label: 'Registry Fields Setup',color: '#06b6d4' },
               ].map(a => (
                 <Link key={a.href} href={a.href} className="block">
-                  <div className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-200 text-left group dark-card hover:border-blue-500/30 hover:bg-blue-50/60 dark:hover:bg-blue-900/20 cursor-pointer">
+                  <div className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm transition-all duration-200 text-left group dark-card hover:border-blue-500/30 hover:bg-blue-900/20 cursor-pointer">
                     <a.icon className="w-4 h-4 flex-shrink-0" style={{ color: a.color }} />
-                    <span className="font-medium text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-300 text-xs">{a.label}</span>
-                    <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-400 group-hover:text-blue-500 opacity-60 group-hover:opacity-100 transition-all" />
+                    <span className="font-medium text-gray-200 group-hover:text-blue-300 text-xs">{a.label}</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-auto text-gray-400 group-hover:text-blue-400 opacity-60 group-hover:opacity-100 transition-all" />
                   </div>
                 </Link>
               ))}
@@ -526,8 +515,8 @@ export default function DashboardPage() {
               <p className="text-2xl font-bold mb-1" style={{ color: c.color, fontFamily: 'Space Grotesk, sans-serif' }}>
                 {loading ? '—' : c.value}
               </p>
-              <p className="text-xs font-semibold text-slate-800 dark:text-white mb-1 leading-tight">{c.title}</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">{c.desc}</p>
+              <p className="text-xs font-semibold text-white mb-1 leading-tight">{c.title}</p>
+              <p className="text-[10px] text-gray-400">{c.desc}</p>
             </div>
           ))}
         </div>

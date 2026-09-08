@@ -355,26 +355,28 @@ export default function RegistryHomePage() {
             quickStats: quickStats
           }
         }))
-      } catch (error) {
-        console.error('Failed to load registry statistics:', error)
+      } catch (err) {
+        console.error('Failed to calculate registry live data:', err)
       } finally {
         setLoading(false)
       }
     }
+
     loadData()
   }, [])
 
-  const totalPatients = registries.reduce((s, r) => s + r.patients, 0)
-  const avgCompletion = Math.round(registries.reduce((s, r) => s + r.completion, 0) / registries.length)
-  const activeCount   = registries.filter(r => r.status === 'Active' && r.patients > 0).length
-  const newThisMonth  = registries.reduce((s, r) => s + r.newThisMonth, 0)
-
+  const totalPatients = registries.reduce((sum, r) => sum + r.patients, 0)
+  const activeCount   = registries.filter(r => r.status === 'Active' || r.status === 'Enrolling').length
+  const newThisMonth  = registries.reduce((sum, r) => sum + r.newThisMonth, 0)
+  const activeRegs    = registries.filter(r => r.patients > 0)
+  const avgCompletion = activeRegs.length > 0
+    ? Math.round(activeRegs.reduce((sum, r) => sum + r.completion, 0) / activeRegs.length)
+    : 0
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3">
-        <Activity className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-gray-400">Loading registry dashboard...</p>
+      <div className="flex items-center justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
       </div>
     )
   }
@@ -390,7 +392,7 @@ export default function RegistryHomePage() {
           { label: 'Avg Data Completion',      value: `${avgCompletion}%`,                        icon: CheckCircle,  color: 'text-violet-400',  bg: 'bg-violet-500/10' },
           { label: 'New Enrollments (Month)',  value: `+${newThisMonth}`,                         icon: TrendingUp,   color: 'text-amber-400',   bg: 'bg-amber-500/10' },
         ].map(s => (
-          <div key={s.label} className="glass-card p-4 flex items-center gap-3 border border-blue-500/10">
+          <div key={s.label} className="glass-card p-4 flex items-center gap-3 border border-white/[0.05]">
             <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', s.bg)}>
               <s.icon className={cn('w-4.5 h-4.5', s.color)} size={18} />
             </div>
@@ -428,13 +430,13 @@ export default function RegistryHomePage() {
                   {reg.categories.map(cat => (
                     <div key={cat.name} className="space-y-0.5">
                       <div className="flex justify-between items-center">
-                        <span className="text-[10px] text-slate-600 dark:text-gray-400 font-medium truncate">{cat.name}</span>
-                        <span className="text-[10px] font-bold text-slate-800 dark:text-white ml-2">{cat.pct}%</span>
+                        <span className="text-[10px] text-gray-400 truncate">{cat.name}</span>
+                        <span className="text-[10px] font-medium text-white ml-2">{cat.pct}%</span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-white/[0.07] overflow-hidden border border-slate-200/50 dark:border-transparent">
+                      <div className="h-1.5 rounded-full bg-white/[0.07] overflow-hidden registry-track">
                         <div
                           className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${cat.pct}%`, background: reg.ringColor, opacity: cat.pct < 70 ? 0.8 : 1 }}
+                          style={{ width: `${cat.pct}%`, background: reg.ringColor, opacity: cat.pct < 70 ? 0.7 : 1 }}
                         />
                       </div>
                     </div>
@@ -443,32 +445,32 @@ export default function RegistryHomePage() {
               </div>
 
               {/* Quick stats row */}
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-white/[0.05]">
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/[0.05] card-divider">
                 {reg.quickStats.map(qs => (
                   <div key={qs.label} className="text-center">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">{qs.value}</p>
-                    <p className="text-[9px] text-slate-500 dark:text-gray-400 font-medium leading-tight mt-0.5">{qs.label}</p>
+                    <p className="text-sm font-bold text-white">{qs.value}</p>
+                    <p className="text-[9px] text-gray-400 leading-tight mt-0.5">{qs.label}</p>
                   </div>
                 ))}
               </div>
 
               {/* Footer row */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-white/[0.05]">
-                <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-gray-400 font-medium">
+              <div className="flex items-center justify-between pt-2 border-t border-white/[0.05] card-divider">
+                <div className="flex items-center gap-3 text-[10px] text-gray-400">
                   <span className="flex items-center gap-1">
-                    <Users size={11} className="text-slate-400 dark:text-gray-500" /> {reg.patients.toLocaleString()} pts
+                    <Users size={11} className="text-gray-400" /> {reg.patients.toLocaleString()} pts
                   </span>
                   <span className="flex items-center gap-1">
-                    <Clock size={11} className="text-slate-400 dark:text-gray-500" /> {lastEntryLabel(reg.lastEntryDaysAgo)}
+                    <Clock size={11} className="text-gray-400" /> {lastEntryLabel(reg.lastEntryDaysAgo)}
                   </span>
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                     <TrendingUp size={11} /> +{reg.newThisMonth}
                   </span>
                 </div>
                 <Link
                   href={`/registry-home/${reg.id}`}
                   className="flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm"
-                  style={{ background: `${reg.ringColor}15`, color: reg.ringColor, border: `1px solid ${reg.ringColor}40` }}
+                  style={{ background: `${reg.ringColor}20`, color: reg.ringColor, border: `1px solid ${reg.ringColor}40` }}
                 >
                   Analytics <ArrowRight size={11} />
                 </Link>

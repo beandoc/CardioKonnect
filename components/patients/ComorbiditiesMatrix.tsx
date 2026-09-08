@@ -262,8 +262,8 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
     <div className="glass-card p-4 border border-blue-500/20 shadow-md relative" ref={dropdownRef}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-rose-500 dark:text-rose-400" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Comorbidities</h3>
+          <Activity className="w-4 h-4 text-rose-400" />
+          <h3 className="text-sm font-bold text-white">Comorbidities</h3>
           <span className="badge badge-blue text-[10px] font-mono font-bold">
             {activeDefinitions.length} selected
           </span>
@@ -275,24 +275,24 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
             size="sm"
             variant="outline"
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-1.5 text-xs py-1.5 px-3 bg-blue-50 dark:bg-slate-900/80 border-blue-300 dark:border-blue-500/30 hover:border-blue-500 hover:bg-blue-100 dark:hover:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold shadow-sm"
+            className="comorbidity-btn flex items-center gap-1.5 text-xs py-1.5 px-3 bg-slate-900/80 border border-blue-500/30 hover:border-blue-400 hover:bg-blue-950/40 text-blue-300 font-semibold shadow-sm"
           >
-            <Plus className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <Plus className="w-3.5 h-3.5 text-blue-400" />
             Select Comorbidities
             <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </Button>
 
           {/* Multi-Select Dropdown Popover */}
           {isOpen && (
-            <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 glass-card p-3 border border-slate-200 dark:border-blue-500/30 shadow-2xl z-50 animate-fade-in bg-white dark:bg-slate-950/95 backdrop-blur-xl rounded-xl">
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-blue-500/15 pb-2 mb-2">
-                <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" /> Select Comorbidities
+            <div className="comorbidity-popover absolute right-0 top-full mt-2 w-80 sm:w-96 glass-card p-3 border border-blue-500/30 shadow-2xl z-50 animate-fade-in bg-slate-950/95 backdrop-blur-xl rounded-xl">
+              <div className="flex items-center justify-between border-b border-blue-500/15 pb-2 mb-2">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> Select Comorbidities
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="p-1 text-slate-400 hover:text-slate-700 dark:text-gray-400 dark:hover:text-white rounded"
+                  className="p-1 text-gray-400 hover:text-white rounded"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -300,20 +300,20 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
 
               {/* Search Bar */}
               <div className="relative mb-2.5">
-                <Search className="w-3.5 h-3.5 text-slate-400 dark:text-gray-400 absolute left-2.5 top-2.5" />
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
                 <input
                   type="text"
                   placeholder="Filter conditions (e.g. DM, CAD, CKD)..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-blue-500/20 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
                 />
               </div>
 
               {/* Dropdown Options List */}
               <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                 {filteredDefinitions.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-gray-500 text-center py-4">No matching condition found.</p>
+                  <p className="text-xs text-gray-500 text-center py-4">No matching condition found.</p>
                 ) : (
                   filteredDefinitions.map(item => {
                     const isChecked = Boolean(flags[item.key as string])
@@ -323,8 +323,8 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
                         onClick={() => toggleFlag(item.key as string)}
                         className={`p-2 rounded-lg border text-xs flex items-center justify-between cursor-pointer transition-colors ${
                           isChecked
-                            ? 'bg-blue-50 dark:bg-blue-950/50 border-blue-300 dark:border-blue-500/40 text-blue-950 dark:text-white font-medium'
-                            : 'bg-slate-50/70 dark:bg-slate-900/40 border-slate-200 dark:border-gray-800/60 text-slate-700 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-slate-900/80'
+                            ? 'comorbidity-opt-active bg-blue-950/60 border-blue-500/50 text-white font-medium'
+                            : 'comorbidity-opt-inactive bg-slate-900/40 border-gray-800/60 text-gray-300 hover:bg-slate-900/80 hover:text-white'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0 pr-2">
@@ -332,16 +332,16 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleFlag(item.key as string)}
-                            className="w-3.5 h-3.5 rounded text-blue-600 bg-white dark:bg-gray-900 border-slate-300 dark:border-gray-700 cursor-pointer flex-shrink-0"
+                            className="w-3.5 h-3.5 rounded text-blue-600 bg-gray-900 border-gray-700 cursor-pointer flex-shrink-0"
                           />
                           <div className="min-w-0">
                             <p className="font-semibold text-xs leading-tight truncate">{item.label}</p>
-                            <span className="text-[10px] text-slate-500 dark:text-gray-400 font-mono">{item.code}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">{item.code}</span>
                           </div>
                         </div>
 
                         {isChecked && (
-                          <span className="text-[10px] font-bold text-blue-600 dark:text-cyan-400 flex items-center gap-1 flex-shrink-0">
+                          <span className="text-[10px] font-bold text-cyan-400 flex items-center gap-1 flex-shrink-0">
                             <Check className="w-3 h-3" /> Active
                           </span>
                         )}
@@ -352,7 +352,7 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
               </div>
 
               {/* Popover Footer */}
-              <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-slate-200 dark:border-blue-500/15">
+              <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-blue-500/15">
                 <button
                   type="button"
                   onClick={() => {
@@ -360,7 +360,7 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
                     COMORBIDITY_DEFINITIONS.forEach(d => { cleared[d.key as string] = false })
                     setFlags(cleared)
                   }}
-                  className="text-[11px] text-slate-500 dark:text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                  className="text-[11px] text-gray-400 hover:text-rose-400 transition-colors"
                 >
                   Clear all
                 </button>
@@ -383,11 +383,11 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
 
       {/* Selected Comorbidities Compact Pill Badges Display */}
       {activeDefinitions.length === 0 ? (
-        <div className="py-2.5 px-3 rounded-lg bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-gray-800/40 text-xs text-slate-600 dark:text-gray-400 flex items-center justify-between">
+        <div className="py-2.5 px-3 rounded-lg bg-slate-950/40 border border-gray-800/40 text-xs text-gray-400 flex items-center justify-between">
           <span>No comorbidities currently documented for this patient.</span>
           <button
             onClick={() => setIsOpen(true)}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+            className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
           >
             + Add Comorbidity
           </button>
@@ -398,21 +398,21 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
             return (
               <span
                 key={item.key as string}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-blue-500/30 text-slate-800 dark:text-white shadow-sm hover:border-blue-400/60 transition-colors group"
+                className="comorbidity-pill inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/90 border border-blue-500/30 text-white shadow-sm hover:border-blue-400/60 transition-colors group"
               >
                 <span
                   className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="font-semibold text-slate-800 dark:text-white">{item.label}</span>
-                <span className="text-[10px] font-mono font-medium text-slate-600 dark:text-gray-300 bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-300/60 dark:border-slate-700">
+                <span className="font-semibold text-white">{item.label}</span>
+                <span className="comorbidity-code text-[10px] font-mono font-medium text-gray-400 bg-slate-800 px-1.5 py-0.5 rounded">
                   {item.code}
                 </span>
                 <button
                   type="button"
                   onClick={() => removeSingle(item.key as string)}
                   title={`Remove ${item.label}`}
-                  className="text-slate-400 hover:text-rose-600 dark:text-gray-500 dark:hover:text-rose-400 ml-1 p-0.5 rounded transition-colors"
+                  className="text-gray-500 hover:text-rose-400 ml-1 p-0.5 rounded transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>

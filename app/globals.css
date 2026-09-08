@@ -298,6 +298,98 @@ body.light main .badge-amber  { background: #fef3c7 !important; color: #92400e !
 body.light main .badge-gray   { background: #f1f5f9 !important; color: #475569 !important; border-color: #cbd5e1 !important; }
 body.light main .badge-cyan   { background: #cffafe !important; color: #0e7490 !important; border-color: #67e8f9 !important; }
 
+/* ── Specific Component Light Theme Remappings ── */
+body.light main .ring-bg-track {
+  stroke: #e2e8f0 !important;
+}
+body.light main .ring-pct-text {
+  fill: #0f2444 !important;
+}
+body.light main .ring-sub-text {
+  fill: #475569 !important;
+}
+body.light main .registry-track {
+  background: #e2e8f0 !important;
+}
+body.light main .card-divider {
+  border-top-color: #f1f5f9 !important;
+}
+body.light main .comorbidity-pill {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+body.light main .comorbidity-pill .text-white {
+  color: #0f2444 !important;
+}
+body.light main .comorbidity-code {
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+}
+body.light main .comorbidity-btn {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1d4ed8 !important;
+}
+body.light main .comorbidity-btn .text-blue-400 {
+  color: #2563eb !important;
+}
+body.light main .comorbidity-popover {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 10px 40px rgba(15,36,68,0.12) !important;
+}
+body.light main .comorbidity-popover input {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f2444 !important;
+}
+body.light main .comorbidity-opt-active {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1e3a8a !important;
+}
+body.light main .comorbidity-opt-inactive {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+body.light main .med-tile {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+body.light main .med-tile p.text-white {
+  color: #0f2444 !important;
+}
+body.light main .med-tile p.text-gray-300 {
+  color: #334155 !important;
+}
+body.light main .med-tile p.text-blue-400 {
+  color: #1d4ed8 !important;
+}
+body.light main .med-tile p.text-gray-400,
+body.light main .med-tile p.text-gray-500 {
+  color: #475569 !important;
+}
+body.light main .missing-critical-banner {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+body.light main .missing-critical-banner span {
+  color: #78350f !important;
+}
+body.light main .data-edit-btn {
+  background: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1d4ed8 !important;
+}
+body.light main .data-edit-btn .text-blue-400 {
+  color: #2563eb !important;
+}
+body.light main .data-row {
+  border-bottom-color: #f1f5f9 !important;
+}
+
 /* ── Status Pills ─────────────────────────────────────────────── */
 body.light main .status-active   { background: #d1fae5 !important; color: #065f46 !important; border-color: #6ee7b7 !important; }
 body.light main .status-inactive { background: #f1f5f9 !important; color: #475569 !important; border-color: #cbd5e1 !important; }
