@@ -79,9 +79,12 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     const srNo = row['SR. NO.'];
     if (!srNo) continue;
 
-    const nameVal = String(row['NAME'] || 'Unknown').trim();
+    const nameVal = String(row['NAME'] || '').trim();
+    if (!nameVal || nameVal.toLowerCase() === 'unknown' || nameVal.toLowerCase() === 'nil' || nameVal === '-') {
+      continue;
+    }
     const nameParts = nameVal.split(/\s+/);
-    const firstName = nameParts[0] || 'Unknown';
+    const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
     const doa = parseExcelDate(row['DOA']);
