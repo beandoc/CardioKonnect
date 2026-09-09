@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { Users, TrendingUp, CheckCircle, ArrowRight, Clock, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
-import { getPatients, getAllLatestVisits } from '@/lib/firestore'
+import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
+import type { CathProcedure } from '@/lib/types'
 
 
 
@@ -20,7 +21,7 @@ interface RegistryCard {
   completion: number
   status: 'Active' | 'Enrolling' | 'Suspended'
   categories: { name: string; pct: number }[]
-  quickStats: { label: string; value: string }[]
+  quickStats: { label: string; value: string; tooltip?: string }[]
 }
 
 const REGISTRIES: RegistryCard[] = [
@@ -131,7 +132,7 @@ const REGISTRIES: RegistryCard[] = [
   {
     id: 'cathlab',
     name: 'Cath Lab & Interventional',
-    shortDesc: 'PCI · CABG Referral · Structural Interventions',
+    shortDesc: 'PCI · STEMI Networks · Coronary Interventions',
     gradient: 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
     ringColor: '#fbbf24',
     borderColor: 'rgba(245,158,11,0.3)',
@@ -141,17 +142,17 @@ const REGISTRIES: RegistryCard[] = [
     completion: 0,
     status: 'Suspended',
     categories: [
-      { name: 'Demographics', pct: 0 },
-      { name: 'Procedure Data', pct: 0 },
-      { name: 'Angiography', pct: 0 },
-      { name: 'PCI / Devices', pct: 0 },
-      { name: 'Complications', pct: 0 },
-      { name: 'Follow-up', pct: 0 },
+      { name: 'Indication & Urgency', pct: 0 },
+      { name: 'Vascular Access', pct: 0 },
+      { name: 'Lesions & Anatomy', pct: 0 },
+      { name: 'Devices & Stents', pct: 0 },
+      { name: 'Hemodynamics & Rad', pct: 0 },
+      { name: 'Complications & Safety', pct: 0 },
     ],
     quickStats: [
       { label: 'PCI Success', value: '—' },
-      { label: 'Multi-vessel', value: '—' },
-      { label: 'SYNTAX > 22', value: '—' },
+      { label: 'Radial First', value: '—' },
+      { label: 'DTB ≤ 90m', value: '—' },
     ],
   },
   {
@@ -237,7 +238,10 @@ export default function RegistryHomePage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const allPatients = await getPatients()
+        const [allPatients, allProcedures] = await Promise.all([
+          getPatients(),
+          getAllCathProcedures()
+        ])
         const startOfMonth = new Date()
         startOfMonth.setDate(1)
         startOfMonth.setHours(0, 0, 0, 0)
@@ -245,6 +249,10 @@ export default function RegistryHomePage() {
         const getPatientsForRegistry = (id: string) => {
           if (id === 'hf') {
             return allPatients.filter(p => p.registryId === 'hf' || p.hfType === 'HFrEF' || p.hfType === 'HFmrEF' || p.hfType === 'HFpEF' || p.studyConsented)
+          }
+          if (id === 'cathlab') {
+            const ptIds = new Set(allProcedures.map(p => p.patientId))
+            return allPatients.filter(p => ptIds.has(p.id) || p.registryId === 'cathlab')
           }
           return allPatients.filter(p => p.registryId === id)
         }
@@ -254,9 +262,10 @@ export default function RegistryHomePage() {
 
         // Fetch latest visits for all patients (single query, not N+1)
         const latestVisitsMap = await getAllLatestVisits()
-        const hfVisits = Array.from(latestVisitsMap.values()).filter(v => hfPatientIds.has(v.patientId))
+        const allVisits = Array.from(latestVisitsMap.values())
+        const hfVisits = allVisits.filter(v => hfPatientIds.has(v.patientId))
 
-        // 6 clinical category definitions matching the detail page
+        // 6 clinical category definitions matching the detail page for HF
         const hfCategories = [
           { name: 'Demographics', fields: ['firstName', 'lastName', 'dob', 'sex', 'mrn', 'contact', 'address', 'indianCitizen', 'studyConsented', 'abhaId', 'occupation', 'addressHouse', 'addressStreet', 'addressPost', 'addressDistrict', 'addressState', 'addressPin', 'secondaryContact', 'caregiverContact'] },
           { name: 'Vitals & Exam', fields: ['bpSystolic', 'bpDiastolic', 'heartRate', 'weight', 'height', 'o2Sat', 'oedema'] },
@@ -301,18 +310,18 @@ export default function RegistryHomePage() {
           const newThisMonth = regPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
 
           // Calculate updated categories completeness
-          const updatedCategories = r.categories.map(cat => {
+          let updatedCategories = r.categories.map(cat => {
             if (r.id === 'hf') {
               return { ...cat, pct: categoryAverages[cat.name] || 0 }
             }
             return { ...cat, pct: regPatients.length ? cat.pct : 0 }
           })
           
-          const updatedCompletion = regPatients.length
+          let updatedCompletion = regPatients.length
             ? Math.round(updatedCategories.reduce((sum, c) => sum + c.pct, 0) / updatedCategories.length)
             : 0
 
-          // Calculate HF registry metrics from latest visits (not patient-level cache)
+          // Calculate registry metrics
           let quickStats = r.quickStats
           if (r.id === 'hf') {
             // 1. Avg LVEF from latest visits (not stale patient.lvef)
@@ -339,6 +348,159 @@ export default function RegistryHomePage() {
               if (stat.label === 'NYHA III–IV') return { ...stat, value: `${nyha34Rate}%` }
               return stat
             })
+          } else if (r.id === 'cathlab') {
+            const pciProcedures = allProcedures.filter(p => p.procedureType !== 'Diagnostic Coronary Angiography')
+            const allTreatedLesions = pciProcedures.flatMap(p => (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy'))
+            
+            // True Angiographic Success: TIMI 3 flow + residual stenosis < 20% with NO in-lab MACE
+            const successfulLesions = pciProcedures.flatMap(p => {
+              const hasInLabMace = !!(
+                p.complications?.inLabDeath ||
+                p.complications?.emergencyCabg ||
+                p.complications?.acuteStentThrombosis ||
+                p.complications?.periproceduralMi
+              )
+              if (hasInLabMace) return []
+              return (p.lesions || []).filter(
+                l => l.treatmentStrategy !== 'Medical Therapy' &&
+                     l.postTimiFlow === 3 &&
+                     l.postStenosisPct != null &&
+                     l.postStenosisPct < 20
+              )
+            })
+            const pciSuccessRate = allTreatedLesions.length > 0
+              ? Math.round((successfulLesions.length / allTreatedLesions.length) * 100)
+              : null
+
+            const radialAccessCount = allProcedures.filter(p => p.accessSite && p.accessSite.includes('Radial')).length
+            const radialRate = allProcedures.length ? Math.round((radialAccessCount / allProcedures.length) * 100) : null
+
+            const stemiCases = allProcedures.filter(p => p.clinicalIndication === 'STEMI' && p.stemiTimelines?.dtbMinutes != null)
+            const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) <= 90).length
+            const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
+
+            // True Multi-vessel CAD from anatomy (LM ≥ 50% or ≥ 2 vessels with stenosis ≥ 70%)
+            let mvdDocumentedCount = 0
+            let mvdPositiveCount = 0
+            allVisits.forEach(v => {
+              if (v.coronaryAnatomy) {
+                const ca = v.coronaryAnatomy
+                const hasData = (ca.lmStenosis != null || ca.ladStenosis != null || ca.lcxStenosis != null || ca.rcaStenosis != null)
+                if (hasData) {
+                  mvdDocumentedCount++
+                  let diseasedCount = 0
+                  if ((ca.ladStenosis ?? 0) >= 70) diseasedCount++
+                  if ((ca.lcxStenosis ?? 0) >= 70) diseasedCount++
+                  if ((ca.rcaStenosis ?? 0) >= 70) diseasedCount++
+                  const hasLM = (ca.lmStenosis ?? 0) >= 50
+                  if (hasLM || diseasedCount >= 2) mvdPositiveCount++
+                }
+              }
+            })
+            const multiVesselRate = mvdDocumentedCount > 0 ? Math.round((mvdPositiveCount / mvdDocumentedCount) * 100) : null
+
+            // True SYNTAX > 22 from documented syntaxScore
+            let syntaxDocumentedCount = 0
+            let syntaxOver22Count = 0
+            allVisits.forEach(v => {
+              const score = v.coronaryAnatomy?.syntaxScore
+              if (typeof score === 'number' && score > 0) {
+                syntaxDocumentedCount++
+                if (score > 22) syntaxOver22Count++
+              }
+            })
+            allProcedures.forEach(p => {
+              if (typeof p.syntaxScore === 'number' && p.syntaxScore > 0) {
+                syntaxDocumentedCount++
+                if (p.syntaxScore > 22) syntaxOver22Count++
+              }
+            })
+            const syntaxHighRate = syntaxDocumentedCount > 0 ? Math.round((syntaxOver22Count / syntaxDocumentedCount) * 100) : null
+
+            quickStats = r.quickStats.map(stat => {
+              if (stat.label === 'PCI Success') return { ...stat, value: '—', tooltip: 'not yet captured' }
+              if (stat.label === 'Radial First') return { ...stat, value: radialRate !== null ? `${radialRate}%` : '—' }
+              if (stat.label === 'DTB ≤ 90m') return { ...stat, value: dtbRate !== null ? `${dtbRate}%` : '—' }
+              if (stat.label === 'Multi-vessel') return { ...stat, value: '—', tooltip: 'not yet captured' }
+              if (stat.label === 'SYNTAX > 22') return { ...stat, value: '—', tooltip: 'not yet captured' }
+              return stat
+            })
+
+            const procCategories = [
+              { name: 'Indication & Urgency', test: (p: CathProcedure) => !!(p.procedureType && p.clinicalIndication) },
+              { name: 'Vascular Access', test: (p: CathProcedure) => !!(p.accessSite && p.sheathSize && p.closureDevice) },
+              { name: 'Lesions & Anatomy', test: (p: CathProcedure) => Array.isArray(p.lesions) && p.lesions.length > 0 },
+              { name: 'Devices & Stents', test: (p: CathProcedure) => Array.isArray(p.lesions) && p.lesions.some(l => l.devices && l.devices.length > 0) },
+              { name: 'Hemodynamics & Rad', test: (p: CathProcedure) => (p.contrastVolumeMl || 0) > 0 || (p.fluoroscopyTimeMinutes || 0) > 0 },
+              { name: 'Complications & Safety', test: (p: CathProcedure) => p.complications != null },
+            ]
+
+            updatedCategories = procCategories.map(cat => {
+              if (allProcedures.length === 0) return { name: cat.name, pct: 0 }
+              const filledCount = allProcedures.filter(cat.test).length
+              return { name: cat.name, pct: Math.round((filledCount / allProcedures.length) * 100) }
+            })
+            updatedCompletion = updatedCategories.length ? Math.round(updatedCategories.reduce((acc, c) => acc + c.pct, 0) / updatedCategories.length) : 0
+
+            const uniqueCathPatientIds = new Set(allProcedures.map(p => p.patientId))
+            let cathLastDaysAgo = 0
+            if (allProcedures.length > 0) {
+              const latestProcTime = allProcedures.reduce((max, p) => {
+                const t = safeTime(p.procedureDate) || safeTime(p.createdAt)
+                return t > max ? t : max
+              }, 0)
+              if (latestProcTime > 0) {
+                cathLastDaysAgo = Math.max(0, Math.floor((Date.now() - latestProcTime) / (1000 * 60 * 60 * 24)))
+              }
+            }
+
+            return {
+              ...r,
+              patients: uniqueCathPatientIds.size,
+              newThisMonth: allProcedures.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length,
+              lastEntryDaysAgo: cathLastDaysAgo,
+              categories: updatedCategories,
+              completion: updatedCompletion,
+              quickStats: quickStats
+            }
+          } else if (r.id === 'acs') {
+            const acsProcedures = allProcedures.filter(p => p.clinicalIndication === 'STEMI' || p.clinicalIndication === 'NSTEMI' || p.clinicalIndication === 'Unstable Angina')
+            const stemiCases = acsProcedures.filter(p => p.clinicalIndication === 'STEMI' && p.stemiTimelines?.dtbMinutes != null)
+            const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) < 90).length
+            const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
+
+            const acsTreatedLesions = acsProcedures.flatMap(p => p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy')
+            const timi3Lesions = acsTreatedLesions.filter(l => l.postTimiFlow === 3)
+            const timi3Rate = acsTreatedLesions.length > 0 ? Math.round((timi3Lesions.length / acsTreatedLesions.length) * 100) : null
+
+            // True DAPT = Aspirin AND P2Y12 inhibitor
+            const acsWithMeds = allVisits.filter(v => v.aspirin?.prescribed === 'Yes' && v.p2y12Inhibitor?.prescribed === 'Yes').length
+            const totalAcsEvaluated = allVisits.filter(v => v.aspirin?.prescribed != null || v.p2y12Inhibitor?.prescribed != null).length
+            const daptRate = totalAcsEvaluated > 0 ? Math.round((acsWithMeds / totalAcsEvaluated) * 100) : null
+
+            quickStats = r.quickStats.map(stat => {
+              if (stat.label === 'DTB < 90 min') return { ...stat, value: dtbRate !== null ? `${dtbRate}%` : '—' }
+              if (stat.label === 'TIMI 3 Flow') return { ...stat, value: timi3Rate !== null ? `${timi3Rate}%` : '—' }
+              if (stat.label === 'DAPT Rate') return { ...stat, value: daptRate !== null ? `${daptRate}%` : '—' }
+              return stat
+            })
+
+            const acsPatientIds = new Set(acsProcedures.map(p => p.patientId))
+            allPatients.forEach(p => {
+              if (p.registryId === 'acs' || p.comorbidPriorMI || p.comorbidCAD) {
+                acsPatientIds.add(p.id)
+              }
+            })
+
+            return {
+              ...r,
+              patients: acsPatientIds.size,
+              newThisMonth: regPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length,
+              lastEntryDaysAgo: r.lastEntryDaysAgo,
+              categories: updatedCategories,
+              completion: updatedCompletion,
+              quickStats: quickStats
+            }
           } else {
             quickStats = r.quickStats.map(stat => ({
               ...stat,
@@ -346,10 +508,24 @@ export default function RegistryHomePage() {
             }))
           }
 
+          let lastEntryDaysAgo = r.lastEntryDaysAgo
+          if (regPatients.length > 0) {
+            const latestTime = regPatients.reduce((max, p) => {
+              const v = latestVisitsMap.get(p.id)
+              const vt = safeTime(v?.visitDate)
+              const pt = safeTime(p.updatedAt || p.createdAt || p.hfConfirmationDate)
+              return Math.max(max, vt, pt)
+            }, 0)
+            if (latestTime > 0) {
+              lastEntryDaysAgo = Math.max(0, Math.floor((Date.now() - latestTime) / (1000 * 60 * 60 * 24)))
+            }
+          }
+
           return {
             ...r,
             patients: regPatients.length,
             newThisMonth: newThisMonth,
+            lastEntryDaysAgo: lastEntryDaysAgo,
             categories: updatedCategories,
             completion: updatedCompletion,
             quickStats: quickStats
@@ -447,7 +623,7 @@ export default function RegistryHomePage() {
               {/* Quick stats row */}
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/[0.05] card-divider">
                 {reg.quickStats.map(qs => (
-                  <div key={qs.label} className="text-center">
+                  <div key={qs.label} className="text-center" title={qs.tooltip || (qs.value === '—' ? 'not yet captured' : undefined)}>
                     <p className="text-sm font-bold text-white">{qs.value}</p>
                     <p className="text-[9px] text-gray-400 leading-tight mt-0.5">{qs.label}</p>
                   </div>

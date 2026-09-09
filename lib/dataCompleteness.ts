@@ -3,7 +3,7 @@
  * Computes registry data completeness scores, audit metrics, and field gap identification.
  */
 
-import type { Patient, Visit } from './types'
+import type { Patient, Visit, CathProcedure } from './types'
 
 export interface FieldAuditItem {
   key: string
@@ -323,7 +323,13 @@ export function assessPatientCompleteness(patient: Patient, latestVisit: Visit |
   const t3Complete = tier3Fields.filter(f => f.isComplete).length
   const optionalResearchScore = tier3Fields.length > 0 ? Math.round((t3Complete / tier3Fields.length) * 100) : 0
 
-  const overallScore = coreInpatientScore
+  // Overall score blends Tier 1 (Core Inpatient: 60%), Tier 2 (Follow-up Ascertainment: 30%), and Tier 3 (Optional: 10%)
+  // A site with zero follow-up ascertainment can attain a maximum score of 70%, preventing unmonitored sites from grading 'A'.
+  const overallScore = Math.round(
+    coreInpatientScore * 0.60 +
+    followUpScore * 0.30 +
+    optionalResearchScore * 0.10
+  )
 
   let grade: 'A' | 'B' | 'C' | 'D' | 'Incomplete' = 'Incomplete'
   let color = '#ef4444'
@@ -376,3 +382,100 @@ export function assessPatientCompleteness(patient: Patient, latestVisit: Visit |
     allFields: fields,
   }
 }
+
+// ─── Cath Lab / Interventional Data Completeness ──────────────────────────────
+
+export interface CathProcedureCompletenessReport {
+  score: number // 0-100%
+  grade: 'A' | 'B' | 'C' | 'D' | 'Incomplete'
+  color: string
+  totalItems: number
+  completedItems: number
+  missingCritical: string[]
+  missingQuality: string[]
+}
+
+/**
+ * Evaluates NCDR CathPCI / NIC India data completeness for a CathProcedure.
+ * Enforces mandatory documentation of indication, access, lesions, devices, and safety audit.
+ */
+export function calculateCathProcedureCompleteness(proc: CathProcedure): CathProcedureCompletenessReport {
+  const missingCritical: string[] = []
+  const missingQuality: string[] = []
+
+  // 1. Tier 1 Critical Mandatory (60% weight)
+  if (!proc.procedureDate) missingCritical.push('Procedure Date & Timestamp')
+  if (!proc.procedureType) missingCritical.push('Procedure Type')
+  if (!proc.clinicalIndication) missingCritical.push('Clinical Indication')
+  if (!proc.accessSite) missingCritical.push('Vascular Access Site')
+  if (!proc.sheathSize) missingCritical.push('Sheath Size')
+  if (!proc.operatorName) missingCritical.push('Primary Operator Name')
+  if (!proc.lesions || proc.lesions.length === 0) missingCritical.push('Target Lesion & Anatomy')
+  if (!proc.complications) missingCritical.push('In-Hospital Complication Audit')
+
+  // Lesion-level critical checks
+  if (proc.lesions && proc.lesions.length > 0) {
+    proc.lesions.forEach((l, idx) => {
+      if (l.preTimiFlow === undefined) missingCritical.push(`Lesion #${idx + 1} Pre-TIMI Flow`)
+      if (l.postTimiFlow === undefined) missingCritical.push(`Lesion #${idx + 1} Post-TIMI Flow`)
+      if (l.preStenosisPct === undefined) missingCritical.push(`Lesion #${idx + 1} Pre-Stenosis %`)
+      if (l.postStenosisPct === undefined) missingCritical.push(`Lesion #${idx + 1} Residual Stenosis %`)
+      if (l.treatmentStrategy === 'DES' && (!l.devices || l.devices.length === 0)) {
+        missingCritical.push(`Lesion #${idx + 1} Deployed Stent Specifications`)
+      }
+    })
+  }
+
+  // 2. Tier 2 Quality Indicators (40% weight)
+  if (proc.contrastVolumeMl === undefined || proc.contrastVolumeMl <= 0) {
+    missingQuality.push('Contrast Volume (mL)')
+  }
+  if (proc.fluoroscopyTimeMinutes === undefined || proc.fluoroscopyTimeMinutes <= 0) {
+    missingQuality.push('Fluoroscopy Time (minutes)')
+  }
+  if (!proc.closureDevice) {
+    missingQuality.push('Vascular Hemostasis / Closure Device')
+  }
+  if (proc.clinicalIndication === 'STEMI' && (!proc.stemiTimelines || !proc.stemiTimelines.dtbMinutes)) {
+    missingQuality.push('STEMI Door-to-Balloon Time & Timelines')
+  }
+
+  // Scoring
+  const t1Total = 8 + (proc.lesions ? proc.lesions.length * 4 : 0)
+  const t1Completed = t1Total - missingCritical.length
+  const t1Score = t1Total > 0 ? (t1Completed / t1Total) * 100 : 0
+
+  const t2Total = 4
+  const t2Completed = t2Total - missingQuality.length
+  const t2Score = (t2Completed / t2Total) * 100
+
+  const score = Math.round(t1Score * 0.70 + t2Score * 0.30)
+
+  let grade: CathProcedureCompletenessReport['grade'] = 'Incomplete'
+  let color = '#ef4444'
+
+  if (score >= 90 && missingCritical.length === 0) {
+    grade = 'A'
+    color = '#10b981'
+  } else if (score >= 75 && missingCritical.length === 0) {
+    grade = 'B'
+    color = '#3b82f6'
+  } else if (score >= 60) {
+    grade = 'C'
+    color = '#f59e0b'
+  } else if (score >= 40) {
+    grade = 'D'
+    color = '#f97316'
+  }
+
+  return {
+    score,
+    grade,
+    color,
+    totalItems: t1Total + t2Total,
+    completedItems: t1Completed + t2Completed,
+    missingCritical,
+    missingQuality,
+  }
+}
+

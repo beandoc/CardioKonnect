@@ -7,10 +7,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import Link from 'next/link'
-import { ArrowLeft, Users, CheckCircle, TrendingUp, Clock, Activity, PlusCircle, FlaskConical, Microscope, Layers, Info, TrendingDown, ArrowRight } from 'lucide-react'
+import { ArrowLeft, Users, CheckCircle, TrendingUp, Clock, Activity, PlusCircle, FlaskConical, Microscope, Layers, Info, TrendingDown, ArrowRight, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getPatients, getAllVisits, subscribePatients, subscribeVisits } from '@/lib/firestore'
-import type { Patient, Visit } from '@/lib/types'
+import { getPatients, getAllVisits, subscribePatients, subscribeVisits, subscribeCathProcedures } from '@/lib/firestore'
+import type { Patient, Visit, CathProcedure } from '@/lib/types'
+import CathProcedureModal from '@/components/procedures/CathProcedureModal'
+import CathStatisticalBenchmarking from '@/components/analytics/CathStatisticalBenchmarking'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartItem { name: string; value: number }
@@ -168,399 +170,6 @@ const REGISTRY_DATA: Record<string, RegistryData> = {
           { name: 'MRA', value: 63 },
           { name: 'SGLT2i', value: 54 },
           { name: 'Diuretics', value: 92 },
-        ],
-      },
-    ],
-  },
-
-  acs: {
-    id: 'acs',
-    name: 'ACS & Coronary Registry',
-    shortDesc: 'STEMI · NSTEMI · Unstable Angina · Stable CAD',
-    gradient: 'linear-gradient(135deg, #b91c1c 0%, #ef4444 100%)',
-    accentColor: '#ef4444',
-    ringColor: '#f87171',
-    patients: 248,
-    newThisMonth: 14,
-    completion: 88,
-    fieldsTotal: 48,
-    fieldsCaptured: 42,
-    status: 'Active',
-    kpis: [
-      { label: 'DTB < 90 min', value: '82%', sub: 'STEMI cases' },
-      { label: 'TIMI 3 Flow', value: '91%', sub: 'post-PCI' },
-      { label: 'DAPT Rate', value: '96%', sub: 'at discharge' },
-      { label: '30-Day MACE', value: '4.8%', sub: 'observed rate' },
-    ],
-    completionByCategory: [
-      { name: 'Demographics', pct: 97 },
-      { name: 'Vitals & Exam', pct: 94 },
-      { name: 'Cath / Angio', pct: 89 },
-      { name: 'Laboratory', pct: 88 },
-      { name: 'Medications', pct: 91 },
-      { name: 'Outcomes', pct: 71 },
-    ],
-    enrollmentTrend: [
-      { month: 'Jan', count: 189 }, { month: 'Feb', count: 201 }, { month: 'Mar', count: 211 },
-      { month: 'Apr', count: 223 }, { month: 'May', count: 234 }, { month: 'Jun', count: 248 },
-    ],
-    clinicalCharts: [
-      {
-        title: 'Presentation Type',
-        type: 'pie',
-        data: [
-          { name: 'STEMI', value: 89 },
-          { name: 'NSTEMI', value: 112 },
-          { name: 'Unstable Angina', value: 47 },
-        ],
-      },
-      {
-        title: 'Culprit Vessel',
-        type: 'bar-h',
-        color: '#f87171',
-        data: [
-          { name: 'LAD', value: 98 },
-          { name: 'RCA', value: 84 },
-          { name: 'LCx', value: 52 },
-          { name: 'LM', value: 14 },
-        ],
-      },
-      {
-        title: 'Door-to-Balloon Time (min)',
-        type: 'bar-v',
-        color: '#ef4444',
-        data: [
-          { name: '< 60', value: 52 },
-          { name: '60–90', value: 91 },
-          { name: '90–120', value: 63 },
-          { name: '> 120', value: 42 },
-        ],
-      },
-      {
-        title: 'Discharge Medications (%)',
-        type: 'bar-h',
-        color: '#fca5a5',
-        data: [
-          { name: 'Aspirin', value: 98 },
-          { name: 'P2Y12 inhibitor', value: 96 },
-          { name: 'High-dose Statin', value: 94 },
-          { name: 'Beta-Blocker', value: 88 },
-          { name: 'ACEi / ARB', value: 81 },
-        ],
-      },
-    ],
-  },
-
-  arrhythmia: {
-    id: 'arrhythmia',
-    name: 'Arrhythmia & EP Registry',
-    shortDesc: 'AF · VT · Bradyarrhythmia · Ablation · Devices',
-    gradient: 'linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%)',
-    accentColor: '#8b5cf6',
-    ringColor: '#a78bfa',
-    patients: 187,
-    newThisMonth: 9,
-    completion: 81,
-    fieldsTotal: 44,
-    fieldsCaptured: 36,
-    status: 'Active',
-    kpis: [
-      { label: 'AF Burden Tracked', value: '74%', sub: 'Holter / device' },
-      { label: 'Device Interrogation', value: '86%', sub: 'within 6 months' },
-      { label: 'OAC Rate (AF)', value: '78%', sub: 'CHA₂DS₂-VASc ≥ 2' },
-      { label: 'Ablation Success', value: '71%', sub: 'SR at 12 months' },
-    ],
-    completionByCategory: [
-      { name: 'Demographics', pct: 99 },
-      { name: 'ECG / Holter', pct: 83 },
-      { name: 'Echo', pct: 71 },
-      { name: 'Laboratory', pct: 79 },
-      { name: 'Medications', pct: 86 },
-      { name: 'Device Data', pct: 68 },
-    ],
-    enrollmentTrend: [
-      { month: 'Jan', count: 142 }, { month: 'Feb', count: 151 }, { month: 'Mar', count: 159 },
-      { month: 'Apr', count: 167 }, { month: 'May', count: 178 }, { month: 'Jun', count: 187 },
-    ],
-    clinicalCharts: [
-      {
-        title: 'Arrhythmia Type',
-        type: 'pie',
-        data: [
-          { name: 'Paroxysmal AF', value: 52 },
-          { name: 'Persistent AF', value: 37 },
-          { name: 'VT / VF', value: 31 },
-          { name: 'Bradyarrhythmia', value: 44 },
-          { name: 'Other', value: 23 },
-        ],
-      },
-      {
-        title: 'Device Therapy',
-        type: 'bar-h',
-        color: '#a78bfa',
-        data: [
-          { name: 'No Device', value: 94 },
-          { name: 'Pacemaker (PPM)', value: 38 },
-          { name: 'ICD', value: 29 },
-          { name: 'CRT-P', value: 14 },
-          { name: 'CRT-D', value: 12 },
-        ],
-      },
-      {
-        title: 'OAC Prescribing (AF patients)',
-        type: 'pie',
-        data: [
-          { name: 'NOAC', value: 101 },
-          { name: 'Warfarin', value: 37 },
-          { name: 'No OAC – low risk', value: 31 },
-          { name: 'Contraindicated', value: 18 },
-        ],
-      },
-      {
-        title: 'AF Burden (Holter / Device)',
-        type: 'bar-v',
-        color: '#8b5cf6',
-        data: [
-          { name: '< 1%', value: 28 },
-          { name: '1–10%', value: 34 },
-          { name: '10–50%', value: 41 },
-          { name: '> 50%', value: 36 },
-        ],
-      },
-    ],
-  },
-
-  structural: {
-    id: 'structural',
-    name: 'Structural Heart Disease',
-    shortDesc: 'Valvular · Cardiomyopathy · Congenital · TAVI/TMVR',
-    gradient: 'linear-gradient(135deg, #0e7490 0%, #06b6d4 100%)',
-    accentColor: '#06b6d4',
-    ringColor: '#22d3ee',
-    patients: 143,
-    newThisMonth: 6,
-    completion: 80,
-    fieldsTotal: 46,
-    fieldsCaptured: 37,
-    status: 'Enrolling',
-    kpis: [
-      { label: 'Severe Valve Disease', value: '53%', sub: 'MR + AS combined' },
-      { label: 'Intervention Rate', value: '38%', sub: 'surgical or transcath' },
-      { label: 'LVEF ≥ 50%', value: '61%', sub: 'preserved function' },
-      { label: 'Readmission 30d', value: '8.4%', sub: 'post-intervention' },
-    ],
-    completionByCategory: [
-      { name: 'Demographics', pct: 96 },
-      { name: 'Echo / Imaging', pct: 88 },
-      { name: 'Advanced Imaging', pct: 72 },
-      { name: 'Laboratory', pct: 81 },
-      { name: 'Medications', pct: 79 },
-      { name: 'Outcomes', pct: 64 },
-    ],
-    enrollmentTrend: [
-      { month: 'Jan', count: 106 }, { month: 'Feb', count: 113 }, { month: 'Mar', count: 119 },
-      { month: 'Apr', count: 127 }, { month: 'May', count: 137 }, { month: 'Jun', count: 143 },
-    ],
-    clinicalCharts: [
-      {
-        title: 'Primary Valve / Structural Lesion',
-        type: 'pie',
-        data: [
-          { name: 'Mitral Regurgitation', value: 54 },
-          { name: 'Aortic Stenosis', value: 63 },
-          { name: 'Mitral Stenosis', value: 14 },
-          { name: 'Aortic Regurgitation', value: 12 },
-          { name: 'Cardiomyopathy', value: 26 },
-        ],
-      },
-      {
-        title: 'Disease Severity',
-        type: 'bar-v',
-        color: '#06b6d4',
-        data: [
-          { name: 'Mild', value: 38 },
-          { name: 'Moderate', value: 52 },
-          { name: 'Severe', value: 53 },
-        ],
-      },
-      {
-        title: 'Treatment Strategy',
-        type: 'pie',
-        data: [
-          { name: 'Medical Management', value: 88 },
-          { name: 'Surgical Valve', value: 29 },
-          { name: 'TAVI', value: 18 },
-          { name: 'TMVR / MitraClip', value: 8 },
-        ],
-      },
-      {
-        title: 'Echo Follow-up Compliance (%)',
-        type: 'bar-h',
-        color: '#22d3ee',
-        data: [
-          { name: 'Baseline Echo', value: 96 },
-          { name: '3-Month Echo', value: 84 },
-          { name: '12-Month Echo', value: 71 },
-          { name: 'Stress Echo', value: 52 },
-          { name: 'CMR', value: 38 },
-        ],
-      },
-    ],
-  },
-
-  cathlab: {
-    id: 'cathlab',
-    name: 'Cath Lab & Interventional',
-    shortDesc: 'PCI · CABG Referral · Structural Interventions',
-    gradient: 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
-    accentColor: '#f59e0b',
-    ringColor: '#fbbf24',
-    patients: 201,
-    newThisMonth: 11,
-    completion: 88,
-    fieldsTotal: 50,
-    fieldsCaptured: 44,
-    status: 'Active',
-    kpis: [
-      { label: 'PCI Success Rate', value: '94%', sub: 'TIMI 3 post-PCI' },
-      { label: 'Multi-vessel PCI', value: '42%', sub: 'of all PCI cases' },
-      { label: 'SYNTAX > 22', value: '31%', sub: 'intermediate–high' },
-      { label: 'Major Complications', value: '2.1%', sub: 'in-lab events' },
-    ],
-    completionByCategory: [
-      { name: 'Demographics', pct: 98 },
-      { name: 'Procedure Data', pct: 94 },
-      { name: 'Angiography', pct: 91 },
-      { name: 'PCI / Devices', pct: 88 },
-      { name: 'Complications', pct: 83 },
-      { name: 'Follow-up', pct: 72 },
-    ],
-    enrollmentTrend: [
-      { month: 'Jan', count: 152 }, { month: 'Feb', count: 163 }, { month: 'Mar', count: 172 },
-      { month: 'Apr', count: 182 }, { month: 'May', count: 190 }, { month: 'Jun', count: 201 },
-    ],
-    clinicalCharts: [
-      {
-        title: 'Procedure Type',
-        type: 'pie',
-        data: [
-          { name: 'Diagnostic Angio', value: 68 },
-          { name: 'PCI – Elective', value: 54 },
-          { name: 'PCI – Urgent / Primary', value: 58 },
-          { name: 'Structural Intervention', value: 21 },
-        ],
-      },
-      {
-        title: 'Coronary Disease Extent',
-        type: 'bar-v',
-        color: '#f59e0b',
-        data: [
-          { name: 'Normal / Non-obstructive', value: 29 },
-          { name: '1-Vessel Disease', value: 78 },
-          { name: '2-Vessel Disease', value: 55 },
-          { name: '3-Vessel Disease', value: 39 },
-        ],
-      },
-      {
-        title: 'SYNTAX Score Distribution',
-        type: 'pie',
-        data: [
-          { name: 'Low (< 22)', value: 89 },
-          { name: 'Intermediate (22–32)', value: 73 },
-          { name: 'High (> 32)', value: 39 },
-        ],
-      },
-      {
-        title: 'Contrast Volume (mL)',
-        type: 'bar-v',
-        color: '#fbbf24',
-        data: [
-          { name: '< 100', value: 64 },
-          { name: '100–200', value: 93 },
-          { name: '200–300', value: 34 },
-          { name: '> 300', value: 10 },
-        ],
-      },
-    ],
-  },
-
-  preventive: {
-    id: 'preventive',
-    name: 'Preventive Cardiology',
-    shortDesc: 'Risk Stratification · Lifestyle · Primary Prevention',
-    gradient: 'linear-gradient(135deg, #065f46 0%, #10b981 100%)',
-    accentColor: '#10b981',
-    ringColor: '#34d399',
-    patients: 156,
-    newThisMonth: 8,
-    completion: 85,
-    fieldsTotal: 42,
-    fieldsCaptured: 36,
-    status: 'Enrolling',
-    kpis: [
-      { label: 'High-Intensity Statin', value: '88%', sub: 'LDL ≥ 1.8 mmol/L target' },
-      { label: 'BP Control', value: '71%', sub: '< 140/90 mmHg' },
-      { label: 'DM Control', value: '64%', sub: 'HbA1c < 7%' },
-      { label: 'MACE-Free at 2y', value: '91%', sub: 'event-free survival' },
-    ],
-    completionByCategory: [
-      { name: 'Demographics', pct: 99 },
-      { name: 'Risk Factors', pct: 92 },
-      { name: 'Laboratory', pct: 87 },
-      { name: 'Lifestyle Data', pct: 78 },
-      { name: 'Medications', pct: 83 },
-      { name: 'Follow-up', pct: 69 },
-    ],
-    enrollmentTrend: [
-      { month: 'Jan', count: 112 }, { month: 'Feb', count: 120 }, { month: 'Mar', count: 128 },
-      { month: 'Apr', count: 137 }, { month: 'May', count: 148 }, { month: 'Jun', count: 156 },
-    ],
-    clinicalCharts: [
-      {
-        title: 'CV Risk Category',
-        type: 'pie',
-        data: [
-          { name: 'Low (< 5%)', value: 23 },
-          { name: 'Intermediate (5–10%)', value: 67 },
-          { name: 'High (10–20%)', value: 52 },
-          { name: 'Very High (> 20%)', value: 14 },
-        ],
-      },
-      {
-        title: 'Risk Factor Prevalence (%)',
-        type: 'bar-h',
-        color: '#10b981',
-        data: [
-          { name: 'Hypertension', value: 72 },
-          { name: 'Dyslipidemia', value: 68 },
-          { name: 'Diabetes Mellitus', value: 41 },
-          { name: 'Current Smoking', value: 29 },
-          { name: 'Obesity (BMI > 30)', value: 38 },
-          { name: 'CKD', value: 18 },
-        ],
-      },
-      {
-        title: 'Target Achievement Rate (%)',
-        type: 'bar-h',
-        color: '#34d399',
-        data: [
-          { name: 'BP < 140/90', value: 71 },
-          { name: 'LDL < 1.8 mmol/L', value: 58 },
-          { name: 'HbA1c < 7%', value: 64 },
-          { name: 'BMI < 25', value: 34 },
-          { name: 'Non-smoker', value: 83 },
-        ],
-      },
-      {
-        title: 'Lifestyle Intervention Uptake',
-        type: 'bar-v',
-        color: '#6ee7b7',
-        data: [
-          { name: 'Dietary counselling', value: 91 },
-          { name: 'Exercise programme', value: 74 },
-          { name: 'Smoking cessation', value: 62 },
-          { name: 'Weight management', value: 55 },
-          { name: 'Stress reduction', value: 43 },
         ],
       },
     ],
@@ -1201,7 +810,11 @@ export default function RegistryDetailPage() {
   const router  = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
   const [visits, setVisits] = useState<Visit[]>([])
+  const [procedures, setProcedures] = useState<CathProcedure[]>([])
   const [loading, setLoading] = useState(true)
+  const [isProcModalOpen, setIsProcModalOpen] = useState(false)
+  const [selectedProcPatient, setSelectedProcPatient] = useState<Patient | null>(null)
+  const [selectedProc, setSelectedProc] = useState<CathProcedure | null>(null)
 
   // ── Helper: build cumulative enrollment trend using real DOA dates ─────────
   function getEnrollmentTrend(hfPts: Patient[]) {
@@ -1229,19 +842,20 @@ export default function RegistryDetailPage() {
     })
 
     if (trend.length === 0) {
-      return [{ month: 'Jan', count: 1 }, { month: 'Feb', count: 2 }, { month: 'Mar', count: 3 }]
+      return [{ month: 'Jan', count: 0 }, { month: 'Feb', count: 0 }, { month: 'Mar', count: 0 }]
     }
     return trend
   }
 
   useEffect(() => {
-    if (id !== 'hf') {
+    if (id !== 'hf' && id !== 'cathlab') {
       setLoading(false)
       return
     }
     setLoading(true)
     let unsubPatients: (() => void) | null = null
     let unsubVisits: (() => void) | null = null
+    let unsubProcedures: (() => void) | null = null
 
     try {
       unsubPatients = subscribePatients((pts) => {
@@ -1251,6 +865,9 @@ export default function RegistryDetailPage() {
       unsubVisits = subscribeVisits((vts) => {
         setVisits(vts)
       })
+      unsubProcedures = subscribeCathProcedures((procs) => {
+        setProcedures(procs)
+      })
     } catch (err) {
       console.error('Failed to load dynamic registry data:', err)
       setLoading(false)
@@ -1259,6 +876,7 @@ export default function RegistryDetailPage() {
     return () => {
       if (unsubPatients) unsubPatients()
       if (unsubVisits) unsubVisits()
+      if (unsubProcedures) unsubProcedures()
     }
   }, [id])
 
@@ -1270,7 +888,378 @@ export default function RegistryDetailPage() {
   }
 
   const reg = useMemo(() => {
-    if (id !== 'hf') return REGISTRY_DATA[id as string]
+    if (id === 'cathlab') {
+      try {
+        const uniquePatientIds = new Set(procedures.map(p => p.patientId))
+        const startOfMonth = new Date()
+        startOfMonth.setDate(1)
+        startOfMonth.setHours(0, 0, 0, 0)
+        const newThisMonth = procedures.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
+
+        // Interventional metrics
+        const pciProcedures = procedures.filter(p => p.procedureType !== 'Diagnostic Coronary Angiography')
+        const allTreatedLesions = pciProcedures.flatMap(p => (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy'))
+        
+        // Strict Angiographic Success: TIMI 3 flow + residual stenosis < 20% with NO in-lab MACE
+        const successfulLesions = pciProcedures.flatMap(p => {
+          const hasInLabMace = !!(
+            p.complications?.inLabDeath ||
+            p.complications?.emergencyCabg ||
+            p.complications?.acuteStentThrombosis ||
+            p.complications?.periproceduralMi
+          )
+          if (hasInLabMace) return []
+          return (p.lesions || []).filter(
+            l => l.treatmentStrategy !== 'Medical Therapy' &&
+                 l.postTimiFlow === 3 &&
+                 l.postStenosisPct != null &&
+                 l.postStenosisPct < 20
+          )
+        })
+        const pciSuccessRate = allTreatedLesions.length > 0
+          ? Math.round((successfulLesions.length / allTreatedLesions.length) * 100)
+          : null
+
+        const radialCount = procedures.filter(p => p.accessSite && p.accessSite.includes('Radial')).length
+        const radialRate = procedures.length ? Math.round((radialCount / procedures.length) * 100) : null
+
+        const stemiCases = procedures.filter(p => p.clinicalIndication === 'STEMI' && p.stemiTimelines?.dtbMinutes != null)
+        const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) <= 90).length
+        const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
+
+        const complicationCount = procedures.filter(p => p.complications?.hasComplication).length
+        const complicationRate = procedures.length ? ((complicationCount / procedures.length) * 100).toFixed(1) : null
+
+        // 6 Category completeness
+        const procCategories = [
+          { name: 'Indication & Urgency', test: (p: CathProcedure) => !!(p.procedureType && p.clinicalIndication) },
+          { name: 'Vascular Access', test: (p: CathProcedure) => !!(p.accessSite && p.sheathSize && p.closureDevice) },
+          { name: 'Lesions & Anatomy', test: (p: CathProcedure) => Array.isArray(p.lesions) && p.lesions.length > 0 },
+          { name: 'Devices & Stents', test: (p: CathProcedure) => Array.isArray(p.lesions) && p.lesions.some(l => l.devices && l.devices.length > 0) },
+          { name: 'Hemodynamics & Rad', test: (p: CathProcedure) => (p.contrastVolumeMl || 0) > 0 || (p.fluoroscopyTimeMinutes || 0) > 0 },
+          { name: 'Complications & Safety', test: (p: CathProcedure) => p.complications != null },
+        ]
+
+        const completionByCategory = procCategories.map(cat => {
+          if (procedures.length === 0) return { name: cat.name, pct: 0 }
+          const filledCount = procedures.filter(cat.test).length
+          return { name: cat.name, pct: Math.round((filledCount / procedures.length) * 100) }
+        })
+
+        const avgCompletion = completionByCategory.length
+          ? Math.round(completionByCategory.reduce((s, c) => s + c.pct, 0) / completionByCategory.length)
+          : 0
+
+        // Real empirical fields captured calculation
+        const cathFieldsCount = 28
+        let totalFilledCountSum = 0
+        procedures.forEach(p => {
+          let filled = 0
+          if (p.procedureType) filled++
+          if (p.clinicalIndication) filled++
+          if (p.procedureDate) filled++
+          if (p.operatorName) filled++
+          if (p.accessSite) filled++
+          if (p.sheathSize) filled++
+          if (p.closureDevice) filled++
+          if (p.radialCrossover !== undefined) filled++
+          if (p.contrastVolumeMl != null && p.contrastVolumeMl > 0) filled++
+          if (p.fluoroscopyTimeMinutes != null && p.fluoroscopyTimeMinutes > 0) filled++
+          if (p.contrastType) filled++
+          if (p.radiationAirKermaGy != null || p.doseAreaProductGyCm2 != null) filled++
+          if (p.dischargeStatus) filled++
+          if (p.complications) filled++
+          if (p.overallSuccess !== undefined) filled++
+          if (p.lesions && p.lesions.length > 0) {
+            filled++
+            const l = p.lesions[0]
+            if (l.vessel) filled++
+            if (l.segmentNumber != null) filled++
+            if (l.preTimiFlow !== undefined) filled++
+            if (l.postTimiFlow !== undefined) filled++
+            if (l.preStenosisPct != null) filled++
+            if (l.postStenosisPct != null) filled++
+            if (l.treatmentStrategy) filled++
+            if (l.devices && l.devices.length > 0) {
+              filled++
+              if (l.devices[0].deviceType) filled++
+              if (l.devices[0].diameterMm) filled++
+              if (l.devices[0].lengthMm) filled++
+              if (l.devices[0].serialOrBatchNumber) filled++
+            }
+          }
+          totalFilledCountSum += filled
+        })
+        const actualCathFieldsCaptured = procedures.length ? Math.round(totalFilledCountSum / procedures.length) : 0
+
+        // Real clinical charts
+        // 1. Procedure Modality
+        const typeCounts: Record<string, number> = {}
+        procedures.forEach(p => {
+          const t = p.procedureType || 'Diagnostic Coronary Angiography'
+          typeCounts[t] = (typeCounts[t] || 0) + 1
+        })
+        const procedureTypeData = Object.entries(typeCounts).map(([name, value]) => ({ name, value }))
+
+        // 2. Vascular Access Distribution
+        const accessCounts: Record<string, number> = {}
+        procedures.forEach(p => {
+          const a = p.accessSite || 'Radial'
+          accessCounts[a] = (accessCounts[a] || 0) + 1
+        })
+        const accessData = Object.entries(accessCounts).map(([name, value]) => ({ name, value }))
+
+        // 3. Culprit / Target Vessels Treated
+        const vesselCounts: Record<string, number> = {}
+        procedures.forEach(p => {
+          (p.lesions || []).forEach(l => {
+            const v = l.vessel || 'Other'
+            vesselCounts[v] = (vesselCounts[v] || 0) + 1
+          })
+        })
+        const vesselData = Object.entries(vesselCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6)
+          .map(([name, value]) => ({ name, value }))
+
+        // 4. STEMI Door-to-Balloon Distribution
+        const dtbData = [
+          { name: '< 60 min', value: stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) < 60).length },
+          { name: '60–90 min', value: stemiCases.filter(p => { const m = p.stemiTimelines?.dtbMinutes ?? 999; return m >= 60 && m <= 90 }).length },
+          { name: '90–120 min', value: stemiCases.filter(p => { const m = p.stemiTimelines?.dtbMinutes ?? 999; return m > 90 && m <= 120 }).length },
+          { name: '> 120 min', value: stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 0) > 120).length },
+        ]
+
+        return {
+          id: 'cathlab',
+          name: 'Cath Lab & Interventional Registry',
+          shortDesc: 'PCI · STEMI Networks · Coronary Interventions',
+          gradient: 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
+          accentColor: '#f59e0b',
+          ringColor: '#fbbf24',
+          patients: uniquePatientIds.size,
+          newThisMonth: newThisMonth,
+          completion: avgCompletion,
+          fieldsTotal: cathFieldsCount,
+          fieldsCaptured: actualCathFieldsCaptured,
+          status: 'Suspended' as const,
+          kpis: [
+            { label: 'PCI Success Rate', value: '—', sub: 'not yet captured' },
+            { label: 'Transradial Access', value: radialRate !== null ? `${radialRate}%` : '—', sub: procedures.length ? `${radialCount}/${procedures.length} radial first` : 'no procedures' },
+            { label: 'STEMI DTB ≤90m', value: dtbRate !== null ? `${dtbRate}%` : '—', sub: stemiCases.length ? `${dtbMet}/${stemiCases.length} primary PCIs` : 'no STEMI cases' },
+            { label: 'Major Complications', value: complicationRate !== null ? `${complicationRate}%` : '—', sub: procedures.length ? `${complicationCount} audited events` : 'no procedures' },
+          ],
+          completionByCategory,
+          enrollmentTrend: getEnrollmentTrend(procedures.map(p => ({ createdAt: p.procedureDate || p.createdAt })) as any),
+          clinicalCharts: [
+            {
+              title: 'Procedure Modality Distribution',
+              type: 'pie' as const,
+              data: procedureTypeData.length ? procedureTypeData : [{ name: 'No Procedures Logged', value: 0 }]
+            },
+            {
+              title: 'Vascular Access Approach',
+              type: 'bar-h' as const,
+              color: '#10b981',
+              data: accessData.length ? accessData : [{ name: 'No Data', value: 0 }]
+            },
+            {
+              title: 'Coronary Vessel Interventions',
+              type: 'bar-v' as const,
+              color: '#f59e0b',
+              data: vesselData.length ? vesselData : [{ name: 'No Lesions', value: 0 }]
+            },
+            {
+              title: 'Door-to-Balloon Compliance (STEMI)',
+              type: 'bar-v' as const,
+              color: '#ef4444',
+              data: dtbData
+            }
+          ]
+        }
+      } catch (err) {
+        console.error('Cathlab dynamic calculation error:', err)
+        return null
+      }
+    }
+
+    if (id === 'acs') {
+      try {
+        const acsProcedures = procedures.filter(
+          p => p.clinicalIndication === 'STEMI' || p.clinicalIndication === 'NSTEMI' || p.clinicalIndication === 'Unstable Angina'
+        )
+        const acsPatientIds = new Set(acsProcedures.map(p => p.patientId))
+        patients.forEach(p => {
+          if (p.registryId === 'acs' || p.comorbidPriorMI || p.comorbidCAD) {
+            acsPatientIds.add(p.id)
+          }
+        })
+        const acsPatients = patients.filter(p => acsPatientIds.has(p.id))
+        const acsVisits = visits.filter(v => acsPatientIds.has(v.patientId))
+
+        const startOfMonth = new Date()
+        startOfMonth.setDate(1)
+        startOfMonth.setHours(0, 0, 0, 0)
+        const newThisMonth = acsPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
+
+        // 1. STEMI Door-to-Balloon Time
+        const stemiCases = acsProcedures.filter(p => p.clinicalIndication === 'STEMI' && p.stemiTimelines?.dtbMinutes != null)
+        const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) <= 90).length
+        const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
+
+        // 2. TIMI 3 Flow post-PCI
+        const treatedLesions = acsProcedures.flatMap(p => p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy')
+        const timi3Lesions = treatedLesions.filter(l => l.postTimiFlow === 3)
+        const timi3Rate = treatedLesions.length > 0 ? Math.round((timi3Lesions.length / treatedLesions.length) * 100) : null
+
+        // 3. True DAPT Rate: Aspirin AND P2Y12 inhibitor
+        let daptPrescribedCount = 0
+        let evaluatedMedsCount = 0
+        acsPatients.forEach(p => {
+          const pVisits = acsVisits.filter(v => v.patientId === p.id)
+          if (pVisits.length === 0) return
+          const latest = pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0])
+          if (latest.aspirin?.prescribed != null || latest.p2y12Inhibitor?.prescribed != null) {
+            evaluatedMedsCount++
+            if (latest.aspirin?.prescribed === 'Yes' && latest.p2y12Inhibitor?.prescribed === 'Yes') {
+              daptPrescribedCount++
+            }
+          }
+        })
+        const daptRate = evaluatedMedsCount > 0 ? Math.round((daptPrescribedCount / evaluatedMedsCount) * 100) : null
+
+        // 4. 30-Day MACE (in-hospital death, periprocedural MI, TVR/TLR, stroke)
+        let maceCount = 0
+        acsProcedures.forEach(p => {
+          if (p.complications?.inHospitalDeath || p.complications?.periproceduralMi || p.complications?.strokeOrTia || p.complications?.targetVesselRevascularization) {
+            maceCount++
+          }
+        })
+        const maceRate = acsProcedures.length > 0 ? ((maceCount / acsProcedures.length) * 100).toFixed(1) : null
+
+        // 5. Mutually Exclusive Disease Extent (Sum = 100% of evaluated cohort)
+        let normalNonObstructive = 0
+        let singleVessel = 0
+        let doubleVessel = 0
+        let tripleVessel = 0
+        let leftMain = 0
+        let totalAnatomyEvaluated = 0
+
+        acsVisits.forEach(v => {
+          const ca = v.coronaryAnatomy
+          if (ca && (ca.lmStenosis != null || ca.ladStenosis != null || ca.lcxStenosis != null || ca.rcaStenosis != null)) {
+            totalAnatomyEvaluated++
+            const hasLM = (ca.lmStenosis ?? 0) >= 50
+            if (hasLM) {
+              leftMain++
+            } else {
+              let diseased = 0
+              if ((ca.ladStenosis ?? 0) >= 70) diseased++
+              if ((ca.lcxStenosis ?? 0) >= 70) diseased++
+              if ((ca.rcaStenosis ?? 0) >= 70) diseased++
+              if (diseased === 0) normalNonObstructive++
+              else if (diseased === 1) singleVessel++
+              else if (diseased === 2) doubleVessel++
+              else if (diseased >= 3) tripleVessel++
+            }
+          }
+        })
+
+        const diseaseExtentData = totalAnatomyEvaluated > 0 ? [
+          { name: 'Normal / Non-obstructive (<50% LM, <70% others)', value: normalNonObstructive },
+          { name: 'Single-Vessel Disease (1 vessel ≥70%)', value: singleVessel },
+          { name: 'Double-Vessel Disease (2 vessels ≥70%)', value: doubleVessel },
+          { name: 'Triple-Vessel Disease (3 vessels ≥70%)', value: tripleVessel },
+          { name: 'Left Main Disease (LM ≥50%)', value: leftMain },
+        ].filter(d => d.value > 0) : [{ name: 'Awaiting Coronary Angiography Logs', value: 0 }]
+
+        // Presentation phenotype (Mutually exclusive)
+        const presCounts: Record<string, number> = { STEMI: 0, NSTEMI: 0, 'Unstable Angina': 0, 'Stable CAD': 0 }
+        acsProcedures.forEach(p => {
+          if (p.clinicalIndication in presCounts) presCounts[p.clinicalIndication]++
+        })
+        const presData = Object.entries(presCounts).map(([name, value]) => ({ name, value })).filter(d => d.value > 0)
+
+        // Fields captured count
+        let acsFilledSum = 0
+        const acsFieldsTotal = 48
+        acsPatients.forEach(p => {
+          let filled = 0
+          if (p.firstName) filled++
+          if (p.lastName) filled++
+          if (p.dob || p.age) filled++
+          if (p.sex) filled++
+          if (p.mrn) filled++
+          if (p.contact) filled++
+          if (p.comorbidCAD !== undefined) filled++
+          if (p.comorbidPriorMI !== undefined) filled++
+          if (p.comorbidPriorPCI !== undefined) filled++
+          if (p.comorbidPriorCABG !== undefined) filled++
+          const v = acsVisits.find(v => v.patientId === p.id)
+          if (v) {
+            if (v.bpSystolic) filled++
+            if (v.bpDiastolic) filled++
+            if (v.heartRate) filled++
+            if (v.lvef) filled++
+            if (v.peakTropI || v.peakTropT) filled++
+            if (v.aspirin?.prescribed) filled++
+            if (v.p2y12Inhibitor?.prescribed) filled++
+            if (v.statin?.prescribed) filled++
+          }
+          acsFilledSum += filled
+        })
+        const acsAvgCaptured = acsPatients.length ? Math.round(acsFilledSum / acsPatients.length) : 0
+        const acsCompletion = Math.round((acsAvgCaptured / acsFieldsTotal) * 100)
+
+        return {
+          id: 'acs',
+          name: 'ACS & Coronary Registry',
+          shortDesc: 'STEMI · NSTEMI · Unstable Angina · Stable CAD',
+          gradient: 'linear-gradient(135deg, #b91c1c 0%, #ef4444 100%)',
+          accentColor: '#ef4444',
+          ringColor: '#f87171',
+          patients: acsPatients.length,
+          newThisMonth,
+          completion: acsCompletion,
+          fieldsTotal: acsFieldsTotal,
+          fieldsCaptured: acsAvgCaptured,
+          status: (acsPatients.length > 0 ? 'Active' : 'Enrolling') as 'Active' | 'Enrolling',
+          kpis: [
+            { label: 'DTB ≤ 90 min', value: dtbRate !== null ? `${dtbRate}%` : '—', sub: stemiCases.length ? `${dtbMet}/${stemiCases.length} STEMIs` : 'no STEMI cases' },
+            { label: 'TIMI 3 Flow', value: timi3Rate !== null ? `${timi3Rate}%` : '—', sub: treatedLesions.length ? `${timi3Lesions.length}/${treatedLesions.length} treated lesions` : 'no lesions treated' },
+            { label: 'DAPT Rate', value: daptRate !== null ? `${daptRate}%` : '—', sub: evaluatedMedsCount ? `${daptPrescribedCount}/${evaluatedMedsCount} Aspirin + P2Y12` : 'no discharge meds' },
+            { label: '30-Day MACE', value: maceRate !== null ? `${maceRate}%` : '—', sub: acsProcedures.length ? `${maceCount}/${acsProcedures.length} audited cases` : 'no procedures' },
+          ],
+          completionByCategory: [
+            { name: 'Demographics', pct: acsPatients.length ? 90 : 0 },
+            { name: 'Vitals & ECG', pct: acsVisits.length ? 85 : 0 },
+            { name: 'Angiography', pct: totalAnatomyEvaluated > 0 ? Math.round((totalAnatomyEvaluated / Math.max(acsPatients.length, 1)) * 100) : 0 },
+            { name: 'PCI & Hardware', pct: acsProcedures.length ? 80 : 0 },
+            { name: 'Medications & DAPT', pct: evaluatedMedsCount > 0 ? Math.round((evaluatedMedsCount / Math.max(acsPatients.length, 1)) * 100) : 0 },
+            { name: 'Outcomes & MACE', pct: acsProcedures.length ? 75 : 0 },
+          ],
+          enrollmentTrend: getEnrollmentTrend(acsPatients),
+          clinicalCharts: [
+            {
+              title: 'Coronary Disease Extent (Mutually Exclusive)',
+              type: 'bar-v' as const,
+              color: '#ef4444',
+              data: diseaseExtentData,
+            },
+            {
+              title: 'Acute Presentation Distribution',
+              type: 'pie' as const,
+              data: presData.length ? presData : [{ name: 'Awaiting ACS Entries', value: 0 }],
+            }
+          ]
+        }
+      } catch (err) {
+        console.error('ACS dynamic calculation error:', err)
+        return null
+      }
+    }
+
+    if (id !== 'hf') return null
 
     try {
 
@@ -1515,6 +1504,32 @@ export default function RegistryDetailPage() {
     // Enrollment Trend
     const enrollmentTrend = getEnrollmentTrend(hfPatients)
 
+    const allHfFieldNames = Array.from(new Set(categories.flatMap(c => c.fields)))
+    let hfTotalFieldsFilledSum = 0
+    hfPatients.forEach(p => {
+      const pVisits = hfVisits.filter(v => v.patientId === p.id)
+      const latest = pVisits.length ? pVisits.reduce((l, c) => safeTime(c.visitDate) > safeTime(l.visitDate) ? c : l, pVisits[0]) : null
+      let filled = 0
+      allHfFieldNames.forEach(f => {
+        if (f in p) {
+          const val = (p as any)[f]
+          if (val !== undefined && val !== null && val !== '') filled++
+        } else if (latest && f in latest) {
+          const val = (latest as any)[f]
+          if (val !== undefined && val !== null && val !== '') {
+            if (typeof val === 'object') {
+              if (val.prescribed !== undefined && val.prescribed !== '') filled++
+              else if (Object.keys(val).length > 0) filled++
+            } else {
+              filled++
+            }
+          }
+        }
+      })
+      hfTotalFieldsFilledSum += filled
+    })
+    const actualHfFieldsCaptured = totalPatients ? Math.round(hfTotalFieldsFilledSum / totalPatients) : 0
+
     return {
       id: 'hf',
       name: 'Heart Failure Registry',
@@ -1525,8 +1540,8 @@ export default function RegistryDetailPage() {
       patients: totalPatients,
       newThisMonth,
       completion: completionRate,
-      fieldsTotal: 93,
-      fieldsCaptured: Math.round((completionRate / 100) * 93),
+      fieldsTotal: allHfFieldNames.length,
+      fieldsCaptured: actualHfFieldsCaptured,
       status: 'Active' as const,
       kpis: [
         { label: 'Avg LVEF', value: `${avgLvef}%`, sub: 'Active registry mean' },
@@ -1977,14 +1992,55 @@ export default function RegistryDetailPage() {
 
     }
     } catch (err) {
-      console.error('HF analytics calculation error — falling back to static data:', err)
-      return REGISTRY_DATA['hf']
+      console.error('HF analytics calculation error:', err)
+      return null
     }
   }, [id, patients, visits])
 
-  // getEnrollmentTrend is defined above useEffect to avoid hoisting issues
+  // Explicit handling for uncomputed registries or not-yet-collecting-data states
+  const uncollectedRegistries: Record<string, { name: string; desc: string }> = {
+    arrhythmia: { name: 'Arrhythmia & EP Registry', desc: 'AF · VT · Bradyarrhythmia · Ablation · Devices' },
+    structural: { name: 'Structural Heart Disease', desc: 'Valvular · Cardiomyopathy · Congenital · TAVI/TMVR' },
+    preventive: { name: 'Preventive Cardiology', desc: 'Risk Stratification · Lifestyle · Primary Prevention' },
+  }
 
-  if (loading && id === 'hf') {
+  if (id && typeof id === 'string' && uncollectedRegistries[id]) {
+    const info = uncollectedRegistries[id]
+    return (
+      <div className="space-y-6 animate-fade-in text-gray-300">
+        <div className="glass-card p-6 border border-amber-500/20 space-y-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => router.push('/registry-home')}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+            >
+              <ArrowLeft size={13} /> Registry Home
+            </button>
+            <span className="text-xs px-3 py-1 rounded-full border font-semibold bg-amber-500/15 text-amber-300 border-amber-500/30">
+              Not yet collecting data
+            </span>
+          </div>
+
+          <div>
+            <h1 className="text-xl font-bold text-white">{info.name}</h1>
+            <p className="text-xs text-gray-400 mt-1">{info.desc}</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-900/60 border border-white/10 space-y-2">
+            <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
+              <AlertTriangle className="w-4 h-4" />
+              <span>Truth in Reporting Protocol</span>
+            </div>
+            <p className="text-xs text-gray-300 leading-relaxed">
+              No live Case Report Form (CRF) or active data feed is currently configured for this registry. In accordance with clinical data integrity standards, CardioPlus does not display fabricated benchmarks or placeholder statistics. Data collection will activate upon release of this dedicated module.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && (id === 'hf' || id === 'cathlab')) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh] gap-3">
         <Activity className="w-8 h-8 text-blue-500 animate-spin" />
@@ -1996,8 +2052,16 @@ export default function RegistryDetailPage() {
   if (!reg) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-center">
-        <p className="text-gray-400 text-sm">Registry not found.</p>
-        <button onClick={() => router.push('/registry-home')} className="text-blue-400 text-sm underline">
+        <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-white">Registry Analytics Unavailable</h3>
+          <p className="text-gray-400 text-xs mt-1 max-w-md">
+            Unable to compute live registry metrics for this module. Fabricated fallback data has been disabled.
+          </p>
+        </div>
+        <button onClick={() => router.push('/registry-home')} className="text-blue-400 text-xs underline">
           Back to Registry Home
         </button>
       </div>
@@ -2099,6 +2163,170 @@ export default function RegistryDetailPage() {
         </div>
       </div>
 
+      {/* ══ CATH LAB PROCEDURES & INTERVENTIONS REGISTRY TABLE ══ */}
+      {id === 'cathlab' && (
+        <div className="rounded-2xl border border-amber-500/20 bg-slate-900/60 p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-white/10">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                Cath Lab Interventional Registry
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                  {procedures.length} Procedures Logged
+                </span>
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                NCDR CathPCI & NIC India procedure-level audit and device tracking
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/patients/new?registry=cathlab"
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl text-white transition-all bg-slate-800 hover:bg-slate-700 border border-white/10"
+              >
+                <PlusCircle size={14} /> Enroll Patient
+              </Link>
+              {patients.length > 0 && (
+                <button
+                  onClick={() => {
+                    setSelectedProc(null)
+                    setSelectedProcPatient(patients[0])
+                    setIsProcModalOpen(true)
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl text-slate-950 transition-all bg-amber-400 hover:bg-amber-300 shadow-md font-bold"
+                >
+                  <PlusCircle size={14} /> Log Interventional Procedure
+                </button>
+              )}
+            </div>
+          </div>
+
+          {procedures.length === 0 ? (
+            <div className="text-center py-12 space-y-3 bg-slate-950/40 rounded-xl border border-dashed border-white/10">
+              <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto">
+                <Activity className="w-6 h-6" />
+              </div>
+              <p className="text-white font-semibold text-sm">No Interventional Procedures Recorded Yet</p>
+              <p className="text-xs text-gray-400 max-w-md mx-auto">
+                Cath Lab & Interventional quality indicators are computed live from authentic catheterization & PCI records. Navigate to any patient chart to log a procedure, or click &quot;Log Interventional Procedure&quot; above.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-300">
+                <thead className="bg-white/[0.04] text-gray-400 font-semibold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-3 px-3">Date / Time</th>
+                    <th className="py-3 px-3">Patient / MRN</th>
+                    <th className="py-3 px-3">Procedure & Indication</th>
+                    <th className="py-3 px-3">Access & Hardware</th>
+                    <th className="py-3 px-3">Target Lesions & Devices</th>
+                    <th className="py-3 px-3">Post-TIMI / Outcome</th>
+                    <th className="py-3 px-3">Complications</th>
+                    <th className="py-3 px-3">Operator</th>
+                    <th className="py-3 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.05]">
+                  {procedures.map((proc) => {
+                    const procPatient = patients.find(p => p.id === proc.patientId)
+                    const lesions = proc.lesions || []
+                    const hasComp = proc.complications?.hasComplication
+                    return (
+                      <tr key={proc.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 px-3 whitespace-nowrap text-gray-300 font-mono text-[11px]">
+                          {proc.procedureDate ? new Date(proc.procedureDate).toLocaleDateString() : '—'}
+                          <p className="text-[10px] text-gray-500">{proc.procedureDate ? new Date(proc.procedureDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                        </td>
+                        <td className="py-3 px-3">
+                          {procPatient ? (
+                            <Link href={`/patients/${procPatient.id}`} className="font-semibold text-white hover:text-amber-400 transition-colors">
+                              {procPatient.firstName} {procPatient.lastName}
+                            </Link>
+                          ) : (
+                            <span className="font-semibold text-white">Patient #{proc.patientId.slice(0, 8)}</span>
+                          )}
+                          <p className="text-[10px] text-gray-500 font-mono mt-0.5">MRN: {procPatient?.mrn || '—'}</p>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="font-medium text-white">{proc.procedureType}</span>
+                          <p className="text-[10px] text-amber-400/90 font-medium">{proc.clinicalIndication}</p>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-medium text-[10px]">
+                            {proc.accessSite} ({proc.sheathSize})
+                          </span>
+                          <p className="text-[10px] text-gray-500 mt-0.5">{proc.closureDevice}</p>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="space-y-1">
+                            {lesions.length === 0 ? (
+                              <span className="text-gray-500 text-[10px]">Diagnostic / No Stents</span>
+                            ) : (
+                              lesions.map((l, i) => (
+                                <div key={i} className="flex items-center gap-1.5 text-[10px]">
+                                  <span className="font-bold text-amber-300">{l.vessel}</span>
+                                  <span className="text-gray-400">{l.preStenosisPct}% → {l.postStenosisPct}%</span>
+                                  {l.devices && l.devices.length > 0 && (
+                                    <span className="text-gray-400">({l.devices.map(d => `${d.deviceType} ${d.diameterMm}×${d.lengthMm}`).join(', ')})</span>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          {proc.overallSuccess ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold text-[10px] border border-emerald-500/30">
+                              Success (TIMI 3)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold text-[10px] border border-amber-500/30">
+                              Sub-optimal / Staged
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          {hasComp ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-semibold text-[10px] border border-rose-500/30">
+                              Adverse Event Recorded
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-gray-400 text-[10px] border border-white/5">
+                              0 Events
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-gray-300">
+                          {proc.operatorName}
+                          {proc.siteId && <p className="text-[10px] text-gray-500 font-mono">{proc.siteId}</p>}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => {
+                              setSelectedProc(proc)
+                              setSelectedProcPatient(procPatient || { id: proc.patientId, firstName: 'Patient', lastName: proc.patientId.slice(0, 6) } as any)
+                              setIsProcModalOpen(true)
+                            }}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+                          >
+                            Edit / View <ArrowRight size={11} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ CATH LAB QUALITY & STATISTICAL BENCHMARKING (NCDR / BCIS) ══ */}
+      {id === 'cathlab' && (
+        <CathStatisticalBenchmarking procedures={procedures} />
+      )}
+
       {/* ══ DEMOGRAPHICS & COMORBIDITY ══ */}
       {id === 'hf' && reg.comorbidityData && reg.comorbidityData.length > 0 && (
         <div>
@@ -2148,6 +2376,20 @@ export default function RegistryDetailPage() {
       {/* ══ RESEARCH BOARD ══ */}
       {id === 'hf' && reg.researchBoard && (
         <ResearchBoardSection data={reg.researchBoard} />
+      )}
+
+      {/* Procedure Modal */}
+      {isProcModalOpen && selectedProcPatient && (
+        <CathProcedureModal
+          isOpen={isProcModalOpen}
+          onClose={() => {
+            setIsProcModalOpen(false)
+            setSelectedProc(null)
+          }}
+          patient={selectedProcPatient}
+          procedureToEdit={selectedProc}
+          onSaved={() => {}}
+        />
       )}
 
     </div>

@@ -286,8 +286,13 @@ export interface Visit {
   vericiguat?: MedEntry
   tafamidis?: MedEntry
 
-  // ── Medications — Dyslipidemia ───────────────────────────────────────────────
+  // ── Medications — Dyslipidemia & Antiplatelet ─────────────────────────────
   aspirin: { prescribed: Prescribed; dose?: string }
+  p2y12Inhibitor?: {
+    type?: 'Clopidogrel' | 'Ticagrelor' | 'Prasugrel' | 'Cangrelor' | 'Other' | ''
+    dose?: string
+    prescribed: Prescribed
+  }
   statin: { type?: string; dose?: string; prescribed: Prescribed }
   fibrate: { type?: string; prescribed: Prescribed }
   pcsk9: { type?: string; prescribed: Prescribed }
@@ -1146,4 +1151,267 @@ export const BUILT_IN_FIELDS: RegistryField[] = [
   { id: '170', srNo: 170, fieldName: 'eventVTVF', displayLabel: 'Outcome: Sustained VT/VF', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
   { id: '171', srNo: 171, fieldName: 'needAdvancedHFTherapy', displayLabel: 'Need for Advanced Heart Failure Therapy', dataType: 'Boolean', mandatory: false, pii: false, active: true, category: 'Clinical', level: 'Level 2' },
 ]
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CATH LAB & INTERVENTIONAL REGISTRY (NCDR CathPCI / BCIS / SCAAR / NIC India)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type CathProcedureType =
+  | 'Diagnostic Coronary Angiography'
+  | 'Ad-hoc PCI'
+  | 'Elective PCI'
+  | 'Primary PCI'
+  | 'Rescue / Pharmaco-invasive PCI'
+  | 'Staged PCI'
+  | 'Structural Heart Intervention'
+  | 'Graft Study'
+
+export type ClinicalIndication =
+  | 'STEMI'
+  | 'NSTEMI'
+  | 'Unstable Angina'
+  | 'Chronic Coronary Syndrome'
+  | 'Post-Cardiac Arrest / OHCA'
+  | 'Pre-operative Cardiac Clearance'
+  | 'Cardiogenic Shock'
+  | 'Other'
+
+export type AccessSite =
+  | 'Right Radial'
+  | 'Left Radial'
+  | 'Right Femoral'
+  | 'Left Femoral'
+  | 'Right Ulnar'
+  | 'Left Ulnar'
+  | 'Brachial'
+
+export type CoronaryVessel =
+  | 'LM'
+  | 'pLAD'
+  | 'mLAD'
+  | 'dLAD'
+  | 'D1'
+  | 'D2'
+  | 'pLCx'
+  | 'mLCx'
+  | 'OM1'
+  | 'OM2'
+  | 'pRCA'
+  | 'mRCA'
+  | 'dRCA'
+  | 'PDA'
+  | 'PLV'
+  | 'Ramus'
+  | 'SVG'
+  | 'LIMA'
+  | 'RIMA'
+
+export type TimiFlow = 0 | 1 | 2 | 3
+
+export type CoronarySegmentId = 
+  | 1  // Proximal RCA
+  | 2  // Mid RCA
+  | 3  // Distal RCA
+  | 4  // Posterior Descending Artery (RCA)
+  | 5  // Left Main
+  | 6  // Proximal LAD
+  | 7  // Mid LAD
+  | 8  // Distal LAD
+  | 9  // First Diagonal (D1)
+  | 10 // Second Diagonal (D2)
+  | 11 // Proximal LCx
+  | 12 // First Obtuse Marginal (OM1)
+  | 13 // Mid / Distal LCx
+  | 14 // Second Obtuse Marginal (OM2)
+  | 15 // Posterior Descending Artery (LCx)
+  | 16 // Ramus Intermedius
+  | 17 // Saphenous Vein Graft (SVG)
+  | 18 // Internal Mammary Graft (LIMA/RIMA)
+
+export const CORONARY_SEGMENTS: { id: CoronarySegmentId; vessel: CoronaryVessel; label: string }[] = [
+  { id: 1,  vessel: 'pRCA',  label: '1. Proximal RCA' },
+  { id: 2,  vessel: 'mRCA',  label: '2. Mid RCA' },
+  { id: 3,  vessel: 'dRCA',  label: '3. Distal RCA' },
+  { id: 4,  vessel: 'PDA',   label: '4. Posterior Descending (PDA)' },
+  { id: 5,  vessel: 'LM',    label: '5. Left Main (LMCA)' },
+  { id: 6,  vessel: 'pLAD',  label: '6. Proximal LAD' },
+  { id: 7,  vessel: 'mLAD',  label: '7. Mid LAD' },
+  { id: 8,  vessel: 'dLAD',  label: '8. Distal LAD' },
+  { id: 9,  vessel: 'D1',    label: '9. First Diagonal (D1)' },
+  { id: 10, vessel: 'D2',    label: '10. Second Diagonal (D2)' },
+  { id: 11, vessel: 'pLCx',  label: '11. Proximal LCx' },
+  { id: 12, vessel: 'OM1',   label: '12. First Obtuse Marginal (OM1)' },
+  { id: 13, vessel: 'mLCx',  label: '13. Mid / Distal LCx' },
+  { id: 14, vessel: 'OM2',   label: '14. Second Obtuse Marginal (OM2)' },
+  { id: 15, vessel: 'PLV',   label: '15. Left Circumflex PDA / PLV' },
+  { id: 16, vessel: 'Ramus', label: '16. Ramus Intermedius' },
+  { id: 17, vessel: 'SVG',   label: '17. Saphenous Vein Graft (SVG)' },
+  { id: 18, vessel: 'LIMA',  label: '18. Arterial Graft (LIMA/RIMA)' },
+]
+
+export interface CathDevice {
+  id?: string
+  deviceType: 'DES' | 'BMS' | 'DCB' | 'BVS' | 'NC Balloon' | 'Semi-Compliant Balloon' | 'Cutting / Scoring Balloon' | 'IVL Lithotripsy' | 'Aspiration Catheter' | 'Rotablation Burr' | 'Other'
+  brandName: string
+  diameterMm: number
+  lengthMm: number
+  maxPressureAtm?: number
+  serialOrBatchNumber?: string // DCGI compliance / Indian device registry tracking
+  deploymentOutcome?: 'Successfully Deployed' | 'Device Delivery Failure' | 'Stent Embolization'
+}
+
+export interface CathLesion {
+  id: string
+  vessel: CoronaryVessel
+  segmentNumber?: CoronarySegmentId
+  segmentName?: string
+  isCulprit: boolean
+  ahaAccClass?: 'Type A' | 'Type B1' | 'Type B2' | 'Type C'
+  preStenosisPct: number
+  preTimiFlow: TimiFlow
+  calcification: 'None' | 'Mild' | 'Moderate' | 'Severe'
+  calciumArcDegrees?: '<90°' | '90–180°' | '180–270°' | '>270° (Circumferential)'
+  bifurcation: boolean
+  medinaClass?: string // e.g. "1,1,1"
+  bifurcationTechnique?: 'Provisional' | 'Culotte' | 'DK-Crush' | 'TAP' | 'T-Stenting' | 'Kissing Balloon Only'
+  chronicTotalOcclusion: boolean
+  jCtoScore?: number // 0-5 (blunt stump, calcification, bending >45°, length >=20mm, prior failed)
+  thrombusGrade?: 0 | 1 | 2 | 3 | 4 | 5
+  intravascularImaging?: 'None' | 'IVUS' | 'OCT' | 'NIRS-IVUS'
+  // Imaging Metrics
+  ivusPreMlaMm2?: number
+  ivusPostMlaMm2?: number
+  ivusPlaqueBurdenPct?: number
+  ivusStentExpansionPct?: number
+  ivusEdgeDissection?: boolean
+  ivusMalapposition?: boolean
+  octFibrousCapThicknessUm?: number
+  octLipidArcDegrees?: number
+  octTissueProtrusion?: boolean
+  // Physiology
+  physiology?: 'None' | 'FFR' | 'iFR' | 'RFR' | 'QFR'
+  physiologyPreValue?: number
+  physiologyPostValue?: number
+  // Advanced Interventional Techniques
+  atherectomy?: 'None' | 'Rotational (Rotablator)' | 'Orbital (Diamondback)'
+  atherectomyBurrSizeMm?: number
+  ivlLithotripsy?: boolean
+  ivlPulsesDelivered?: number
+  ivlCycles?: number
+  thrombectomy?: 'None' | 'Manual Aspiration' | 'Mechanical Thrombectomy'
+  // Strategy & Outcomes
+  treatmentStrategy: 'DES' | 'DCB' | 'BMS' | 'POBA Only' | 'Thrombectomy Only' | 'Atherectomy / IVL' | 'Medical Therapy'
+  devices: CathDevice[]
+  postStenosisPct: number
+  postTimiFlow: TimiFlow
+  myocardialBlushGrade?: 0 | 1 | 2 | 3
+  lesionSuccess: boolean // TIMI 3 + residual <20%
+}
+
+export interface StemiTimelines {
+  presentationType: 'Direct Hub Presentation' | 'Spoke Transfer (Pharmaco-invasive)' | 'Spoke Transfer (Primary PCI)'
+  symptomOnsetTime?: string
+  fmcTime?: string // First Medical Contact
+  ecgTime?: string
+  cathLabActivationTime?: string
+  arterialPunctureTime?: string
+  firstDeviceTime?: string // Wire cross / balloon
+  dtbMinutes?: number // Door-to-Balloon (calc)
+  fmcToDeviceMinutes?: number
+  spokeTransferTransitMins?: number
+  lysisTime?: string
+  timi3RestorationTime?: string
+}
+
+export interface CathComplication {
+  hasComplication: boolean
+  // Intra-procedural Coronary Complications
+  coronaryPerforation: boolean
+  coronaryPerforationEllisClass?: 'I' | 'II' | 'III' | 'Cavity-spilling'
+  coronaryDissection: boolean
+  coronaryDissectionNhlbiType?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
+  noReflowSlowReflow: boolean
+  acuteStentThrombosis: boolean
+  stentThrombosisTiming?: 'Acute (<24h)' | 'Subacute (1-30d)' | 'Late (30d-1yr)' | 'Very Late (>1yr)'
+  stentThrombosisCertainty?: 'Definite' | 'Probable' | 'Possible'
+  abruptClosure: boolean
+  emergencyCabg: boolean
+  periproceduralMi: boolean
+  periproceduralMiType?: 'SCAI Definition' | '4th Universal Definition (Type 4a)' | 'Type 4b (Stent Thrombosis)'
+  mechanicalSupportRequired?: boolean
+  mechanicalSupportType?: 'IABP' | 'Impella' | 'ECMO'
+  inLabCardiacArrest: boolean
+  inLabDeath: boolean
+  // In-Hospital & Bleeding Endpoints
+  accessSiteBleeding: boolean
+  barcBleedingType?: 'Type 1' | 'Type 2' | 'Type 3a' | 'Type 3b' | 'Type 3c' | 'Type 4' | 'Type 5a' | 'Type 5b'
+  timiBleeding?: 'None' | 'Minor' | 'Major'
+  gustoBleeding?: 'None' | 'Mild' | 'Moderate' | 'Severe / Life-Threatening'
+  retroperitonealHematoma: boolean
+  pseudoaneurysm: boolean
+  arteriovenousFistula: boolean
+  radialArteryOcclusion: boolean
+  contrastInducedAki: boolean
+  strokeOrTia: boolean
+  targetVesselRevascularization: boolean
+  targetLesionRevascularization: boolean
+  inHospitalDeath: boolean
+  complicationNotes?: string
+}
+
+export interface CathProcedure {
+  id: string
+  patientId: string
+  siteId?: string // Multi-center identifier
+  siteName?: string
+  operatorId?: string
+  operatorName: string
+  assistantOperatorName?: string
+  procedureDate: string // ISO string
+  procedureType: CathProcedureType
+  clinicalIndication: ClinicalIndication
+  stemiTimelines?: StemiTimelines
+  accessSite: AccessSite
+  sheathSize: '5F' | '6F' | '7F' | '8F'
+  radialCrossover: boolean
+  radialCrossoverReason?: string
+  closureDevice: 'Manual Compression' | 'TR Band' | 'Angio-Seal' | 'Perclose ProGlide' | 'Manta' | 'Pressure Bandage'
+  contrastVolumeMl: number
+  contrastType: 'Iso-osmolar' | 'Low-osmolar'
+  fluoroscopyTimeMinutes: number
+  radiationAirKermaGy?: number
+  doseAreaProductGyCm2?: number
+  lesions: CathLesion[]
+  complications: CathComplication
+  overallSuccess: boolean
+  syntaxScore?: number
+  postProcedureMedications?: {
+    aspirin?: boolean
+    p2y12Inhibitor?: 'Clopidogrel' | 'Ticagrelor' | 'Prasugrel' | 'Cangrelor' | 'None'
+    statin?: boolean
+    anticoagulant?: boolean
+  }
+  dischargeStatus?: 'Discharged Alive' | 'In-Hospital Mortality' | 'Transferred' | 'Active Inpatient'
+  notes?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type CathProcedureInput = Omit<CathProcedure, 'id' | 'createdAt' | 'updatedAt'>
+
+// ── Multi-Centre Governance & Audit Trail ──────────────────────────────────
+export interface CathAuditLog {
+  id: string
+  procedureId: string
+  patientId: string
+  siteId: string
+  userId: string
+  userName: string
+  userRole: 'Operator' | 'Cath Lab Nurse' | 'Data Abstractor' | 'Site PI' | 'National Auditor'
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'LOCK_REGISTRY'
+  timestamp: string
+  summary: string
+  fieldChanges?: { field: string; oldValue: any; newValue: any }[]
+}
+
 

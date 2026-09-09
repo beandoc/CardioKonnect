@@ -982,15 +982,18 @@ export interface MACERiskInput {
   stentLength: number       // mm (total), proxy for complexity
 }
 
-export interface MACERiskResult {
-  riskScore: number         // 0-100 internal risk index
-  maceRisk30Day: number     // fraction 0-1
+export interface ExploratoryPostPCIRiskIndexResult {
+  riskScore: number         // 0-100 internal ordinal risk index
   riskCategory: 'Low' | 'Moderate' | 'High' | 'Very High'
   keyDrivers: string[]
   recommendation: string
+  isExternallyValidatedInIndia: boolean
+  validationDisclaimer: string
 }
 
-export function calculateMACERisk(input: MACERiskInput): MACERiskResult {
+export type MACERiskResult = ExploratoryPostPCIRiskIndexResult
+
+export function calculateExploratoryPostPCIRiskIndex(input: MACERiskInput): ExploratoryPostPCIRiskIndexResult {
   let score = 0
   const drivers: string[] = []
 
@@ -1034,32 +1037,29 @@ export function calculateMACERisk(input: MACERiskInput): MACERiskResult {
 
   const clampedScore = Math.min(100, Math.max(0, score))
 
-  // Map to 30-day MACE probability (calibrated from GRACE/TIMI registry data)
-  const maceRisk30Day = clampedScore < 20 ? 0.02 + (clampedScore / 20) * 0.03 :
-    clampedScore < 40 ? 0.05 + ((clampedScore - 20) / 20) * 0.07 :
-    clampedScore < 60 ? 0.12 + ((clampedScore - 40) / 20) * 0.10 :
-    clampedScore < 80 ? 0.22 + ((clampedScore - 60) / 20) * 0.14 :
-    0.36 + ((clampedScore - 80) / 20) * 0.30
-
-  const riskCategory: MACERiskResult['riskCategory'] =
+  const riskCategory: ExploratoryPostPCIRiskIndexResult['riskCategory'] =
     clampedScore < 20 ? 'Low' :
     clampedScore < 40 ? 'Moderate' :
     clampedScore < 65 ? 'High' : 'Very High'
 
   const recommendation =
-    riskCategory === 'Low' ? 'Low 30-day MACE risk. Standard dual antiplatelet therapy (DAPT). Early outpatient follow-up in 2–4 weeks.' :
-    riskCategory === 'Moderate' ? 'Moderate MACE risk. Confirm complete DAPT + statin + RAAS inhibitor. Consider extended monitoring for 48–72h.' :
-    riskCategory === 'High' ? 'High MACE risk. Intensify antiplatelet strategy (consider ticagrelor/prasugrel). Cardiac rehab referral. Follow-up within 1 week.' :
-    'Very High MACE risk. Multidisciplinary review. Consider early repeat angiography, high-intensity DAPT. Inpatient monitoring for ≥72h post-PCI.'
+    riskCategory === 'Low' ? 'Low procedural risk index. Standard dual antiplatelet therapy (DAPT). Early outpatient follow-up in 2–4 weeks.' :
+    riskCategory === 'Moderate' ? 'Moderate procedural risk index. Confirm complete DAPT + statin + RAAS inhibitor. Consider extended monitoring for 48–72h.' :
+    riskCategory === 'High' ? 'High procedural risk index. Intensify antiplatelet strategy (consider ticagrelor/prasugrel). Cardiac rehab referral. Follow-up within 1 week.' :
+    'Very High procedural risk index. Multidisciplinary review. Consider early repeat angiography, high-intensity DAPT. Inpatient monitoring for ≥72h post-PCI.'
 
   return {
     riskScore: clampedScore,
-    maceRisk30Day: parseFloat(Math.min(0.95, maceRisk30Day).toFixed(3)),
     riskCategory,
     keyDrivers: drivers,
     recommendation,
+    isExternallyValidatedInIndia: false,
+    validationDisclaimer: 'Exploratory post-PCI risk index combining published procedural prognostic factors. Uncalibrated for Indian cohorts and does not represent an empirical percentage probability.'
   }
 }
+
+// Retain alias for backwards compatibility
+export const calculateMACERisk = calculateExploratoryPostPCIRiskIndex
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 10. CONTRAST NEPHROPATHY RISK SCORER (Mehran Score)
@@ -1068,15 +1068,18 @@ export function calculateMACERisk(input: MACERiskInput): MACERiskResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ContrastNephropathyInput {
-  eGFR: number              // mL/min/1.73m²
+  eGFR?: number              // mL/min/1.73m²
   contrastVolumeMl: number  // mL planned contrast volume
   diabetes: boolean
-  nSAIDUse: boolean         // current NSAID use
-  hypotension: boolean      // SBP <80 mmHg for ≥1h (periprocedure)
-  heartFailure: boolean     // NYHA III-IV or LVEF <40%
+  hypotension: boolean      // SBP <80 mmHg for ≥1h (periprocedure) or requiring inotropes
+  heartFailure: boolean     // NYHA III-IV or pulmonary edema history
   age: number
   creatinine: number        // mg/dL
+  weightKg?: number         // kg — for Cigarroa formula
   iabpUse: boolean          // intra-aortic balloon pump
+  anemia?: boolean          // Baseline Hct <39% (men) or <36% (women), or Hb <13 (men) / <12 (women)
+  hematocrit?: number       // %
+  sex?: 'Male' | 'Female' | 'Other'
 }
 
 export interface ContrastNephropathyResult {
@@ -1084,7 +1087,7 @@ export interface ContrastNephropathyResult {
   akiRisk: number           // fraction 0-1
   dialysisRisk: number      // fraction 0-1
   riskCategory: 'Low' | 'Moderate' | 'High' | 'Very High'
-  suggestedContrastCap: number  // mL — contrast dose cap based on eGFR
+  suggestedContrastCap: number  // mL — contrast dose cap based on Cigarroa / eGFR
   preHydrationProtocol: string
   recommendation: string
 }
@@ -1092,60 +1095,72 @@ export interface ContrastNephropathyResult {
 export function calculateContrastNephropathyRisk(input: ContrastNephropathyInput): ContrastNephropathyResult {
   let score = 0
 
-  // Hypotension (SBP <80 for ≥1h or IABP) — 5 points
+  // 1. Hypotension (SBP <80 for ≥1h or requiring inotropes) — 5 points
   if (input.hypotension) score += 5
+
+  // 2. Intra-aortic balloon pump — 5 points
   if (input.iabpUse) score += 5
 
-  // CHF (NYHA III-IV, LVEF <40, pulmonary oedema) — 5 points
+  // 3. CHF (NYHA III-IV or pulmonary edema history) — 5 points
   if (input.heartFailure) score += 5
 
-  // Age >75 — 4 points
+  // 4. Age >75 — 4 points
   if (input.age > 75) score += 4
 
-  // Anaemia (proxy via absence — not scored separately if not available)
+  // 5. Anemia — 3 points (Mehran 2004: Hct <39% men, <36% women)
+  const isAnemic = input.anemia || (
+    input.hematocrit != null && (
+      input.sex === 'Female' ? input.hematocrit < 36 : input.hematocrit < 39
+    )
+  )
+  if (isAnemic) score += 3
 
-  // Diabetes mellitus — 3 points
+  // 6. Diabetes mellitus — 3 points
   if (input.diabetes) score += 3
 
-  // NSAID use (nephrotoxic adjuncts) — 3 points
-  if (input.nSAIDUse) score += 3
+  // 7. Renal Impairment points (Mutually exclusive: eGFR OR serum creatinine >1.5)
+  if (input.eGFR != null && input.eGFR > 0) {
+    if (input.eGFR < 20) score += 6
+    else if (input.eGFR < 40) score += 4
+    else if (input.eGFR < 60) score += 2
+  } else if (input.creatinine > 1.5) {
+    score += 4
+  }
 
-  // Creatinine >1.5 mg/dL — 4 points
-  if (input.creatinine > 1.5) score += 4
-
-  // eGFR-based points (Mehran: eGFR <60 = 2pts, <40 = 4pts, <20 = 6pts)
-  if (input.eGFR < 20) score += 6
-  else if (input.eGFR < 40) score += 4
-  else if (input.eGFR < 60) score += 2
-
-  // Contrast volume (per 100 mL — Mehran adds 1 per 100mL, capped at 5)
+  // 8. Contrast volume (1 point per 100 mL, capped at 5)
   const cvPoints = Math.min(5, Math.floor(input.contrastVolumeMl / 100))
   score += cvPoints
 
-  // AKI risk lookup (Mehran Table 3)
+  // AKI risk lookup (Mehran 2004 Table 3)
+  // Low: ≤5 (7.5% AKI, 0.04% Dialysis)
+  // Moderate: 6-10 (14.0% AKI, 0.12% Dialysis)
+  // High: 11-16 (26.1% AKI, 1.09% Dialysis)
+  // Very High: ≥17 (57.3% AKI, 12.6% Dialysis)
   const akiRisk =
     score <= 5 ? 0.075 :
-    score <= 10 ? 0.14 :
-    score <= 15 ? 0.26 :
-    score <= 20 ? 0.57 : 0.57
+    score <= 10 ? 0.140 :
+    score <= 16 ? 0.261 : 0.573
 
   const dialysisRisk =
-    score <= 5 ? 0.001 :
-    score <= 10 ? 0.002 :
-    score <= 15 ? 0.012 :
-    score <= 20 ? 0.092 : 0.125
+    score <= 5 ? 0.0004 :
+    score <= 10 ? 0.0012 :
+    score <= 16 ? 0.0109 : 0.126
 
   const riskCategory: ContrastNephropathyResult['riskCategory'] =
     score <= 5 ? 'Low' :
     score <= 10 ? 'Moderate' :
-    score <= 15 ? 'High' : 'Very High'
+    score <= 16 ? 'High' : 'Very High'
+
+  const effectiveEgfr = input.eGFR ?? Math.max(15, Math.round(90 / (input.creatinine || 1)))
 
   // Contrast dose cap: Cigarroa formula = 5 × weight(kg) / creatinine, max 300mL; or 2×eGFR
-  const suggestedContrastCap = Math.min(300, Math.max(40, Math.round(2 * input.eGFR)))
+  const suggestedContrastCap = (input.weightKg && input.creatinine > 0)
+    ? Math.min(300, Math.max(40, Math.round((5 * input.weightKg) / input.creatinine)))
+    : Math.min(300, Math.max(40, Math.round(2 * effectiveEgfr)))
 
-  const preHydrationProtocol = input.eGFR < 30
+  const preHydrationProtocol = effectiveEgfr < 30
     ? '1–1.5 mL/kg/h IV NaHCO₃ (1.4%) for 1h pre + 4–6h post-procedure. Hold NSAID/metformin 48h pre. Consider N-acetylcysteine 1200mg BD if borderline. Nephrology consult advised.'
-    : input.eGFR < 60
+    : effectiveEgfr < 60
     ? 'Isotonic saline 0.9% at 1 mL/kg/h for 12h pre + 12h post. Hold NSAIDs. Minimise contrast volume. Recheck creatinine at 48–72h.'
     : 'Standard hydration encouraged. Monitor creatinine at 48h. Avoid NSAIDs peri-procedure.'
 
@@ -1537,3 +1552,543 @@ export function calculateHFAPEFF(input: HFAPEFFInput): HFAPEFFResult {
     interpretation
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. GRACE 2.0 ACS RISK CALCULATOR
+//     Reference: Fox KA et al. BMJ 2014;348:g3428; Eagle KA et al. JACC 2004;44:1393.
+//     Predicts in-hospital and 6-month all-cause mortality in Acute Coronary Syndromes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GRACEInput {
+  age: number
+  heartRate: number
+  systolicBp: number
+  creatinine: number // mg/dL
+  killipClass: 'I' | 'II' | 'III' | 'IV'
+  cardiacArrestAtAdmission: boolean
+  stSegmentDeviation: boolean
+  elevatedCardiacEnzymes: boolean
+}
+
+export interface GRACEResult {
+  graceScore: number
+  inHospitalMortalityPct: number
+  sixMonthMortalityPct: number
+  inHospitalRiskTier: 'Low' | 'Intermediate' | 'High'
+  sixMonthRiskTier: 'Low' | 'Intermediate' | 'High'
+  recommendation: string
+}
+
+export function calculateGRACE2(input: GRACEInput): GRACEResult {
+  let score = 0
+
+  // 1. Age
+  if (input.age < 40) score += 0
+  else if (input.age < 50) score += 18
+  else if (input.age < 60) score += 36
+  else if (input.age < 70) score += 55
+  else if (input.age < 80) score += 73
+  else score += 91
+
+  // 2. Heart Rate (bpm)
+  if (input.heartRate < 50) score += 0
+  else if (input.heartRate < 70) score += 3
+  else if (input.heartRate < 90) score += 9
+  else if (input.heartRate < 110) score += 14
+  else if (input.heartRate < 150) score += 23
+  else if (input.heartRate < 200) score += 35
+  else score += 43
+
+  // 3. Systolic Blood Pressure (mmHg)
+  if (input.systolicBp < 80) score += 58
+  else if (input.systolicBp < 100) score += 53
+  else if (input.systolicBp < 120) score += 43
+  else if (input.systolicBp < 140) score += 34
+  else if (input.systolicBp < 160) score += 24
+  else if (input.systolicBp < 200) score += 10
+  else score += 0
+
+  // 4. Initial Serum Creatinine (mg/dL)
+  if (input.creatinine < 0.4) score += 2
+  else if (input.creatinine < 0.8) score += 5
+  else if (input.creatinine < 1.2) score += 8
+  else if (input.creatinine < 1.6) score += 11
+  else if (input.creatinine < 2.0) score += 14
+  else if (input.creatinine < 4.0) score += 23
+  else score += 31
+
+  // 5. Killip Class
+  if (input.killipClass === 'I') score += 0
+  else if (input.killipClass === 'II') score += 21
+  else if (input.killipClass === 'III') score += 43
+  else if (input.killipClass === 'IV') score += 64
+
+  // 6. Cardiac arrest at presentation
+  if (input.cardiacArrestAtAdmission) score += 43
+
+  // 7. ST-segment deviation
+  if (input.stSegmentDeviation) score += 30
+
+  // 8. Elevated cardiac markers (Troponin)
+  if (input.elevatedCardiacEnzymes) score += 15
+
+  // In-hospital mortality mapping (GRACE registry regression)
+  let inHospitalMortalityPct = 0.5
+  if (score <= 80) inHospitalMortalityPct = 0.4
+  else if (score <= 100) inHospitalMortalityPct = 0.8
+  else if (score <= 120) inHospitalMortalityPct = 1.6
+  else if (score <= 140) inHospitalMortalityPct = 3.3
+  else if (score <= 160) inHospitalMortalityPct = 7.1
+  else if (score <= 180) inHospitalMortalityPct = 14.5
+  else if (score <= 200) inHospitalMortalityPct = 28.0
+  else inHospitalMortalityPct = 52.0
+
+  const inHospitalRiskTier: GRACEResult['inHospitalRiskTier'] =
+    score <= 108 ? 'Low' : score <= 140 ? 'Intermediate' : 'High'
+
+  // 6-month mortality mapping
+  let sixMonthMortalityPct = 1.0
+  if (score <= 80) sixMonthMortalityPct = 1.2
+  else if (score <= 100) sixMonthMortalityPct = 2.9
+  else if (score <= 120) sixMonthMortalityPct = 6.0
+  else if (score <= 140) sixMonthMortalityPct = 12.8
+  else if (score <= 160) sixMonthMortalityPct = 25.5
+  else sixMonthMortalityPct = 48.0
+
+  const sixMonthRiskTier: GRACEResult['sixMonthRiskTier'] =
+    score <= 88 ? 'Low' : score <= 118 ? 'Intermediate' : 'High'
+
+  const recommendation =
+    inHospitalRiskTier === 'High'
+      ? `GRACE Score ${score} (High Risk). Early invasive coronary angiography (<24h) and admission to CCU/ICU strongly indicated. Intensive guideline-directed antithrombotic therapy.`
+      : inHospitalRiskTier === 'Intermediate'
+      ? `GRACE Score ${score} (Intermediate Risk). Invasive strategy within 72 hours recommended. Dual antiplatelet therapy and serial monitoring.`
+      : `GRACE Score ${score} (Low Risk). Selective invasive strategy guided by non-invasive functional testing or clinical trajectory.`
+
+  return {
+    graceScore: score,
+    inHospitalMortalityPct,
+    sixMonthMortalityPct,
+    inHospitalRiskTier,
+    sixMonthRiskTier,
+    recommendation,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. TIMI RISK SCORE FOR STEMI
+//     Reference: Morrow DA et al. Circulation 2000;102:2031-2037.
+//     Predicts 30-day all-cause mortality in acute ST-elevation myocardial infarction.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TIMIStemiInput {
+  age: number
+  diabetesOrHypertensionOrAngina: boolean
+  systolicBp: number // mmHg
+  heartRate: number  // bpm
+  killipClass: 'I' | 'II' | 'III' | 'IV'
+  weightKg: number
+  anteriorStemiOrLbbb: boolean
+  timeToTreatmentHours: number
+}
+
+export interface TIMIStemiResult {
+  score: number // 0-14
+  thirtyDayMortalityPct: number
+  riskTier: 'Low' | 'Intermediate' | 'High'
+  recommendation: string
+}
+
+export function calculateTIMIRiskSTEMI(input: TIMIStemiInput): TIMIStemiResult {
+  let score = 0
+
+  if (input.age >= 75) score += 3
+  else if (input.age >= 65) score += 2
+
+  if (input.diabetesOrHypertensionOrAngina) score += 1
+  if (input.systolicBp < 100) score += 3
+  if (input.heartRate > 100) score += 2
+  if (input.killipClass !== 'I') score += 2
+  if (input.weightKg < 67) score += 1
+  if (input.anteriorStemiOrLbbb) score += 1
+  if (input.timeToTreatmentHours > 4) score += 1
+
+  // Published 30-day mortality rates
+  const mortalityRates = [0.8, 1.6, 2.2, 4.4, 7.3, 12.4, 16.1, 23.4, 26.8]
+  const thirtyDayMortalityPct = score >= 8 ? 35.9 : (mortalityRates[score] ?? 35.9)
+
+  const riskTier: TIMIStemiResult['riskTier'] =
+    score <= 2 ? 'Low' : score <= 5 ? 'Intermediate' : 'High'
+
+  const recommendation =
+    riskTier === 'High'
+      ? `TIMI STEMI Score ${score}/14 (High Risk, 30-day mortality ${thirtyDayMortalityPct}%). Emergent primary PCI mandatory; consider invasive hemodynamic monitoring and mechanical circulatory support (IABP/Impella) if hemodynamically compromised.`
+      : riskTier === 'Intermediate'
+      ? `TIMI STEMI Score ${score}/14 (Intermediate Risk, 30-day mortality ${thirtyDayMortalityPct}%). Immediate primary PCI without delay. Close CCU telemetry.`
+      : `TIMI STEMI Score ${score}/14 (Low Risk, 30-day mortality ${thirtyDayMortalityPct}%). Primary PCI reperfusion per standard STEMI network protocol.`
+
+  return {
+    score,
+    thirtyDayMortalityPct,
+    riskTier,
+    recommendation,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. TIMI RISK SCORE FOR UA / NSTEMI
+//     Reference: Antman EM et al. JAMA 2000;284:835-842.
+//     Predicts 14-day composite endpoint (death, new/recurrent MI, urgent revasc).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TIMINstemiInput {
+  age65OrOlder: boolean
+  threeOrMoreCadRiskFactors: boolean // FHx, HTN, Hypercholesterolemia, DM, Smoker
+  knownCadStenosis50PctOrMore: boolean
+  aspirinUsePast7Days: boolean
+  severeAnginaInPast24Hours: boolean // >=2 episodes at rest
+  stSegmentDeviation05MmOrMore: boolean
+  elevatedCardiacMarkers: boolean
+}
+
+export interface TIMINstemiResult {
+  score: number // 0-7
+  fourteenDayEventRatePct: number
+  riskTier: 'Low' | 'Intermediate' | 'High'
+  strategy: 'Conservative / Selective Invasive' | 'Early Invasive (<24h)' | 'Urgent Invasive (<2h)'
+  recommendation: string
+}
+
+export function calculateTIMIRiskNSTEMI(input: TIMINstemiInput): TIMINstemiResult {
+  let score = 0
+  if (input.age65OrOlder) score += 1
+  if (input.threeOrMoreCadRiskFactors) score += 1
+  if (input.knownCadStenosis50PctOrMore) score += 1
+  if (input.aspirinUsePast7Days) score += 1
+  if (input.severeAnginaInPast24Hours) score += 1
+  if (input.stSegmentDeviation05MmOrMore) score += 1
+  if (input.elevatedCardiacMarkers) score += 1
+
+  const eventRates = [4.7, 4.7, 8.3, 13.2, 19.9, 26.2, 40.9, 40.9]
+  const fourteenDayEventRatePct = eventRates[score] ?? 40.9
+
+  const riskTier: TIMINstemiResult['riskTier'] =
+    score <= 2 ? 'Low' : score <= 4 ? 'Intermediate' : 'High'
+
+  const strategy: TIMINstemiResult['strategy'] =
+    riskTier === 'High' ? 'Early Invasive (<24h)' :
+    riskTier === 'Intermediate' ? 'Early Invasive (<24h)' : 'Conservative / Selective Invasive'
+
+  const recommendation =
+    riskTier === 'High'
+      ? `TIMI NSTEMI Score ${score}/7 (High Risk: ${fourteenDayEventRatePct}% 14-day MACE). Routine early invasive strategy (<24h). Dual antiplatelet therapy plus parenteral anticoagulation.`
+      : riskTier === 'Intermediate'
+      ? `TIMI NSTEMI Score ${score}/7 (Intermediate Risk: ${fourteenDayEventRatePct}% 14-day MACE). Inpatient coronary angiography within 24-72 hours recommended.`
+      : `TIMI NSTEMI Score ${score}/7 (Low Risk: ${fourteenDayEventRatePct}% 14-day MACE). Non-invasive ischemia testing or selective invasive angiography.`
+
+  return {
+    score,
+    fourteenDayEventRatePct,
+    riskTier,
+    strategy,
+    recommendation,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 17. CRUSADE BLEEDING SCORE IN ACS
+//     Reference: Subherwal S et al. Circulation 2009;119:1873-1882.
+//     Predicts in-hospital major bleeding during acute coronary syndrome care.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CRUSADEInput {
+  hematocrit: number       // %
+  creatinineClearance: number // mL/min
+  heartRate: number        // bpm
+  femaleSex: boolean
+  signsOfChfAtPresentation: boolean
+  priorVascularDisease: boolean // PAD or prior stroke
+  diabetes: boolean
+  systolicBp: number       // mmHg
+}
+
+export interface CRUSADEResult {
+  score: number
+  inHospitalBleedingPct: number
+  riskTier: 'Very Low' | 'Low' | 'Moderate' | 'High' | 'Very High'
+  recommendation: string
+}
+
+export function calculateCRUSADE(input: CRUSADEInput): CRUSADEResult {
+  let score = 0
+
+  // 1. Baseline Hematocrit (%)
+  if (input.hematocrit < 31) score += 9
+  else if (input.hematocrit < 34) score += 7
+  else if (input.hematocrit < 37) score += 3
+  else if (input.hematocrit < 40) score += 2
+  else score += 0
+
+  // 2. Creatinine Clearance (mL/min)
+  if (input.creatinineClearance <= 15) score += 39
+  else if (input.creatinineClearance <= 30) score += 35
+  else if (input.creatinineClearance <= 60) score += 28
+  else if (input.creatinineClearance <= 90) score += 17
+  else if (input.creatinineClearance <= 120) score += 7
+  else score += 0
+
+  // 3. Heart Rate (bpm)
+  if (input.heartRate <= 70) score += 0
+  else if (input.heartRate <= 80) score += 1
+  else if (input.heartRate <= 100) score += 3
+  else if (input.heartRate <= 110) score += 6
+  else if (input.heartRate <= 120) score += 8
+  else score += 10
+
+  // 4. Female sex
+  if (input.femaleSex) score += 8
+
+  // 5. CHF signs at presentation
+  if (input.signsOfChfAtPresentation) score += 7
+
+  // 6. Prior vascular disease
+  if (input.priorVascularDisease) score += 6
+
+  // 7. Diabetes mellitus
+  if (input.diabetes) score += 6
+
+  // 8. Systolic BP (mmHg)
+  if (input.systolicBp <= 90) score += 10
+  else if (input.systolicBp <= 100) score += 8
+  else if (input.systolicBp <= 120) score += 5
+  else if (input.systolicBp <= 180) score += 1
+  else if (input.systolicBp <= 200) score += 3
+  else score += 5
+
+  // Bleeding rates
+  let inHospitalBleedingPct = 3.1
+  let riskTier: CRUSADEResult['riskTier'] = 'Very Low'
+
+  if (score <= 20) {
+    inHospitalBleedingPct = 3.1
+    riskTier = 'Very Low'
+  } else if (score <= 30) {
+    inHospitalBleedingPct = 5.5
+    riskTier = 'Low'
+  } else if (score <= 40) {
+    inHospitalBleedingPct = 8.6
+    riskTier = 'Moderate'
+  } else if (score <= 50) {
+    inHospitalBleedingPct = 11.9
+    riskTier = 'High'
+  } else {
+    inHospitalBleedingPct = 19.5
+    riskTier = 'Very High'
+  }
+
+  const recommendation =
+    riskTier === 'High' || riskTier === 'Very High'
+      ? `CRUSADE Score ${score} (${riskTier} Risk, ${inHospitalBleedingPct}% major bleeding). Radial artery access strongly indicated. Strict weight-adjusted dosing of antithrombotics. Proton-pump inhibitor co-prescription mandatory.`
+      : `CRUSADE Score ${score} (${riskTier} Risk, ${inHospitalBleedingPct}% major bleeding). Standard antithrombotic regimen with routine bleeding precautions.`
+
+  return {
+    score,
+    inHospitalBleedingPct,
+    riskTier,
+    recommendation,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 18. ARC-HBR (HIGH BLEEDING RISK) CRITERIA FOR PCI
+//     Reference: Urban P et al. Circulation 2019;140:240-261.
+//     Consensus definition of High Bleeding Risk (BARC 3-5 ≥4% at 1 year).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ARCHBRInput {
+  // Major Criteria (1 needed)
+  anticipatedOralAnticoagulation: boolean
+  severeOrEndStageCkd: boolean // eGFR <30 mL/min
+  hemoglobinLessThan11: boolean
+  spontaneousBleedingPast6Months: boolean // requiring hosp or transfusion
+  thrombocytopeniaUnder100k: boolean
+  chronicBleedingDiathesis: boolean
+  liverCirrhosisWithPortalHypertension: boolean
+  activeMalignancyPast12Months: boolean
+  priorSpontaneousIchOrBrainAvm: boolean
+  recentIschemicStrokePast6Months: boolean
+
+  // Minor Criteria (2 needed)
+  age75OrOlder: boolean
+  moderateCkd: boolean // eGFR 30-59 mL/min
+  hemoglobin11To12Point9MenOr11To11Point9Women: boolean
+  spontaneousBleedingPast12Months: boolean // not meeting major
+  chronicNsaidOrSteroidUse: boolean
+  anyPriorIschemicStrokeNotMeetingMajor: boolean
+}
+
+export interface ARCHBRResult {
+  isHighBleedingRisk: boolean
+  majorCriteriaMet: string[]
+  minorCriteriaMet: string[]
+  majorCount: number
+  minorCount: number
+  recommendation: string
+}
+
+export function calculateARCHBR(input: ARCHBRInput): ARCHBRResult {
+  const majorCriteriaMet: string[] = []
+  const minorCriteriaMet: string[] = []
+
+  if (input.anticipatedOralAnticoagulation) majorCriteriaMet.push('Anticipated long-term oral anticoagulation')
+  if (input.severeOrEndStageCkd) majorCriteriaMet.push('Severe/end-stage CKD (eGFR <30 mL/min)')
+  if (input.hemoglobinLessThan11) majorCriteriaMet.push('Baseline hemoglobin <11 g/dL')
+  if (input.spontaneousBleedingPast6Months) majorCriteriaMet.push('Spontaneous major bleeding within past 6 months')
+  if (input.thrombocytopeniaUnder100k) majorCriteriaMet.push('Moderate/severe thrombocytopenia (<100 × 10⁹/L)')
+  if (input.chronicBleedingDiathesis) majorCriteriaMet.push('Chronic bleeding diathesis')
+  if (input.liverCirrhosisWithPortalHypertension) majorCriteriaMet.push('Cirrhosis with portal hypertension')
+  if (input.activeMalignancyPast12Months) majorCriteriaMet.push('Active malignancy within past 12 months')
+  if (input.priorSpontaneousIchOrBrainAvm) majorCriteriaMet.push('Prior spontaneous intracranial hemorrhage or vascular malformation')
+  if (input.recentIschemicStrokePast6Months) majorCriteriaMet.push('Recent ischemic stroke within past 6 months')
+
+  if (input.age75OrOlder) minorCriteriaMet.push('Age ≥75 years')
+  if (input.moderateCkd) minorCriteriaMet.push('Moderate CKD (eGFR 30–59 mL/min)')
+  if (input.hemoglobin11To12Point9MenOr11To11Point9Women) minorCriteriaMet.push('Mild anemia (Hb 11–12.9 g/dL in men, 11–11.9 g/dL in women)')
+  if (input.spontaneousBleedingPast12Months) minorCriteriaMet.push('Spontaneous bleeding requiring hospitalization in past 12 months')
+  if (input.chronicNsaidOrSteroidUse) minorCriteriaMet.push('Chronic use of oral NSAIDs or systemic corticosteroids')
+  if (input.anyPriorIschemicStrokeNotMeetingMajor) minorCriteriaMet.push('Prior ischemic stroke >6 months ago')
+
+  const majorCount = majorCriteriaMet.length
+  const minorCount = minorCriteriaMet.length
+  const isHighBleedingRisk = majorCount >= 1 || minorCount >= 2
+
+  const recommendation = isHighBleedingRisk
+    ? `Patient meets ARC-HBR criteria (${majorCount} Major, ${minorCount} Minor). High bleeding risk (predicted BARC 3–5 bleeding ≥4%/year). Radial access mandatory. Consider abbreviating DAPT to 1–3 months post-PCI with contemporary DES, followed by P2Y12 inhibitor monotherapy.`
+    : `Patient does NOT meet ARC-HBR criteria (${majorCount} Major, ${minorCount} Minor). Standard DAPT duration (6–12 months depending on ACS vs. CCS) recommended.`
+
+  return {
+    isHighBleedingRisk,
+    majorCriteriaMet,
+    minorCriteriaMet,
+    majorCount,
+    minorCount,
+    recommendation,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19. PRECISE-DAPT SCORE
+//     Reference: Costa F et al. Lancet 2017;389:1025-1034.
+//     Clinical decision tool for duration of Dual Antiplatelet Therapy after PCI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PRECISEDAPTInput {
+  age: number
+  creatinineClearance: number // mL/min
+  hemoglobin: number          // g/dL
+  whiteBloodCellCount: number // × 10⁹/L
+  priorSpontaneousBleeding: boolean
+}
+
+export interface PRECISEDAPTResult {
+  score: number // 0-100
+  isHighBleedingRisk: boolean // score >= 25
+  recommendedDaptDuration: 'Short (3–6 months)' | 'Standard / Prolonged (12–24 months)'
+  recommendation: string
+}
+
+export function calculatePRECISEDAPT(input: PRECISEDAPTInput): PRECISEDAPTResult {
+  // Linear score approximation of the PRECISE-DAPT nomogram
+  let points = 0
+
+  // Age points (approx 0.35 pts/yr above 50)
+  points += Math.max(0, Math.round((input.age - 50) * 0.45))
+
+  // CrCl points (inversely related: <30 = +16, 30-59 = +10, 60-89 = +4)
+  if (input.creatinineClearance < 30) points += 16
+  else if (input.creatinineClearance < 60) points += 10
+  else if (input.creatinineClearance < 90) points += 4
+
+  // Hemoglobin points (<10 = +14, 10-11.9 = +8, 12-13.9 = +3)
+  if (input.hemoglobin < 10) points += 14
+  else if (input.hemoglobin < 12) points += 8
+  else if (input.hemoglobin < 14) points += 3
+
+  // WBC count (>12 = +6, >10 = +3)
+  if (input.whiteBloodCellCount > 12) points += 6
+  else if (input.whiteBloodCellCount > 10) points += 3
+
+  // Prior spontaneous bleeding (+15 pts)
+  if (input.priorSpontaneousBleeding) points += 15
+
+  const score = Math.max(0, Math.min(100, points))
+  const isHighBleedingRisk = score >= 25
+  const recommendedDaptDuration: PRECISEDAPTResult['recommendedDaptDuration'] =
+    isHighBleedingRisk ? 'Short (3–6 months)' : 'Standard / Prolonged (12–24 months)'
+
+  const recommendation = isHighBleedingRisk
+    ? `PRECISE-DAPT Score = ${score} (≥25: High Bleeding Risk). Abbreviated DAPT (3 to 6 months) recommended to reduce major bleeding without increasing ischemic risk.`
+    : `PRECISE-DAPT Score = ${score} (<25: Non-High Bleeding Risk). Standard DAPT duration (12 months or longer) is safe and reduces ischemic/thrombotic events.`
+
+  return {
+    score,
+    isHighBleedingRisk,
+    recommendedDaptDuration,
+    recommendation,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 20. ACEF & MODIFIED ACEF SCORE FOR PCI MORTALITY
+//     Reference: Ranucci M et al. Ann Thorac Surg 2009;88:1310; Wykrzykowska JJ et al. JACC Intv 2011.
+//     Formula: Age / LVEF + (1 point if Serum Creatinine > 2.0 mg/dL).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ACEFInput {
+  age: number
+  lvef: number // %
+  creatinine: number // mg/dL
+}
+
+export interface ACEFResult {
+  acefScore: number
+  riskTier: 'Low' | 'Intermediate' | 'High'
+  predictedInHospitalMortalityPct: number
+  recommendation: string
+}
+
+export function calculateACEF(input: ACEFInput): ACEFResult {
+  const safeLvef = Math.max(10, input.lvef || 50)
+  let score = input.age / safeLvef
+  if (input.creatinine > 2.0) {
+    score += 1.0
+  }
+  const acefScore = parseFloat(score.toFixed(3))
+
+  let riskTier: ACEFResult['riskTier'] = 'Low'
+  let predictedInHospitalMortalityPct = 0.6
+
+  if (acefScore < 1.02) {
+    riskTier = 'Low'
+    predictedInHospitalMortalityPct = 0.6
+  } else if (acefScore <= 1.35) {
+    riskTier = 'Intermediate'
+    predictedInHospitalMortalityPct = 1.9
+  } else {
+    riskTier = 'High'
+    predictedInHospitalMortalityPct = 5.6
+  }
+
+  const recommendation =
+    riskTier === 'High'
+      ? `ACEF Score ${acefScore} (High Risk, predicted mortality ${predictedInHospitalMortalityPct}%). Adverse cardiorenal-age index; assess anatomical complexity (SYNTAX score) and Heart Team review.`
+      : `ACEF Score ${acefScore} (${riskTier} Risk, predicted mortality ${predictedInHospitalMortalityPct}%). Favorable baseline clinical risk profile.`
+
+  return {
+    acefScore,
+    riskTier,
+    predictedInHospitalMortalityPct,
+    recommendation,
+  }
+}
+

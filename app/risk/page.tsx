@@ -1,18 +1,19 @@
 'use client'
 import { useState, useMemo, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { FlaskConical, Calculator, Heart, Info, ArrowRight, ShieldCheck, Activity, Save, User, Printer, Database, Layers, Sparkles, CheckCircle2, RotateCcw } from 'lucide-react'
+import { FlaskConical, Calculator, Heart, Info, ArrowRight, ShieldCheck, Activity, Save, User, Printer, Database, Layers, Sparkles, CheckCircle2, RotateCcw, Zap } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import Button from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
-import { calculateMAGGIC, calculateH2FPEF, calculateHFAPEFF, calculateCHARM, calculateCHADSVASc, calculateHASBLED, calculateMACERisk, calculateContrastNephropathyRisk, calculateReadmissionRisk, calculateASCVDRisk } from '@/lib/riskScores'
+import { calculateMAGGIC, calculateH2FPEF, calculateHFAPEFF, calculateCHARM, calculateCHADSVASc, calculateHASBLED, calculateExploratoryPostPCIRiskIndex, calculateContrastNephropathyRisk, calculateReadmissionRisk, calculateASCVDRisk } from '@/lib/riskScores'
 import type { KillipClass, TIMIFlow, CulpritVessel, ASCVDRace } from '@/lib/riskScores'
 import { getPatient, getVisits, updateVisit, getPatients, getAllLatestVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import { toast } from 'sonner'
+import InterventionalRiskWorkbench from '@/components/risk/InterventionalRiskWorkbench'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomSurvivalTooltip({ active, payload }: any) {
@@ -33,6 +34,7 @@ function RiskCalculatorContent() {
   const patientId = searchParams.get('patientId')
   const visitId = searchParams.get('visitId')
 
+  const [domainTrack, setDomainTrack] = useState<'hf' | 'interventional'>('hf')
   const [activeCalculator, setActiveCalculator] = useState<'maggic' | 'h2fpef' | 'hfapeff' | 'charm' | 'chads' | 'hasbled' | 'mace' | 'cin' | 'readmission' | 'ascvd'>('maggic')
   const [crUnit, setCrUnit] = useState<'mg/dL' | 'umol/L'>('mg/dL')
 
@@ -476,8 +478,8 @@ function RiskCalculatorContent() {
     })
   }, [hasbledHTN, hasbledRenal, hasbledLiver, hasbledStroke, hasbledBleeding, hasbledLabileINR, hasbledAge, hasbledDrugs, hasbledAlcohol])
 
-  // MACE Risk
-  const maceResult = useMemo(() => calculateMACERisk({
+  // Exploratory Post-PCI Risk Index
+  const maceResult = useMemo(() => calculateExploratoryPostPCIRiskIndex({
     killipClass: maceKillip,
     syntaxScore: maceSyntax,
     culpritVessel: maceCulprit,
@@ -494,13 +496,12 @@ function RiskCalculatorContent() {
     eGFR: cinEGFR,
     contrastVolumeMl: cinContrast,
     diabetes: cinDiabetes,
-    nSAIDUse: cinNSAID,
     hypotension: cinHypotension,
     heartFailure: cinHF,
     age: cinAge,
     creatinine: cinCreatinine,
     iabpUse: cinIABP,
-  }), [cinEGFR, cinContrast, cinDiabetes, cinNSAID, cinHypotension, cinHF, cinAge, cinCreatinine, cinIABP])
+  }), [cinEGFR, cinContrast, cinDiabetes, cinHypotension, cinHF, cinAge, cinCreatinine, cinIABP])
 
   // Readmission Risk
   const readmissionResult = useMemo(() => calculateReadmissionRisk({
@@ -602,8 +603,10 @@ function RiskCalculatorContent() {
             <div className="relative">
               <select
                 value={selectedRegistry}
-                onChange={(e) => {
+                onChange={e => {
                   setSelectedRegistry(e.target.value)
+                  if (e.target.value === 'cathlab') setDomainTrack('interventional')
+                  else setDomainTrack('hf')
                   setSelectedPatientId('')
                   setConnectedPatient(null)
                   setConnectedVisit(null)
@@ -716,16 +719,46 @@ function RiskCalculatorContent() {
         )}
       </div>
 
-      {/* Calculator Selector Tabs */}
-      <div className="flex border-b border-blue-500/10 pb-3 gap-6 flex-wrap">
+      {/* ── Domain Track Switcher ── */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900/90 border border-white/10 w-fit">
         <button
-          onClick={() => setActiveCalculator('maggic')}
-          className={cn("text-xs font-semibold pb-2 border-b-2 px-1 transition-all",
-            activeCalculator === 'maggic' ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-gray-200"
+          onClick={() => setDomainTrack('hf')}
+          className={cn(
+            'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2',
+            domainTrack === 'hf'
+              ? 'bg-blue-600 text-white shadow-lg'
+              : 'text-gray-400 hover:text-white'
           )}
         >
-          MAGGIC Mortality Risk
+          <Heart className="w-4 h-4 text-rose-400" /> Heart Failure & Cardiometabolic
         </button>
+        <button
+          onClick={() => setDomainTrack('interventional')}
+          className={cn(
+            'px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2',
+            domainTrack === 'interventional'
+              ? 'bg-amber-500 text-slate-950 shadow-lg font-extrabold'
+              : 'text-gray-400 hover:text-white'
+          )}
+        >
+          <Zap className="w-4 h-4 text-amber-950 fill-amber-950" /> Cath Lab & Interventional PCI Suite
+        </button>
+      </div>
+
+      {domainTrack === 'interventional' ? (
+        <InterventionalRiskWorkbench patient={connectedPatient} visit={connectedVisit} />
+      ) : (
+        <>
+          {/* Calculator Selector Tabs */}
+          <div className="flex border-b border-blue-500/10 pb-3 gap-6 flex-wrap">
+            <button
+              onClick={() => setActiveCalculator('maggic')}
+              className={cn("text-xs font-semibold pb-2 border-b-2 px-1 transition-all",
+                activeCalculator === 'maggic' ? "border-blue-500 text-white" : "border-transparent text-gray-400 hover:text-gray-200"
+              )}
+            >
+              MAGGIC Mortality Risk
+            </button>
         <button
           onClick={() => setActiveCalculator('h2fpef')}
           className={cn("text-xs font-semibold pb-2 border-b-2 px-1 transition-all",
@@ -1390,8 +1423,8 @@ function RiskCalculatorContent() {
                 {/* Graph bars representation of mortality */}
                 <div className="space-y-4">
                   <div>
-                    <p className="text-xs font-semibold text-white">Estimated Survival Curve Projection (Kaplan-Meier)</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">Based on MAGGIC baseline score vs Guideline-Directed Target (GDMT)</p>
+                    <p className="text-xs font-semibold text-white">Estimated Survival Curve Projection (Parametric Model)</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Parametric projection based on MAGGIC trial derivation cohort — not an empirical Kaplan-Meier follow-up curve</p>
                   </div>
 
                   <div className="h-56 w-full bg-slate-950/20 p-2 rounded-lg border border-blue-500/5">
@@ -1614,13 +1647,13 @@ function RiskCalculatorContent() {
               </div>
             )}
 
-            {/* MACE Risk Result */}
+            {/* Exploratory Post-PCI Risk Index Result */}
             {activeCalculator === 'mace' && (
               <div className="space-y-5 animate-fade-in">
                 <div className="flex justify-between items-center bg-orange-500/5 p-4 rounded-xl border border-orange-500/10">
                   <div>
-                    <p className="text-[10px] uppercase text-gray-400">30-Day MACE Risk</p>
-                    <p className="text-3xl font-extrabold text-white mt-1">{(maceResult.maceRisk30Day * 100).toFixed(1)}<span className="text-sm font-normal text-gray-400">%</span></p>
+                    <p className="text-[10px] uppercase text-gray-400">Post-PCI Risk Index</p>
+                    <p className="text-3xl font-extrabold text-white mt-1">{maceResult.riskScore}<span className="text-sm font-normal text-gray-400"> / 100</span></p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] uppercase text-gray-400">Risk Category</p>
@@ -1636,9 +1669,9 @@ function RiskCalculatorContent() {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold text-white">MACE Risk Gauge</p>
+                  <p className="text-xs font-semibold text-white">Ordinal Risk Index Scale</p>
                   <div className="progress-track">
-                    <div className="progress-fill bg-gradient-to-r from-orange-400 to-rose-600" style={{ width: `${maceResult.maceRisk30Day * 100}%` }} />
+                    <div className="progress-fill bg-gradient-to-r from-orange-400 to-rose-600" style={{ width: `${maceResult.riskScore}%` }} />
                   </div>
                 </div>
                 {maceResult.keyDrivers.length > 0 && (
@@ -1654,6 +1687,14 @@ function RiskCalculatorContent() {
                 )}
                 <div className="alert-strip info text-xs mt-3 leading-relaxed bg-orange-500/10 border-orange-500/20 text-orange-200">
                   {maceResult.recommendation}
+                </div>
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-200 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-300">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" /> Research Reference (Uncalibrated in India)
+                  </p>
+                  <p className="text-gray-300 leading-normal">
+                    {maceResult.validationDisclaimer}
+                  </p>
                 </div>
               </div>
             )}
@@ -1820,6 +1861,8 @@ function RiskCalculatorContent() {
         </div>
 
       </div>
+    </>
+  )}
 
     </div>
   )

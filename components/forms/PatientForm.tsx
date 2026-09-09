@@ -236,8 +236,31 @@ export default function PatientForm({ defaultValues, onSubmit, loading, submitLa
     }
   }, [errors])
 
+  const handleFormSubmit = async (v: FormValues) => {
+    const list = v.comorbidities || []
+    const has = (item: string) => list.includes(item)
+
+    const payload: PatientInput = {
+      ...(v as unknown as PatientInput),
+      comorbidCAD: has('CAD') || has('PriorMI_IHD') || has('PriorPCI') || has('PriorCardiacSurgery'),
+      comorbidPriorMI: has('PriorMI_IHD') || has('Prior MI'),
+      comorbidPriorPCI: has('PriorPCI') || has('Prior PCI'),
+      comorbidPriorCABG: has('PriorCardiacSurgery') || has('Prior CABG'),
+      comorbidDiabetes: has('DM2') || has('Diabetes'),
+      comorbidHypertension: has('HTN') || has('Hypertension'),
+      comorbidDyslipidemia: has('Dyslipidemia'),
+      comorbidCKD: has('CKD'),
+      comorbidAF: has('AF'),
+      comorbidCOPD: has('COPD'),
+      comorbidStrokeTIA: has('Stroke') || has('Stroke / TIA'),
+      comorbidPAD: has('PAD'),
+    }
+
+    await onSubmit(payload)
+  }
+
   return (
-    <form onSubmit={handleSubmit(v => onSubmit(v as unknown as PatientInput))} className="space-y-6">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       {Object.keys(errors).length > 0 && (
         <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300">
           <p className="font-bold mb-1">Please correct the following errors before registering:</p>

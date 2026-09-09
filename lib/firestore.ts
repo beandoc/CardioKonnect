@@ -4,7 +4,7 @@ import {
   serverTimestamp, Timestamp, writeBatch, arrayUnion, onSnapshot,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import type { Patient, PatientInput, Visit, VisitInput, PopulationStats, PatientTrends, TrendPoint, RegistryField, OutcomeEvent, OutcomeEventInput } from './types'
+import type { Patient, PatientInput, Visit, VisitInput, PopulationStats, PatientTrends, TrendPoint, RegistryField, OutcomeEvent, OutcomeEventInput, CathProcedure, CathProcedureInput } from './types'
 import { BUILT_IN_FIELDS } from './types'
 
 // ─── Local Storage Fallback for Offline Demo Mode ────────────────────────────
@@ -64,6 +64,23 @@ function saveLocalOutcomes(evs: OutcomeEvent[]) {
   localStorage.setItem('cardio_outcomes', JSON.stringify(evs))
 }
 
+function getLocalProcedures(): CathProcedure[] {
+  if (typeof window === 'undefined') return []
+  const data = localStorage.getItem('cardio_procedures')
+  if (!data) return []
+  try {
+    return JSON.parse(data)
+  } catch {
+    return []
+  }
+}
+
+function saveLocalProcedures(procs: CathProcedure[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('cardio_procedures', JSON.stringify(procs))
+  window.dispatchEvent(new Event('cardio_procedures_updated'))
+}
+
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -115,6 +132,17 @@ function docToVisit(id: string, patientId: string, data: any): Visit {
     followupDate: toDate(data.followupDate),
     createdAt: toDate(data.createdAt),
   } as Visit
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function docToProcedure(id: string, data: any): CathProcedure {
+  return {
+    ...data,
+    id,
+    procedureDate: toDate(data.procedureDate) || toDate(data.createdAt),
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
+  } as CathProcedure
 }
 
 // ─── Patients ────────────────────────────────────────────────────────────────
@@ -789,6 +817,125 @@ export function subscribeVisits(onUpdate: (visits: Visit[]) => void): () => void
     onUpdate(visits)
   }, (err) => {
     console.error('subscribeVisits error:', err)
+  })
+}
+
+// ─── Cath Lab & Interventional Procedures ────────────────────────────────────
+
+function safeTime(d?: string): number {
+  return d ? new Date(d).getTime() || 0 : 0
+}
+
+export async function addCathProcedure(input: CathProcedureInput): Promise<string> {
+  if (isDemoMode) {
+    const procs = getLocalProcedures()
+    const id = 'proc-' + Math.random().toString(36).substr(2, 9)
+    const newProc: CathProcedure = {
+      ...input,
+      id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    procs.unshift(newProc)
+    saveLocalProcedures(procs)
+    return id
+  }
+
+  // Deep clone to strip undefined values which Firestore rejects
+  const cleanInput = JSON.parse(JSON.stringify(input))
+  const ref = await addDoc(collection(db, 'procedures'), {
+    ...cleanInput,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
+  return ref.id
+}
+
+export async function updateCathProcedure(id: string, data: Partial<CathProcedureInput>): Promise<void> {
+  if (isDemoMode) {
+    const procs = getLocalProcedures()
+    const idx = procs.findIndex(p => p.id === id)
+    if (idx !== -1) {
+      procs[idx] = { ...procs[idx], ...data, updatedAt: new Date().toISOString() }
+      saveLocalProcedures(procs)
+    }
+    return
+  }
+
+  const clean = JSON.parse(JSON.stringify(data))
+  await updateDoc(doc(db, 'procedures', id), {
+    ...clean,
+    updatedAt: serverTimestamp(),
+  })
+}
+
+export async function deleteCathProcedure(id: string): Promise<void> {
+  if (isDemoMode) {
+    const procs = getLocalProcedures().filter(p => p.id !== id)
+    saveLocalProcedures(procs)
+    return
+  }
+  await deleteDoc(doc(db, 'procedures', id))
+}
+
+export async function getAllCathProcedures(): Promise<CathProcedure[]> {
+  if (isDemoMode) {
+    return getLocalProcedures()
+  }
+  try {
+    const snap = await getDocs(query(collection(db, 'procedures'), orderBy('procedureDate', 'desc'), limit(1000)))
+    return snap.docs.map(d => docToProcedure(d.id, d.data()))
+  } catch {
+    try {
+      const snap = await getDocs(collection(db, 'procedures'))
+      return snap.docs.map(d => docToProcedure(d.id, d.data())).sort((a, b) => safeTime(b.procedureDate) - safeTime(a.procedureDate))
+    } catch (e) {
+      console.error('getAllCathProcedures error:', e)
+      return []
+    }
+  }
+}
+
+export async function getCathProceduresByPatient(patientId: string): Promise<CathProcedure[]> {
+  if (isDemoMode) {
+    return getLocalProcedures().filter(p => p.patientId === patientId)
+  }
+  try {
+    const q = query(collection(db, 'procedures'), where('patientId', '==', patientId))
+    const snap = await getDocs(q)
+    return snap.docs.map(d => docToProcedure(d.id, d.data())).sort((a, b) => safeTime(b.procedureDate) - safeTime(a.procedureDate))
+  } catch (err) {
+    console.error('getCathProceduresByPatient error:', err)
+    return []
+  }
+}
+
+export function subscribeCathProcedures(onUpdate: (procedures: CathProcedure[]) => void): () => void {
+  if (isDemoMode) {
+    onUpdate(getLocalProcedures())
+    const handleLocalUpdate = () => onUpdate(getLocalProcedures())
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === 'cardio_procedures') handleLocalUpdate()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cardio_procedures_updated', handleLocalUpdate)
+      window.addEventListener('storage', handleStorageUpdate)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('cardio_procedures_updated', handleLocalUpdate)
+        window.removeEventListener('storage', handleStorageUpdate)
+      }
+    }
+  }
+
+  const q = collection(db, 'procedures')
+  return onSnapshot(q, (snap) => {
+    const procs = snap.docs.map(d => docToProcedure(d.id, d.data()))
+    procs.sort((a, b) => safeTime(b.procedureDate) - safeTime(a.procedureDate))
+    onUpdate(procs)
+  }, (err) => {
+    console.error('subscribeCathProcedures error:', err)
   })
 }
 

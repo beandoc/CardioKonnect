@@ -353,6 +353,14 @@ const schema = z.object({
     revascularizationType: z.enum(['None', 'PCI', 'CABG', 'Both', '']).default(''),
   }).default({}),
 
+  // Coronary Imaging & Angiography
+  coronaryCalciumScore: z.coerce.number().optional().or(z.literal('')),
+  cacCategory: z.enum(['Zero', 'Minimal', 'Mild', 'Moderate', 'Severe', '']).default(''),
+  ctAngiographyDone: z.boolean().default(false),
+  ctaFindings: z.string().optional(),
+  invasiveAngiographyDone: z.boolean().default(false),
+  angiographyFindings: z.string().optional(),
+
   valvularHemodynamics: z.object({
     asAVA: z.coerce.number().min(0).max(10).optional().or(z.literal('')),
     asMeanGradient: z.coerce.number().min(0).max(150).optional().or(z.literal('')),
@@ -640,6 +648,12 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
         priorCabgDate: '',
         revascularizationType: ''
       },
+      coronaryCalciumScore: '',
+      cacCategory: '',
+      ctAngiographyDone: false,
+      ctaFindings: '',
+      invasiveAngiographyDone: false,
+      angiographyFindings: '',
       valvularHemodynamics: {
         asAVA: '',
         asMeanGradient: '',
@@ -1884,6 +1898,44 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 <FieldWrap label="Prior CABG Date">
                   <Input type="date" {...register('coronaryAnatomy.priorCabgDate')} />
                 </FieldWrap>
+              </div>
+
+              <div className="pt-4 border-t border-white/10 space-y-4">
+                <p className="text-xs font-bold text-white uppercase tracking-wider">Coronary Calcium & Angiographic Imaging</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <FieldWrap label="Agatston CAC Score">
+                    <Input type="number" {...register('coronaryCalciumScore')} placeholder="e.g. 150" />
+                  </FieldWrap>
+                  <FieldWrap label="CAC Risk Category">
+                    <Select {...register('cacCategory')}>
+                      <option value="">Select Category</option>
+                      <option value="Zero">Zero (0)</option>
+                      <option value="Minimal">Minimal (1–10)</option>
+                      <option value="Mild">Mild (11–100)</option>
+                      <option value="Moderate">Moderate (101–400)</option>
+                      <option value="Severe">Severe (&gt;400)</option>
+                    </Select>
+                  </FieldWrap>
+                  <div className="space-y-2 pt-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-300">
+                      <input type="checkbox" {...register('ctAngiographyDone')} className="rounded" />
+                      CT Coronary Angiography (CTCA) Done
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-gray-300">
+                      <input type="checkbox" {...register('invasiveAngiographyDone')} className="rounded" />
+                      Invasive Coronary Angiogram Done
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FieldWrap label="CTCA Findings Summary">
+                    <Input {...register('ctaFindings')} placeholder="e.g. CAD-RADS 3, calcified plaque in proximal LAD" />
+                  </FieldWrap>
+                  <FieldWrap label="Invasive Angiogram Summary">
+                    <Input {...register('angiographyFindings')} placeholder="e.g. 2-vessel CAD, pLAD 90%, mRCA 80%" />
+                  </FieldWrap>
+                </div>
               </div>
             </div>
           </div>

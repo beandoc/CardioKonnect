@@ -10,8 +10,8 @@ import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
 } from 'recharts'
 import { AlertTriangle, Users, Database } from 'lucide-react'
-import { getPatients, getAllLatestVisits } from '@/lib/firestore'
-import type { Patient, Visit } from '@/lib/types'
+import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
+import type { Patient, Visit, CathProcedure } from '@/lib/types'
 
 // Left Navigation sections
 const REPORT_SECTIONS = [
@@ -29,57 +29,57 @@ const REPORT_SECTIONS = [
   { id: 'medication', label: 'Medication Reports', icon: FileText },
 ]
 
-// All reports mapped to their sections
+// All reports mapped to their sections (Reference Benchmarks)
 const REPORTS_REGISTRY: Record<string, { title: string; category: string; description: string; metrics: string[] }[]> = {
   population: [
-    { title: 'Demographic Distribution', category: 'Clinical Reports', description: 'Patient age, gender, and regional location matrices.', metrics: ['Total Registered: 1,248', 'Avg Age: 58.4 yrs', 'Male: 64%'] },
-    { title: 'Disease Category Distribution', category: 'Operational Reports', description: 'Prevalence maps of CAD, HF, Arrhythmias, and Valvular disease.', metrics: ['CAD: 45%', 'HF: 32%', 'Arrhythmias: 18%'] }
+    { title: 'Demographic Distribution', category: 'Clinical Reports', description: 'Patient age, gender, and regional location matrices.', metrics: ['[Reference Benchmark] Total Registered: 1,248', '[Reference Benchmark] Avg Age: 58.4 yrs', '[Reference Benchmark] Male: 64%'] },
+    { title: 'Disease Category Distribution', category: 'Operational Reports', description: 'Prevalence maps of CAD, HF, Arrhythmias, and Valvular disease.', metrics: ['[Reference Benchmark] CAD: 45%', '[Reference Benchmark] HF: 32%', '[Reference Benchmark] Arrhythmias: 18%'] }
   ],
   cad: [
-    { title: 'Disease Burden & Prevalence Trends', category: 'Clinical Reports', description: 'STEMI/NSTEMI incidence ratios, multi-vessel CAD distribution, and young MI registry analytics.', metrics: ['Young MI (<40 yrs): 8.4%', 'Multi-vessel CAD: 38.2%'] },
-    { title: 'Angiography Distribution Patterns', category: 'Clinical Reports', description: 'Vessel involvement mappings (LAD, LCX, RCA) and Left Main disease occurrences.', metrics: ['LAD Involvement: 62%', 'Left Main Disease: 12.4%', 'SYNTAX Score >32: 15%'] },
-    { title: 'PCI Success & Access Benchmarks', category: 'Clinical Reports', description: 'Success rates, radial vs femoral access benchmarks, and drug-eluting stent utilization trends.', metrics: ['PCI Success: 98.4%', 'Radial Access: 85%'] }
+    { title: 'Disease Burden & Prevalence Trends', category: 'Clinical Reports', description: 'STEMI/NSTEMI incidence ratios, multi-vessel CAD distribution, and young MI registry analytics.', metrics: ['[Reference Benchmark] Young MI (<40 yrs): 8.4%', '[Reference Benchmark] Multi-vessel CAD: 38.2%'] },
+    { title: 'Angiography Distribution Patterns', category: 'Clinical Reports', description: 'Vessel involvement mappings (LAD, LCX, RCA) and Left Main disease occurrences.', metrics: ['[Reference Benchmark] LAD Involvement: 62%', '[Reference Benchmark] Left Main Disease: 12.4%', '[Reference Benchmark] SYNTAX Score >32: 15%'] },
+    { title: 'PCI Success & Access Benchmarks', category: 'Clinical Reports', description: 'Success rates, radial vs femoral access benchmarks, and drug-eluting stent utilization trends.', metrics: ['[Benchmark Target] Radial Access: 85%'] }
   ],
   acs: [
-    { title: 'STEMI Quality Metrics', category: 'Quality & Benchmark Reports', description: 'Door-to-balloon time, FMC-to-device timelines, and thrombolysis success rates.', metrics: ['Median D2B: 58 mins', 'Compliance: 92%'] },
-    { title: 'Outcomes & MACE Records', category: 'Outcomes Reports', description: 'In-hospital mortality, 30-day MACE logs, and repeat revascularization incidence.', metrics: ['30-day MACE: 2.1%', 'In-hospital Mortality: 1.4%'] }
+    { title: 'STEMI Quality Metrics', category: 'Quality & Benchmark Reports', description: 'Door-to-balloon time, FMC-to-device timelines, and thrombolysis success rates.', metrics: ['[NCDR Benchmark Target] Median D2B: 58 mins', '[NCDR Benchmark Target] Compliance: 92%'] },
+    { title: 'Outcomes & MACE Records', category: 'Outcomes Reports', description: 'In-hospital mortality, 30-day MACE logs, and repeat revascularization incidence.', metrics: ['[SCAAR Benchmark] 30-day MACE: 2.1%', '[SCAAR Benchmark] In-hospital Mortality: 1.4%'] }
   ],
   hf: [
-    { title: 'HF Population Cohorts', category: 'Clinical Reports', description: 'HFrEF, HFpEF, and HFmrEF distribution trends alongside mean LVEF trajectories.', metrics: ['HFrEF: 48%', 'HFpEF: 35%', 'Mean LVEF: 34.2%'] },
-    { title: 'Guideline-Directed Medical Therapy (GDMT)', category: 'Quality & Benchmark Reports', description: 'Quadruple therapy utilization compliance (ARNI, Beta-blocker, MRA, SGLT2i).', metrics: ['ARNI: 82%', 'SGLT2i: 76%', 'Quadruple Compliance: 64%'] },
-    { title: 'Remote Monitoring & Congestion Risks', category: 'Research & Analytics Reports', description: 'Weight fluctuation alerts, congestion scores, and wearable-derived deterioration signals.', metrics: ['Decompensation Alerts: 14', 'Sensor Compliance: 91%'] }
+    { title: 'HF Population Cohorts', category: 'Clinical Reports', description: 'HFrEF, HFpEF, and HFmrEF distribution trends alongside mean LVEF trajectories.', metrics: ['[Reference Benchmark] HFrEF: 48%', '[Reference Benchmark] HFpEF: 35%', '[Reference Benchmark] Mean LVEF: 34.2%'] },
+    { title: 'Guideline-Directed Medical Therapy (GDMT)', category: 'Quality & Benchmark Reports', description: 'Quadruple therapy utilization compliance (ARNI, Beta-blocker, MRA, SGLT2i).', metrics: ['[Reference Benchmark] ARNI: 82%', '[Reference Benchmark] SGLT2i: 76%', '[Reference Benchmark] Quadruple Compliance: 64%'] },
+    { title: 'Remote Monitoring & Congestion Risks', category: 'Research & Analytics Reports', description: 'Weight fluctuation alerts, congestion scores, and wearable-derived deterioration signals.', metrics: ['[Reference Benchmark] Decompensation Alerts: 14', '[Reference Benchmark] Sensor Compliance: 91%'] }
   ],
   arrhythmia: [
-    { title: 'AF Registry & Anticoagulation', category: 'Clinical Reports', description: 'CHA₂DS₂-VASc scores, anticoagulation adherence, and stroke prevention compliance.', metrics: ['Avg CHA₂DS₂-VASc: 3.2', 'OAC Compliance: 88%'] },
-    { title: 'EP Procedure & Ablation Success', category: 'Outcomes Reports', description: 'AF ablation success rates, recurrence patterns, and procedure complication rates.', metrics: ['Success Rate: 84.5%', 'Recurrence (1 yr): 15%'] },
-    { title: 'Device Rhythm Burden Tracker', category: 'AI & Predictive Reports', description: 'AF burden trends, VT/VF episodes, and appropriate ICD shock analytics.', metrics: ['AF Burden >10%: 12%', 'VT/VF Episodes: 45'] }
+    { title: 'AF Registry & Anticoagulation', category: 'Clinical Reports', description: 'CHA₂DS₂-VASc scores, anticoagulation adherence, and stroke prevention compliance.', metrics: ['[Reference Benchmark] Avg CHA₂DS₂-VASc: 3.2', '[Reference Benchmark] OAC Compliance: 88%'] },
+    { title: 'EP Procedure & Ablation Success', category: 'Outcomes Reports', description: 'AF ablation success rates, recurrence patterns, and procedure complication rates.', metrics: ['[Reference Benchmark] Success Rate: 84.5%', '[Reference Benchmark] Recurrence (1 yr): 15%'] },
+    { title: 'Device Rhythm Burden Tracker', category: 'AI & Predictive Reports', description: 'AF burden trends, VT/VF episodes, and appropriate ICD shock analytics.', metrics: ['[Reference Benchmark] AF Burden >10%: 12%', '[Reference Benchmark] VT/VF Episodes: 45'] }
   ],
   device: [
-    { title: 'Implant & Utilization Trends', category: 'Operational Reports', description: 'Pacemaker, ICD, and CRT implantation rates and manufacturer distribution tables.', metrics: ['Total Implants: 312', 'CRT-D: 24%'] },
-    { title: 'Device Performance & Battery Longevity', category: 'Quality & Benchmark Reports', description: 'Lead impedance failures, battery longevity curves, and manufacturer advisory tracking.', metrics: ['Lead Failure Rate: 0.8%', 'Battery Expiry Warnings: 3'] }
+    { title: 'Implant & Utilization Trends', category: 'Operational Reports', description: 'Pacemaker, ICD, and CRT implantation rates and manufacturer distribution tables.', metrics: ['[Reference Benchmark] Total Implants: 312', '[Reference Benchmark] CRT-D: 24%'] },
+    { title: 'Device Performance & Battery Longevity', category: 'Quality & Benchmark Reports', description: 'Lead impedance failures, battery longevity curves, and manufacturer advisory tracking.', metrics: ['[Reference Benchmark] Lead Failure Rate: 0.8%', '[Reference Benchmark] Battery Expiry Warnings: 3'] }
   ],
   structural: [
-    { title: 'TAVR Procedural Benchmarks', category: 'Outcomes Reports', description: 'Valve gradients, post-implant paravalvular leaks, and new pacemaker requirements.', metrics: ['Success Rate: 97.8%', 'New PPI Rate: 8.5%'] },
-    { title: 'Mitral & Tricuspid Interventions', category: 'Outcomes Reports', description: 'MR/TR severity improvements, functional class outcomes, and device durability parameters.', metrics: ['MR Severity Reduction: 84%'] }
+    { title: 'TAVR Procedural Benchmarks', category: 'Outcomes Reports', description: 'Valve gradients, post-implant paravalvular leaks, and new pacemaker requirements.', metrics: ['[Reference Benchmark] Success Rate: 97.8%', '[Reference Benchmark] New PPI Rate: 8.5%'] },
+    { title: 'Mitral & Tricuspid Interventions', category: 'Outcomes Reports', description: 'MR/TR severity improvements, functional class outcomes, and device durability parameters.', metrics: ['[Reference Benchmark] MR Severity Reduction: 84%'] }
   ],
   imaging: [
-    { title: 'Echocardiography Quality Indices', category: 'Clinical Reports', description: 'GLS trends, valve disease progression tracking, and pulmonary hypertension charts.', metrics: ['Mean GLS: -14.2%', 'PA Systolic Pressure: 42mmHg'] },
-    { title: 'CT Coronary & Calcium Scores', category: 'Research & Academic Reports', description: 'Calcium score distributions, CAD-RADS categories, and plaque morphology tracking.', metrics: ['Calcium Score >400: 18%', 'CAD-RADS 4/5: 22%'] },
-    { title: 'Cardiac MRI Scar Mapping', category: 'Research & Academic Reports', description: 'LGE scar burden calculations, myocarditis patterns, and cardiomyopathy phenotypes.', metrics: ['Scar Burden >10%: 14%'] }
+    { title: 'Echocardiography Quality Indices', category: 'Clinical Reports', description: 'GLS trends, valve disease progression tracking, and pulmonary hypertension charts.', metrics: ['[Reference Benchmark] Mean GLS: -14.2%', '[Reference Benchmark] PA Systolic Pressure: 42mmHg'] },
+    { title: 'CT Coronary & Calcium Scores', category: 'Research & Academic Reports', description: 'Calcium score distributions, CAD-RADS categories, and plaque morphology tracking.', metrics: ['[Reference Benchmark] Calcium Score >400: 18%', '[Reference Benchmark] CAD-RADS 4/5: 22%'] },
+    { title: 'Cardiac MRI Scar Mapping', category: 'Research & Academic Reports', description: 'LGE scar burden calculations, myocarditis patterns, and cardiomyopathy phenotypes.', metrics: ['[Reference Benchmark] Scar Burden >10%: 14%'] }
   ],
   cathlab: [
-    { title: 'Workflow & Cath Lab Turnaround', category: 'Operational Reports', description: 'Room utilization rates, procedure times, and emergency activation delays.', metrics: ['Utilization Rate: 84.2%', 'Turnaround Time: 32 mins'] },
-    { title: 'Safety, Contrast & Radiation Logs', category: 'Quality & Benchmark Reports', description: 'Contrast-induced nephropathy logs, radiation dose area product (DAP), and vascular issues.', metrics: ['CIN Rate: 1.1%', 'Mean DAP: 42 DAP'] }
+    { title: 'Workflow & Cath Lab Turnaround', category: 'Operational Reports', description: 'Room utilization rates, procedure times, and emergency activation delays.', metrics: ['[Reference Benchmark] Utilization Rate: 84.2%', '[Reference Benchmark] Turnaround Time: 32 mins'] },
+    { title: 'Safety, Contrast & Radiation Logs', category: 'Quality & Benchmark Reports', description: 'Contrast-induced nephropathy logs, radiation dose area product (DAP), and vascular issues.', metrics: ['[Reference Benchmark] CIN Rate: 1.1%', '[Reference Benchmark] Mean DAP: 42 DAP'] }
   ],
   outcomes: [
-    { title: 'Longitudinal Survival & Kaplan-Meier', category: 'Outcomes Reports', description: 'Kaplan-Meier survival curves, MACE-free survival trends, and readmission analytics.', metrics: ['1-Year Survival: 94.2%', 'MACE-free Survival: 89.8%'] },
-    { title: 'Readmissions & Emergency Revisits', category: 'Outcomes Reports', description: '7-day and 30-day HF readmission rates, recurrent hospitalizations, and root cause reviews.', metrics: ['30-day Readmissions: 8.2%', '7-day Readmissions: 1.4%'] }
+    { title: 'Longitudinal Survival & Kaplan-Meier', category: 'Outcomes Reports', description: 'Kaplan-Meier survival curves, MACE-free survival trends, and readmission analytics.', metrics: ['[Reference Benchmark] 1-Year Survival: 94.2%', '[Reference Benchmark] MACE-free Survival: 89.8%'] },
+    { title: 'Readmissions & Emergency Revisits', category: 'Outcomes Reports', description: '7-day and 30-day HF readmission rates, recurrent hospitalizations, and root cause reviews.', metrics: ['[Reference Benchmark] 30-day Readmissions: 8.2%', '[Reference Benchmark] 7-day Readmissions: 1.4%'] }
   ],
   quality: [
-    { title: 'Institutional Quality Benchmarking', category: 'Quality & Benchmark Reports', description: 'Mortality comparison, door-to-balloon benchmark comparisons, and guideline adherence rankings.', metrics: ['Registry Rank: 92nd Rank', 'D2B Deviation: -8 mins'] }
+    { title: 'Institutional Quality Benchmarking', category: 'Quality & Benchmark Reports', description: 'Mortality comparison, door-to-balloon benchmark comparisons, and guideline adherence rankings.', metrics: ['[Quality Benchmark] Peer Ranking Scheduled'] }
   ],
   medication: [
-    { title: 'GDMT Persistence & DAPT Compliance', category: 'Clinical Reports', description: 'Medication adherence levels at 1, 6, and 12 months post-discharge.', metrics: ['GDMT Persistence: 87%', 'DAPT Compliance: 94%'] }
+    { title: 'GDMT Persistence & DAPT Compliance', category: 'Clinical Reports', description: 'Medication adherence levels at 1, 6, and 12 months post-discharge.', metrics: ['[Reference Benchmark] GDMT Persistence: 87%', '[Reference Benchmark] DAPT Compliance: 94%'] }
   ]
 }
 
@@ -177,28 +177,6 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
     checklists: [
       'Verify angiographic percent stenosis fields are completely logged.',
       'Audit SYNTAX score calculation compliance for multi-vessel records.'
-    ]
-  },
-  'PCI Success & Access Benchmarks': {
-    chartType: 'line',
-    chartData: [
-      { month: 'Jan', 'Radial Access': 81, 'PCI Success': 98.0 },
-      { month: 'Feb', 'Radial Access': 83, 'PCI Success': 98.2 },
-      { month: 'Mar', 'Radial Access': 84, 'PCI Success': 98.1 },
-      { month: 'Apr', 'Radial Access': 85, 'PCI Success': 98.3 },
-      { month: 'May', 'Radial Access': 85, 'PCI Success': 98.4 },
-      { month: 'Jun', 'Radial Access': 86, 'PCI Success': 98.4 }
-    ],
-    xAxisKey: 'month',
-    yAxisLabel: 'Rate (%)',
-    summary: 'Benchmarking the clinical switch to radial-first approach alongside overall post-procedure angio success rates.',
-    recommendations: [
-      'Conduct radial access training sessions for junior fellows to push the institutional target to >90%.',
-      'Track femoral site access complications systematically in outcomes reports.'
-    ],
-    checklists: [
-      'Document post-PCI TIMI flow grades within 15 minutes of completion.',
-      'Crosscheck sheath size and vascular closure device logs.'
     ]
   },
   'STEMI Quality Metrics': {
@@ -583,26 +561,6 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
       'Confirm patient/family understanding of warnings and action plans.'
     ]
   },
-  'Institutional Quality Benchmarking': {
-    chartType: 'bar',
-    chartData: [
-      { metric: 'D2B Time', 'This Center': 92, 'National Median': 85 },
-      { metric: 'GDMT Coverage', 'This Center': 87, 'National Median': 74 },
-      { metric: 'DAPT Compliance', 'This Center': 94, 'National Median': 88 },
-      { metric: '30d Readmission', 'This Center': 91, 'National Median': 84 }
-    ],
-    xAxisKey: 'metric',
-    yAxisLabel: 'Percentile / Value',
-    summary: 'Institutional quality indicator ranking compared against national registries. Highlights outstanding performance in GDMT coverage.',
-    recommendations: [
-      'Promote best-practice sharing across departments to maintain top-tier rankings.',
-      'Formulate improvement initiatives focusing on room turnaround times.'
-    ],
-    checklists: [
-      'Verify data submissions are uploaded completely and audited regularly.',
-      'Review comparative registry benchmarking datasets.'
-    ]
-  },
   'GDMT Persistence & DAPT Compliance': {
     chartType: 'line',
     chartData: [
@@ -656,14 +614,20 @@ export default function ReportsArchitecturePage() {
   const [timeframe, setTimeframe] = useState<'3 Months' | '6 Months' | '12 Months'>('6 Months')
   const [patients, setPatients] = useState<Patient[]>([])
   const [visitsMap, setVisitsMap] = useState<Map<string, Visit>>(new Map())
+  const [procedures, setProcedures] = useState<CathProcedure[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       try {
-        const [pts, vMap] = await Promise.all([getPatients(), getAllLatestVisits()])
+        const [pts, vMap, procs] = await Promise.all([
+          getPatients(),
+          getAllLatestVisits(),
+          getAllCathProcedures()
+        ])
         setPatients(pts)
         setVisitsMap(vMap)
+        setProcedures(procs)
       } catch (err) {
         console.error('Failed to load reports database:', err)
       } finally {
@@ -703,7 +667,21 @@ export default function ReportsArchitecturePage() {
   const sglt2Pct = Math.round((sglt2Count / hfTotal) * 100)
   const quadPct = Math.round((quadCount / hfTotal) * 100)
 
-  // Dynamic Reports Registry with real data
+  // Interventional calculations
+  const pciProcedures = procedures.filter(p => p.procedureType !== 'Diagnostic Coronary Angiography')
+  const allTreatedLesions = pciProcedures.flatMap(p => (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy'))
+  const successfulLesions = pciProcedures.flatMap(p => {
+    const hasMace = !!(p.complications?.inLabDeath || p.complications?.emergencyCabg || p.complications?.acuteStentThrombosis || p.complications?.periproceduralMi)
+    if (hasMace) return []
+    return (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy' && l.postTimiFlow === 3 && (l.postStenosisPct ?? 100) < 20)
+  })
+  const livePciSuccess = allTreatedLesions.length > 0 ? `${Math.round((successfulLesions.length / allTreatedLesions.length) * 100)}%` : '—'
+  const radialCount = procedures.filter(p => p.accessSite && p.accessSite.includes('Radial')).length
+  const liveRadialPct = procedures.length > 0 ? `${Math.round((radialCount / procedures.length) * 100)}%` : '—'
+  const meanFluoro = procedures.length > 0 ? (procedures.reduce((s, p) => s + (p.fluoroscopyTimeMinutes || 0), 0) / procedures.length).toFixed(1) : '—'
+  const meanContrast = procedures.length > 0 ? Math.round(procedures.reduce((s, p) => s + (p.contrastVolumeMl || 0), 0) / procedures.length) : '—'
+
+  // Dynamic Reports Registry with real data covering ALL sections
   const dynamicReportsRegistry = useMemo(() => {
     return {
       population: [
@@ -742,6 +720,86 @@ export default function ReportsArchitecturePage() {
           metrics: [`Ischemic CMP: ${patients.filter(p => p.comorbidCAD || p.comorbidPriorMI).length}`, `Prior Revascularization: ${patients.filter(p => p.comorbidPriorPCI || p.comorbidPriorCABG).length}`],
         },
       ],
+      acs: [
+        {
+          title: 'STEMI Quality Metrics',
+          category: 'Quality & Benchmark Reports',
+          description: 'Door-to-balloon time compliance and acute reperfusion quality indicators.',
+          metrics: [
+            `Audited ACS Cases: ${procedures.filter(p => p.clinicalIndication === 'STEMI' || p.clinicalIndication === 'NSTEMI').length}`,
+            `STEMI Presentations: ${procedures.filter(p => p.clinicalIndication === 'STEMI').length}`,
+            `TIMI 3 Post-PCI: ${allTreatedLesions.filter(l => l.postTimiFlow === 3).length}`
+          ],
+        },
+        {
+          title: 'Outcomes & Adverse Event Surveillance',
+          category: 'Outcomes Reports',
+          description: 'In-hospital mortality and procedural adverse events in acute coronary presentations.',
+          metrics: [
+            `Audited Complications: ${procedures.filter(p => p.complications?.hasComplication).length}`,
+            `In-Hospital Mortality: ${procedures.filter(p => p.complications?.inHospitalDeath).length}`
+          ],
+        }
+      ],
+      cathlab: [
+        {
+          title: 'PCI Quality & Lesion Success Benchmarks',
+          category: 'Clinical Reports',
+          description: 'Angiographic success, radial artery access rates, and lesion-level outcomes.',
+          metrics: [`PCI Success Rate: ${livePciSuccess}`, `Radial Access: ${liveRadialPct}`, `Treated Lesions: ${allTreatedLesions.length}`],
+        },
+        {
+          title: 'Safety, Contrast & Radiation Logs',
+          category: 'Quality & Benchmark Reports',
+          description: 'Patient radiation exposure, fluoroscopy duration, and contrast utilization.',
+          metrics: [`Mean Fluoro Time: ${meanFluoro} min`, `Mean Contrast: ${meanContrast} mL`, `Total Procedures: ${procedures.length}`],
+        },
+      ],
+      arrhythmia: [
+        {
+          title: 'Arrhythmia Prevalence & Management',
+          category: 'Clinical Reports',
+          description: 'Atrial fibrillation diagnosis, CHA₂DS₂-VASc risk assessment, and oral anticoagulation.',
+          metrics: [
+            `Documented AF: ${patients.filter(p => p.comorbidAF).length}`,
+            `Anticoagulated Patients: ${patients.filter(p => visitsMap.get(p.id)?.noac?.prescribed === 'Yes' || visitsMap.get(p.id)?.vki?.prescribed === 'Yes').length}`
+          ],
+        }
+      ],
+      device: [
+        {
+          title: 'Cardiac Device Implants & Utilization',
+          category: 'Operational Reports',
+          description: 'Pacemaker, ICD, and cardiac resynchronization therapy implants in registered cohort.',
+          metrics: [
+            `ICD / CRT Documented: ${patients.filter(p => visitsMap.get(p.id)?.device && visitsMap.get(p.id)!.device!.length > 0).length}`,
+            `Total Cohort: ${total}`
+          ],
+        }
+      ],
+      structural: [
+        {
+          title: 'Valvular & Structural Heart Disease',
+          category: 'Clinical Reports',
+          description: 'Severe aortic and mitral disease distribution and intervention surveillance.',
+          metrics: [
+            `Severe AS/MR Tracked: ${patients.filter(p => visitsMap.get(p.id)?.ddGrade === 'Grade III' || visitsMap.get(p.id)?.rvsp && (visitsMap.get(p.id)?.rvsp ?? 0) > 50).length}`,
+            `Awaiting Structural Procedure Feed`
+          ],
+        }
+      ],
+      imaging: [
+        {
+          title: 'Echocardiography & Angiography Quality Indices',
+          category: 'Clinical Reports',
+          description: 'Echocardiographic functional assessments and invasive catheterization logs.',
+          metrics: [
+            `Documented Echoes: ${Array.from(visitsMap.values()).filter(v => v.lvef != null).length}`,
+            `Mean LVEF: ${avgLvef}%`,
+            `Documented Caths: ${procedures.length}`
+          ],
+        }
+      ],
       medication: [
         {
           title: 'GDMT Persistence & 4-Pillar Compliance',
@@ -755,7 +813,7 @@ export default function ReportsArchitecturePage() {
           title: 'Longitudinal Survival & Quality of Care',
           category: 'Outcomes Reports',
           description: 'Survival monitoring and hospitalization surveillance for enrolled cohort.',
-          metrics: [`Enrolled Cohort: ${total}`, `Major Complications: 0%`],
+          metrics: [`Enrolled Cohort: ${total}`, `Major Complications: ${procedures.filter(p => p.complications?.hasComplication).length}`],
         },
       ],
       quality: [
@@ -767,10 +825,10 @@ export default function ReportsArchitecturePage() {
         },
       ],
     } as Record<string, any[]>
-  }, [total, avgAge, malePct, hfrEFPct, avgLvef, raasiPct, bbPct, mraPct, sglt2Pct, quadPct, patients])
+  }, [total, avgAge, malePct, hfrEFPct, avgLvef, raasiPct, bbPct, mraPct, sglt2Pct, quadPct, patients, procedures, visitsMap, livePciSuccess, liveRadialPct, meanFluoro, meanContrast, allTreatedLesions])
 
   const activeReports = useMemo(() => {
-    const list = dynamicReportsRegistry[activeSection] || []
+    const list = dynamicReportsRegistry[activeSection] || REPORTS_REGISTRY[activeSection] || []
     if (!searchQuery) return list
     return list.filter(r =>
       r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1047,52 +1105,72 @@ export default function ReportsArchitecturePage() {
           </div>
 
           {/* Active Reports Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {activeReports.length === 0 ? (
-              <div className="col-span-2 glass-card py-16 text-center text-gray-500">
-                No reports found matching your query.
+          {['arrhythmia', 'device', 'structural', 'imaging', 'outcomes', 'quality'].includes(activeSection) ? (
+            <div className="glass-card p-10 border border-amber-500/20 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
+                <Database className="w-7 h-7" />
               </div>
-            ) : (
-              activeReports.map((report, idx) => (
-                <div 
-                  key={idx} 
-                  onClick={() => handleOpenReport(report)}
-                  className="glass-card p-5 space-y-4 flex flex-col justify-between hover:-translate-y-1 hover:border-blue-500/30 cursor-pointer transition-all duration-300 group"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="badge badge-blue text-[9px] uppercase tracking-wider font-bold">
-                        {report.category}
-                      </span>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleOpenReport(report)
-                        }} 
-                        className="text-gray-500 hover:text-white transition-colors group-hover:text-blue-400" 
-                        title="Open Detailed Analytics"
-                      >
-                        <ArrowUpRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <h4 className="text-sm font-bold text-white font-sans group-hover:text-blue-400 transition-colors">{report.title}</h4>
-                    <p className="text-xs text-gray-400 leading-relaxed">{report.description}</p>
-                  </div>
-
-                  <div className="pt-3 border-t border-blue-500/10 space-y-2">
-                    <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Key Indicators</p>
-                    <div className="flex flex-wrap gap-2">
-                      {report.metrics.map((m: string, mIdx: number) => (
-                        <span key={mIdx} className="bg-navy-900 border border-blue-500/10 text-[10px] text-gray-300 px-2 py-0.5 rounded font-mono">
-                          {m}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+              <div className="space-y-2 max-w-md mx-auto">
+                <h3 className="text-base font-bold text-white">No Data Model Yet</h3>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  The <span className="text-amber-300 font-semibold">{REPORT_SECTIONS.find(s => s.id === activeSection)?.label}</span> module does not yet have an active Case Report Form (CRF) or dynamic clinical backing.
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  In accordance with registry truth-in-reporting standards, placeholder metrics and simulated charts have been removed until live data collection commences.
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-semibold text-amber-400">
+                Scheduled for Future Expansion
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {activeReports.length === 0 ? (
+                <div className="col-span-2 glass-card py-16 text-center text-gray-500">
+                  No reports found matching your query.
                 </div>
-              ))
-            )}
-          </div>
+              ) : (
+                activeReports.map((report, idx) => (
+                  <div 
+                    key={idx} 
+                    onClick={() => handleOpenReport(report)}
+                    className="glass-card p-5 space-y-4 flex flex-col justify-between hover:-translate-y-1 hover:border-blue-500/30 cursor-pointer transition-all duration-300 group"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="badge badge-blue text-[9px] uppercase tracking-wider font-bold">
+                          {report.category}
+                        </span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenReport(report)
+                          }} 
+                          className="text-gray-500 hover:text-white transition-colors group-hover:text-blue-400" 
+                          title="Open Detailed Analytics"
+                        >
+                          <ArrowUpRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <h4 className="text-sm font-bold text-white font-sans group-hover:text-blue-400 transition-colors">{report.title}</h4>
+                      <p className="text-xs text-gray-400 leading-relaxed">{report.description}</p>
+                    </div>
+
+                    <div className="pt-3 border-t border-blue-500/10 space-y-2">
+                      <p className="text-[9px] uppercase tracking-widest text-gray-500 font-bold">Key Indicators</p>
+                      <div className="flex flex-wrap gap-2">
+                        {report.metrics.map((m: string, mIdx: number) => (
+                          <span key={mIdx} className="bg-navy-900 border border-blue-500/10 text-[10px] text-gray-300 px-2 py-0.5 rounded font-mono">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           {/* Core Analytics Quick View */}
           <div className="accent-card p-5 space-y-3 border-amber-500/20 bg-amber-950/10">

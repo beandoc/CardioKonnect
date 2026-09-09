@@ -4,9 +4,10 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   getPatient, getVisits, deleteVisit, updatePatient, getPatientTrends,
-  getOutcomeEvents, addOutcomeEvent, deleteOutcomeEvent, deletePatient
+  getOutcomeEvents, addOutcomeEvent, deleteOutcomeEvent, deletePatient,
+  getCathProceduresByPatient
 } from '@/lib/firestore'
-import type { Patient, Visit, OutcomeEvent, OutcomeEventInput, EventType } from '@/lib/types'
+import type { Patient, Visit, OutcomeEvent, OutcomeEventInput, EventType, CathProcedure } from '@/lib/types'
 import { getAge, formatDate, nyhaBadgeColor, hfTypeBadgeColor, lvefColor, initials, cn } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card'
 import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
@@ -17,11 +18,12 @@ import PatientForm from '@/components/forms/PatientForm'
 import GDMTDashboard from '@/components/patients/GDMTDashboard'
 import type { PatientTrends } from '@/lib/types'
 import { toast } from 'sonner'
-import { PlusCircle, Edit2, Edit3, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList, Sparkles } from 'lucide-react'
+import { PlusCircle, Edit2, Edit3, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList, Sparkles, Heart } from 'lucide-react'
 import MLRiskCard from '@/components/patients/MLRiskCard'
 import DataCompletenessCard from '@/components/patients/DataCompletenessCard'
 import QuickDataEntryModal from '@/components/patients/QuickDataEntryModal'
 import ComorbiditiesMatrix from '@/components/patients/ComorbiditiesMatrix'
+import CathProcedureModal from '@/components/procedures/CathProcedureModal'
 
 const EVENT_TYPES: EventType[] = [
   'All-cause death', 'CV death', 'HF hospitalisation', 'Urgent HF visit', 'LVAD implant',
@@ -53,8 +55,11 @@ export default function PatientDetailPage() {
   const [saving, setSaving] = useState(false)
   const [addingEvent, setAddingEvent] = useState(false)
   const [savingEvent, setSavingEvent] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends' | 'outcomes' | 'gdmt'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends' | 'outcomes' | 'gdmt' | 'procedures'>('overview')
   const [showQuickModal, setShowQuickModal] = useState(false)
+  const [patientProcedures, setPatientProcedures] = useState<CathProcedure[]>([])
+  const [isCathModalOpen, setIsCathModalOpen] = useState(false)
+  const [editingProcedure, setEditingProcedure] = useState<CathProcedure | null>(null)
 
   // Outcome Event Form State
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0])
@@ -73,7 +78,7 @@ export default function PatientDetailPage() {
   const [eventAdjudicationStatus, setEventAdjudicationStatus] = useState<'Pending Review' | 'Adjudicated - Confirmed' | 'Adjudicated - Reclassified' | 'Adjudicated - Rejected'>('Adjudicated - Confirmed')
 
   useEffect(() => {
-    if (tabParam === 'overview' || tabParam === 'timeline' || tabParam === 'trends' || tabParam === 'outcomes' || tabParam === 'gdmt') {
+    if (tabParam === 'overview' || tabParam === 'timeline' || tabParam === 'trends' || tabParam === 'outcomes' || tabParam === 'gdmt' || tabParam === 'procedures') {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -83,11 +88,13 @@ export default function PatientDetailPage() {
     let v = await getVisits(id)
     let t = await getPatientTrends(id)
     let o = await getOutcomeEvents(id)
+    let procs = await getCathProceduresByPatient(id)
 
     setPatient(p)
     setVisits(v)
     setTrends(t)
     setOutcomeEvents(o)
+    setPatientProcedures(procs)
     setLoading(false)
   }, [id])
 
@@ -454,6 +461,7 @@ export default function PatientDetailPage() {
       <div className="flex border-b border-blue-500/10 mb-5 gap-4">
         {([
           { id: 'overview', label: 'Overview' },
+          { id: 'procedures', label: `Cath Lab & PCI (${patientProcedures.length})` },
           { id: 'gdmt', label: 'GDMT Checklist' },
           { id: 'timeline', label: 'Timeline' },
           { id: 'trends', label: 'Trends' },
@@ -730,6 +738,205 @@ export default function PatientDetailPage() {
             </Card>
           )}
           </div>
+        </div>
+      )}
+
+      {/* Cath Lab & PCI Procedures tab */}
+      {activeTab === 'procedures' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                Cath Lab Interventional Procedures
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                  {patientProcedures.length} Logged
+                </span>
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">
+                NCDR CathPCI & NIC India compliant procedure logs, lesion-specific interventions, and complication surveillance.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingProcedure(null)
+                setIsCathModalOpen(true)
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <PlusCircle className="w-4 h-4" /> Log Cath / PCI Procedure
+            </Button>
+          </div>
+
+          {patientProcedures.length === 0 ? (
+            <div className="text-center py-12 space-y-3 bg-slate-950/40 rounded-2xl border border-dashed border-white/10 p-8">
+              <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto">
+                <Heart className="w-6 h-6" />
+              </div>
+              <h4 className="text-base font-bold text-white">No Catheterization or PCI Procedures Recorded</h4>
+              <p className="text-xs text-gray-400 max-w-md mx-auto">
+                No procedure records exist for this patient in the Cath Lab registry. Click &quot;Log Cath / PCI Procedure&quot; to record diagnostic angiography, ad-hoc, elective, or primary PCI with lesion-level stent details.
+              </p>
+              <div className="pt-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingProcedure(null)
+                    setIsCathModalOpen(true)
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs"
+                >
+                  <PlusCircle className="w-4 h-4" /> Log First Procedure
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {patientProcedures.map((proc, idx) => {
+                const lesions = proc.lesions || []
+                const hasComp = proc.complications?.hasComplication
+                const comp = proc.complications
+
+                return (
+                  <div key={proc.id || idx} className="rounded-2xl border border-amber-500/20 bg-slate-900/70 p-5 space-y-4">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center text-xs border border-amber-500/30">
+                          #{patientProcedures.length - idx}
+                        </span>
+                        <div>
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                            {proc.procedureType}
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                              {proc.clinicalIndication}
+                            </span>
+                            {proc.overallSuccess ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                                Overall Success (TIMI 3)
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">
+                                Incomplete / Sub-optimal
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[11px] text-gray-400 mt-0.5 font-mono">
+                            {formatDate(proc.procedureDate)} · Operator: <strong className="text-gray-200">{proc.operatorName}</strong>
+                            {proc.assistantOperatorName && ` · Assistant: ${proc.assistantOperatorName}`}
+                            {proc.siteId && ` · Center: ${proc.siteId}`}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingProcedure(proc)
+                          setIsCathModalOpen(true)
+                        }}
+                        className="text-xs border-white/15 text-gray-300 hover:text-white self-start sm:self-auto"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Edit Procedure
+                      </Button>
+                    </div>
+
+                    {/* Metadata Badges */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="bg-slate-950/60 p-2.5 rounded-xl border border-white/5 space-y-0.5">
+                        <span className="text-gray-500 text-[10px] uppercase font-semibold">Vascular Access</span>
+                        <p className="font-semibold text-white">{proc.accessSite} ({proc.sheathSize})</p>
+                        <p className="text-[10px] text-gray-400">{proc.closureDevice}</p>
+                      </div>
+
+                      <div className="bg-slate-950/60 p-2.5 rounded-xl border border-white/5 space-y-0.5">
+                        <span className="text-gray-500 text-[10px] uppercase font-semibold">Contrast & Fluoro</span>
+                        <p className="font-semibold text-white">{proc.contrastVolumeMl} mL ({proc.contrastType})</p>
+                        <p className="text-[10px] text-gray-400">{proc.fluoroscopyTimeMinutes} mins fluoro</p>
+                      </div>
+
+                      <div className="bg-slate-950/60 p-2.5 rounded-xl border border-white/5 space-y-0.5">
+                        <span className="text-gray-500 text-[10px] uppercase font-semibold">Radiation Exposure</span>
+                        <p className="font-semibold text-white">{proc.radiationAirKermaGy ?? '—'} Gy Air Kerma</p>
+                        <p className="text-[10px] text-gray-400">{proc.doseAreaProductGyCm2 ?? '—'} Gy·cm² DAP</p>
+                      </div>
+
+                      <div className="bg-slate-950/60 p-2.5 rounded-xl border border-white/5 space-y-0.5">
+                        <span className="text-gray-500 text-[10px] uppercase font-semibold">STEMI DTB Metric</span>
+                        {proc.stemiTimelines?.dtbMinutes != null ? (
+                          <p className={`font-bold ${proc.stemiTimelines.dtbMinutes <= 90 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            DTB: {proc.stemiTimelines.dtbMinutes} mins {proc.stemiTimelines.dtbMinutes <= 90 ? '(≤90m Met)' : '(Delayed)'}
+                          </p>
+                        ) : (
+                          <p className="text-gray-400">Non-STEMI / Elective</p>
+                        )}
+                        <p className="text-[10px] text-gray-500">{proc.stemiTimelines?.presentationType || 'Standard'}</p>
+                      </div>
+                    </div>
+
+                    {/* Lesions Treated */}
+                    <div className="space-y-2">
+                      <span className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
+                        Treated Lesions & Stenting ({lesions.length})
+                      </span>
+                      {lesions.length === 0 ? (
+                        <p className="text-xs text-gray-500">No coronary lesions treated (Diagnostic angiogram).</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {lesions.map((l, lIdx) => (
+                            <div key={lIdx} className="bg-slate-950 p-3 rounded-xl border border-white/5 space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                                  {l.vessel} {l.isCulprit && <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px]">Culprit</span>}
+                                </span>
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${l.lesionSuccess ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                                  Post-TIMI {l.postTimiFlow} · {l.postStenosisPct}% Residual
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-400">
+                                Pre: {l.preStenosisPct}% stenosis · TIMI {l.preTimiFlow} · {l.calcification} calcium {l.bifurcation ? '· Bifurcation' : ''}
+                              </p>
+                              {l.devices && l.devices.length > 0 && (
+                                <div className="text-[10px] text-gray-300 bg-slate-900/80 p-1.5 rounded border border-white/5">
+                                  <strong>Devices:</strong> {l.devices.map(d => `${d.deviceType} ${d.brandName} (${d.diameterMm}×${d.lengthMm}mm) ${d.serialOrBatchNumber ? `[Batch: ${d.serialOrBatchNumber}]` : ''}`).join(' · ')}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Complications */}
+                    {hasComp && (
+                      <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl space-y-1 text-xs text-rose-300">
+                        <div className="flex items-center gap-2 font-bold text-rose-400">
+                          <ShieldAlert className="w-4 h-4" />
+                          <span>Procedural Adverse Event Recorded</span>
+                        </div>
+                        <p className="text-[11px] text-gray-300">
+                          {[
+                            comp?.coronaryPerforation && `Perforation (Ellis ${comp.coronaryPerforationEllisClass || 'I'})`,
+                            comp?.coronaryDissection && `Dissection (NHLBI ${comp.coronaryDissectionNhlbiType || 'C'})`,
+                            comp?.noReflowSlowReflow && 'Slow/No-Reflow',
+                            comp?.acuteStentThrombosis && 'Acute Stent Thrombosis',
+                            comp?.emergencyCabg && 'Emergent CABG Bailout',
+                            comp?.accessSiteBleeding && `Access Site Bleeding (${comp.barcBleedingType || 'BARC'})`,
+                            comp?.contrastInducedAki && 'Contrast-Induced AKI',
+                            comp?.strokeOrTia && 'Stroke / TIA',
+                            comp?.inLabDeath && 'Mortality Event',
+                          ].filter(Boolean).join(' · ')}
+                        </p>
+                        {comp?.complicationNotes && (
+                          <p className="text-[10px] text-gray-400 mt-1 italic">&quot;{comp.complicationNotes}&quot;</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1047,6 +1254,20 @@ export default function PatientDetailPage() {
         latestVisit={latest}
         onSaved={load}
       />
+
+      {/* Cath Lab & Interventional Procedure Modal */}
+      {isCathModalOpen && (
+        <CathProcedureModal
+          isOpen={isCathModalOpen}
+          onClose={() => {
+            setIsCathModalOpen(false)
+            setEditingProcedure(null)
+          }}
+          patient={patient}
+          procedureToEdit={editingProcedure}
+          onSaved={load}
+        />
+      )}
     </div>
   )
 }

@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizePatientForEgress, sanitizeVisitForEgress } from '@/lib/anonymization'
 
 const SYSTEM_PROMPT = `You are a clinical decision support system embedded in a Heart Failure Registry (CardioPlus) at AICTS, Pune, India.
 
@@ -65,14 +66,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'patientSummary required' }, { status: 400 })
     }
 
+    // De-identify PHI prior to any third-party egress
+    const sanitizedPatient = sanitizePatientForEgress(patientSummary)
+    const sanitizedVisit = sanitizeVisitForEgress(visitData)
+
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
       return NextResponse.json(buildFallbackResponse(patientSummary))
     }
 
     const userMessage = `
-Patient Data:
-${JSON.stringify({ patientSummary, visitData }, null, 2)}
+Clinical Data (De-Identified):
+${JSON.stringify({ patient: sanitizedPatient, visit: sanitizedVisit }, null, 2)}
 
 Analyse this patient and provide clinical recommendations in the exact JSON format specified.`
 
