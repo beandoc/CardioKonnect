@@ -238,9 +238,6 @@ export default function LoginPage() {
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-gray-400">
                   Password
                 </label>
-                <span className="text-[10px] text-gray-500 font-mono">
-                  {selectedUserPreset === 'rajeev' ? 'cathlab1234' : selectedUserPreset === 'jayachandra' ? 'test1234' : 'deo1234'}
-                </span>
               </div>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
