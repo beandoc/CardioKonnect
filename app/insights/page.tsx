@@ -6,6 +6,8 @@ import { Brain, Zap, Users, ShieldAlert, Heart, TrendingUp, AlertTriangle,
 import { cn } from '@/lib/utils'
 import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
 import {
   summarisePopulationML, evaluateGDMT, generateClinicalAlerts,
   computeMLRiskProfile,
@@ -19,6 +21,7 @@ import { Card } from '@/components/ui/Card'
 interface PatientWithVisits { patient: Patient; latestVisit: Visit; allVisits: Visit[] }
 
 export default function InsightsPage() {
+  const { currentUser } = useAppUser()
   const [data, setData] = useState<PatientWithVisits[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'population' | 'high-risk' | 'gdmt' | 'data-quality'>('population')
@@ -27,10 +30,12 @@ export default function InsightsPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [patients, allVisits] = await Promise.all([
+      const [allPatients, allVisits] = await Promise.all([
         getPatients(),
         getAllVisits(),
       ])
+
+      const patients = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
 
       const visitsByPatientMap = new Map<string, Visit[]>()
       allVisits.forEach(v => {
@@ -57,7 +62,7 @@ export default function InsightsPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [currentUser])
 
   const visitsByPatient = useMemo(() => {
     const map: Record<string, Visit[]> = {}

@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
 import {
   computeMLRiskProfile,
   evaluateGDMT,
@@ -33,6 +35,7 @@ interface TriagePatientRow {
 }
 
 export default function TriagePage() {
+  const { currentUser } = useAppUser()
   const [rows, setRows] = useState<TriagePatientRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -47,7 +50,8 @@ export default function TriagePage() {
     async function loadCohortData() {
       setLoading(true)
       try {
-        const [patients, allVisits] = await Promise.all([getPatients(), getAllVisits()])
+        const [allPatients, allVisits] = await Promise.all([getPatients(), getAllVisits()])
+        const patients = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
         const visitsByPatient = new Map<string, Visit[]>()
         for (const v of allVisits) {
           const list = visitsByPatient.get(v.patientId) || []
@@ -152,7 +156,7 @@ export default function TriagePage() {
     }
 
     loadCohortData()
-  }, [])
+  }, [currentUser])
 
   // Filtering Logic
   const filteredRows = useMemo(() => {

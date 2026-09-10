@@ -2,9 +2,11 @@
 import { useEffect, useState } from 'react'
 import { Bell, ShieldAlert, Sparkles, Filter, CheckCircle, Activity } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { getPatients, getAllVisits } from '@/lib/firestore'
-import type { Patient, Visit } from '@/lib/types'
+import { getPatients, getAllVisits, getAllCathProcedures } from '@/lib/firestore'
+import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { fullName } from '@/lib/utils'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
 
 interface AlertItem {
   id: string
@@ -18,6 +20,7 @@ interface AlertItem {
 }
 
 export default function ClinicalAlertsPage() {
+  const { currentUser } = useAppUser()
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
@@ -25,15 +28,33 @@ export default function ClinicalAlertsPage() {
   useEffect(() => {
     async function loadAlerts() {
       try {
-        const [patients, allVisits] = await Promise.all([getPatients(), getAllVisits()])
+        const [allPatients, allVisits, allProcs] = await Promise.all([
+          getPatients(),
+          getAllVisits(),
+          getAllCathProcedures().catch(() => [] as CathProcedure[]),
+        ])
+
+        // Strictly enforce patient access control per institutional scope
+        const patients = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
+        const accessiblePatientIds = new Set(patients.map(p => p.id))
         
         const visitsByPatient: Record<string, Visit[]> = {}
         allVisits.forEach(v => {
-          if (v.patientId) {
+          if (v.patientId && accessiblePatientIds.has(v.patientId)) {
             if (!visitsByPatient[v.patientId]) {
               visitsByPatient[v.patientId] = []
             }
             visitsByPatient[v.patientId].push(v)
+          }
+        })
+
+        const procsByPatient: Record<string, CathProcedure[]> = {}
+        allProcs.forEach(p => {
+          if (p.patientId && accessiblePatientIds.has(p.patientId)) {
+            if (!procsByPatient[p.patientId]) {
+              procsByPatient[p.patientId] = []
+            }
+            procsByPatient[p.patientId].push(p)
           }
         })
 
@@ -113,6 +134,64 @@ export default function ClinicalAlertsPage() {
               status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
             })
           }
+
+          // 5. Interventional / Cath Lab Alerts
+          const ptProcs = procsByPatient[p.id] || []
+          ptProcs.forEach(proc => {
+            if (proc.complications?.hasComplication) {
+              const alertId = `proc-comp-${proc.id}`
+              const compDesc = [
+                proc.complications.inLabDeath && 'In-Lab Mortality',
+                proc.complications.coronaryPerforation && 'Coronary Perforation',
+                proc.complications.coronaryDissection && 'Coronary Dissection',
+                proc.complications.acuteStentThrombosis && 'Acute Stent Thrombosis',
+                proc.complications.majorBleed && 'Major Bleed',
+                proc.complications.emergencyCabg && 'Emergency CABG'
+              ].filter(Boolean).join(', ') || 'Procedural Complication Recorded'
+
+              dynamicAlerts.push({
+                id: alertId,
+                patient: pName,
+                mrn,
+                trigger: 'Post-PCI Adverse Event',
+                severity: 'Critical',
+                value: compDesc,
+                timestamp: proc.procedureDate || new Date().toISOString(),
+                status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
+              })
+            }
+
+            // High contrast load alert (> 250 mL)
+            if (proc.contrastVolumeMl && proc.contrastVolumeMl > 250) {
+              const alertId = `contrast-high-${proc.id}`
+              dynamicAlerts.push({
+                id: alertId,
+                patient: pName,
+                mrn,
+                trigger: 'High Contrast Volume (CIN Risk)',
+                severity: 'Warning',
+                value: `Volume: ${proc.contrastVolumeMl} mL`,
+                timestamp: proc.procedureDate || new Date().toISOString(),
+                status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
+              })
+            }
+
+            // Sub-optimal post-TIMI flow (< 3)
+            const suboptimalLesion = proc.lesions?.find(l => l.postTimiFlow !== undefined && l.postTimiFlow < 3)
+            if (suboptimalLesion) {
+              const alertId = `suboptimal-timi-${proc.id}-${suboptimalLesion.vessel}`
+              dynamicAlerts.push({
+                id: alertId,
+                patient: pName,
+                mrn,
+                trigger: 'Sub-optimal Coronary Perfusion',
+                severity: 'Warning',
+                value: `${suboptimalLesion.vessel}: TIMI ${suboptimalLesion.postTimiFlow} flow`,
+                timestamp: proc.procedureDate || new Date().toISOString(),
+                status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
+              })
+            }
+          })
         })
 
         setAlerts(dynamicAlerts)
@@ -123,7 +202,7 @@ export default function ClinicalAlertsPage() {
       }
     }
     loadAlerts()
-  }, [])
+  }, [currentUser])
 
   const resolveAlert = (id: string) => {
     setAlerts(prev => prev.map(a => a.id === id ? { ...a, status: 'Resolved' } : a))
