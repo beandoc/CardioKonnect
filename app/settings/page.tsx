@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { 
   Shield, ShieldAlert, Award, Calendar, Clock, Laptop, Compass, Heart, HelpCircle, 
-  Globe, Search, PlusCircle, Trash2, Edit2, FileClock, Filter, FileSpreadsheet, UserCheck, Check
+  Globe, Search, PlusCircle, Trash2, Edit2, FileClock, Filter, FileSpreadsheet, UserCheck, Check, Building2
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
@@ -14,14 +14,16 @@ interface ProviderRow {
   name: string
   email: string
   role: string
+  hospital: string
   status: 'Active' | 'Inactive'
   addedOn: string
 }
 
 const INITIAL_PROVIDERS: ProviderRow[] = [
-  { id: '1', name: 'Dr. A. Jayachandra', email: 'jayachandra.a@aicts.in', role: 'RegistryOwner', status: 'Active', addedOn: '01/01/2026' },
-  { id: '2', name: 'Dr. Nitin Sharma', email: 'nitin.sharma@aicts.in', role: 'Provider', status: 'Active', addedOn: '15/01/2026' },
-  { id: '3', name: 'Dr. Arshdeep', email: 'arshdeep@aicts.in', role: 'Senior Resident', status: 'Active', addedOn: '01/02/2026' }
+  { id: '1', name: 'Dr. Rajeev Chauhan', email: 'rajeev.chauhan@apexkanpur.in', role: 'Registry Owner & PI (Cath Lab)', hospital: 'Kanpur Cardiac Apex Hospital', status: 'Active', addedOn: '01/01/2026' },
+  { id: '2', name: 'Dr. A. Jayachandra', email: 'jayachandra.a@aicts.in', role: 'Registry Owner & PI (Heart Failure)', hospital: 'AICTS Pune', status: 'Active', addedOn: '01/01/2026' },
+  { id: '3', name: 'Dr. Nitin Sharma', email: 'nitin.sharma@aicts.in', role: 'Cardiologist', hospital: 'AICTS Pune', status: 'Active', addedOn: '15/01/2026' },
+  { id: '4', name: 'Dr. Arshdeep', email: 'arshdeep@aicts.in', role: 'Senior Resident', hospital: 'AICTS Pune', status: 'Active', addedOn: '01/02/2026' }
 ]
 
 // Types and data from Logs list
@@ -60,11 +62,26 @@ const INITIAL_LANGUAGES: LanguageRow[] = [
   { id: '7', name: 'Telugu', patientsCount: 0 },
 ]
 
+import { useAppUser } from '@/context/AppUserContext'
+import { SITES } from '@/lib/appConfig'
+
 function SettingsContent() {
+  const { currentUser } = useAppUser()
   const searchParams = useSearchParams()
   const router = useRouter()
   const tabParam = searchParams.get('tab')
   const initialTab = (tabParam === 'admin' || tabParam === 'logs' || tabParam === 'languages') ? tabParam : 'profile'
+
+  const isKanpur = currentUser?.siteId === 'KANPUR_APEX'
+  const doctorName = currentUser?.name || 'Dr. A. Jayachandra'
+  const doctorShort = currentUser?.shortName || (isKanpur ? 'RC' : 'AJ')
+  const doctorEmail = currentUser?.email || (isKanpur ? 'rajeev.chauhan@apexkanpur.in' : 'jayachandra.a@aicts.in')
+  const doctorRole = isKanpur ? 'Registry Owner & Principal Investigator' : (currentUser?.role === 'RegistryOwner' ? 'Registry Owner' : currentUser?.role || 'Attending Doctor')
+  const doctorHospital = isKanpur ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune'
+  const doctorFacilityFull = isKanpur ? 'Kanpur Cardiac Apex Hospital, Kanpur, Uttar Pradesh' : 'All India Institute of Cardiothoracic Sciences (AICTS), Pune'
+  const doctorLicense = isKanpur ? 'UP-MCI-74892' : 'MH-MCI-123454'
+  const doctorSubspecialty = isKanpur ? 'Cath Lab & Interventional Cardiology' : 'Cardiology & Heart Failure Research'
+  const doctorExperience = isKanpur ? '16 years' : '18 years'
 
   const [activeTab, setActiveTab] = useState<'profile' | 'admin' | 'logs' | 'languages'>(initialTab)
 
@@ -199,15 +216,18 @@ function SettingsContent() {
           <div className="accent-card p-6 flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
             <div className="flex flex-col md:flex-row items-center gap-5 text-center md:text-left">
               <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold text-white flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4)' }}>
-                AJ
+                style={{ background: isKanpur ? 'linear-gradient(135deg, #f59e0b, #d97706, #b45309)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4)' }}>
+                {doctorShort}
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-white mb-1">Dr. A. Jayachandra</h2>
-                <p className="text-sm text-gray-400">Attending Doctor &bull; AICTS Pune</p>
+                <h2 className="text-2xl font-bold text-white mb-1">{doctorName}</h2>
+                <p className="text-sm text-gray-400">{doctorRole} &bull; {doctorHospital}</p>
                 <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-3">
                   <span className="badge badge-green text-[10px] uppercase font-semibold">Active</span>
                   <span className="badge badge-blue text-[10px] uppercase font-semibold">Approved Account</span>
+                  <span className="badge badge-amber text-[10px] uppercase font-semibold">
+                    {isKanpur ? 'Cath Lab Registry PI' : 'HF Registry Owner'}
+                  </span>
                   <span className="text-xs text-gray-500 flex items-center gap-1 ml-2">
                     <Calendar className="w-3.5 h-3.5" /> Member since: Nov 4, 2025
                   </span>
@@ -218,8 +238,8 @@ function SettingsContent() {
             {/* Small stats in banner */}
             <div className="flex gap-4 border-t md:border-t-0 md:border-l border-blue-500/10 pt-4 md:pt-0 md:pl-6">
               <div className="text-center md:text-left">
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Last Login</p>
-                <p className="text-white font-semibold text-sm mt-0.5">Today, 07:27 PM</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Active Session</p>
+                <p className="text-white font-semibold text-sm mt-0.5">{doctorHospital}</p>
               </div>
             </div>
           </div>
@@ -352,15 +372,34 @@ function SettingsContent() {
                   <h3 className="text-sm font-semibold text-white pb-3 border-b border-blue-500/10 flex items-center gap-2">
                     <Compass className="w-4 h-4 text-cyan-400" /> Registry Access
                   </h3>
-                  <div className="dark-card p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-xs text-white">Cardiovascular Registry</p>
-                      <span className="badge badge-green text-[9px] uppercase">Active</span>
+                  {isKanpur ? (
+                    <div className="dark-card p-3 space-y-2 border border-amber-500/20 bg-amber-500/5">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-xs text-white">Cath Lab & Interventional Registry</p>
+                        <span className="badge badge-green text-[9px] uppercase">Active PI</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400">Kanpur Cardiac Apex Hospital · Coronary, PCI & Cath Lab Data</p>
+                      <p className="text-[10px] text-gray-500 pt-1">Primary Facility · Kanpur, Uttar Pradesh</p>
                     </div>
-                    <p className="text-[11px] text-gray-400">Main Heart Failure Registry Database</p>
-                    <p className="text-[10px] text-gray-500 pt-1">Assigned Nov 4, 2025 at 03:12 PM</p>
-                  </div>
-                  <div className="pt-2 text-xs text-gray-500 text-center">No other registry accesses assigned</div>
+                  ) : (
+                    <>
+                      <div className="dark-card p-3 space-y-2 border border-blue-500/20 bg-blue-500/5">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold text-xs text-white">Heart Failure Registry</p>
+                          <span className="badge badge-green text-[9px] uppercase">Active PI</span>
+                        </div>
+                        <p className="text-[11px] text-gray-400">Main Heart Failure Registry Database · AICTS Pune</p>
+                      </div>
+                      <div className="dark-card p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold text-xs text-white">ACS & Coronary Registry</p>
+                          <span className="badge badge-blue text-[9px] uppercase">Authorized</span>
+                        </div>
+                        <p className="text-[11px] text-gray-400">Acute Coronary Syndromes Database · AICTS Pune</p>
+                      </div>
+                    </>
+                  )}
+                  <div className="pt-2 text-xs text-gray-500 text-center">Managed via institutional ethics approval</div>
                 </div>
 
                 {/* Provider Information */}
@@ -371,19 +410,23 @@ function SettingsContent() {
                   <div className="space-y-3 text-xs">
                     <div className="flex justify-between">
                       <span className="text-gray-500">License Number:</span>
-                      <span className="text-white font-mono">123454</span>
+                      <span className="text-white font-mono">{doctorLicense}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Experience:</span>
-                      <span className="text-white">12 years</span>
+                      <span className="text-white">{doctorExperience}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Subspecialty:</span>
-                      <span className="text-white">Cardiology / Research</span>
+                      <span className="text-white">{doctorSubspecialty}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Primary Facility:</span>
-                      <span className="text-white">AICTS, Pune</span>
+                      <span className="text-white text-right max-w-[180px] truncate">{doctorHospital}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Official Email:</span>
+                      <span className="text-white font-mono">{doctorEmail}</span>
                     </div>
                   </div>
                 </div>
@@ -484,7 +527,8 @@ function SettingsContent() {
                   <tr>
                     <th className="w-12">#</th>
                     <th>Healthcare Provider</th>
-                    <th>Role</th>
+                    <th>Role & Registry</th>
+                    <th>Affiliated Hospital</th>
                     <th>Status</th>
                     <th>Added On</th>
                     <th className="text-right">Actions</th>
@@ -493,7 +537,7 @@ function SettingsContent() {
                 <tbody>
                   {filteredProviders.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center">
+                      <td colSpan={7} className="py-12 text-center">
                         <Shield className="w-10 h-10 text-gray-500 mx-auto mb-2" />
                         <p className="text-gray-400 text-sm font-semibold">No healthcare providers found</p>
                       </td>
@@ -515,6 +559,12 @@ function SettingsContent() {
                         </td>
                         <td>
                           <span className="badge badge-violet text-[10px]">{p.role}</span>
+                        </td>
+                        <td>
+                          <span className="text-xs text-gray-300 font-medium flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                            {p.hospital}
+                          </span>
                         </td>
                         <td>
                           <span className={p.status === 'Active' ? 'status-active' : 'status-inactive'}>

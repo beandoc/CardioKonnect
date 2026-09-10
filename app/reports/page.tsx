@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useEffect } from 'react'
 import {
-  FileText, Search, BarChart3, Heart, ShieldAlert, Award, Compass, Sparkles, Download, ArrowUpRight, TrendingUp, X, Printer, Calendar
+  FileText, Search, BarChart3, Heart, ShieldAlert, Award, Compass, Sparkles, Download, ArrowUpRight, TrendingUp, X, Printer, Calendar, AlertTriangle, Users, Database
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
@@ -9,9 +9,10 @@ import { toast } from 'sonner'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
 } from 'recharts'
-import { AlertTriangle, Users, Database } from 'lucide-react'
 import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
 
 // Left Navigation sections
 const REPORT_SECTIONS = [
@@ -608,6 +609,7 @@ const DEFAULT_VISUAL_CONFIG: ReportVisualConfig = {
 }
 
 export default function ReportsArchitecturePage() {
+  const { currentUser } = useAppUser()
   const [activeSection, setActiveSection] = useState('hf')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
@@ -617,6 +619,10 @@ export default function ReportsArchitecturePage() {
   const [procedures, setProcedures] = useState<CathProcedure[]>([])
   const [loading, setLoading] = useState(true)
 
+  const isKanpur = currentUser?.siteId === 'KANPUR_APEX'
+  const doctorName = currentUser?.name || (isKanpur ? 'Dr. Rajeev Chauhan' : 'Dr. A. Jayachandra')
+  const facilityName = isKanpur ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune'
+
   useEffect(() => {
     async function load() {
       try {
@@ -625,7 +631,8 @@ export default function ReportsArchitecturePage() {
           getAllLatestVisits(),
           getAllCathProcedures()
         ])
-        setPatients(pts)
+        const accessiblePts = currentUser ? filterPatientsByAccess(currentUser, pts) : pts
+        setPatients(accessiblePts)
         setVisitsMap(vMap)
         setProcedures(procs)
       } catch (err) {
@@ -635,7 +642,7 @@ export default function ReportsArchitecturePage() {
       }
     }
     load()
-  }, [])
+  }, [currentUser])
 
   // Dynamic calculations from live cohort
   const total = patients.length
@@ -947,14 +954,15 @@ export default function ReportsArchitecturePage() {
 
       const csvContent = [
         `# CardioKonnect Registry Report: ${title}`,
-        `# Facility: AICTS Pune | Investigator: Dr. A. Jayachandra`,
+        `# Facility: ${facilityName} | Investigator: ${doctorName}`,
         `# Date: ${new Date().toLocaleDateString()}`,
         '',
         headers.join(','),
         ...rows
       ].join('\n')
 
-      const filename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_AICTS_Pune_${new Date().toISOString().split('T')[0]}.csv`
+      const siteSlug = facilityName.replace(/[^a-zA-Z0-9]/g, '_')
+      const filename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${siteSlug}_${new Date().toISOString().split('T')[0]}.csv`
       downloadCSV(filename, csvContent)
       toast.success(`Exported ${filename} successfully!`)
     } catch (err) {
@@ -1040,7 +1048,7 @@ export default function ReportsArchitecturePage() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-white leading-tight">Cardiovascular Reports Architecture</h2>
-            <p className="text-xs text-gray-400 mt-1">Registry intelligence layers for Dr. A. Jayachandra, AICTS Pune</p>
+            <p className="text-xs text-gray-400 mt-1">Registry intelligence layers for {doctorName}, {facilityName}</p>
           </div>
         </div>
         <Button onClick={handleExportPack} className="btn-primary flex items-center gap-2">

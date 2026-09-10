@@ -8,6 +8,8 @@ import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { getPatients, getAllLatestVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -71,20 +73,27 @@ function ProgressBar({ label, rate, n, den, color }: {
 export default function AnalyticsDashboardPage() {
   type Tab = 'overview' | 'burden' | 'biomarker' | 'medication' | 'outcomes' | 'preventive'
   const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const { currentUser } = useAppUser()
   const [patients, setPatients] = useState<Patient[]>([])
   const [visitMap, setVisitMap] = useState<Map<string, Visit>>(new Map())
   const [loading, setLoading] = useState(true)
+
+  const isKanpur = currentUser?.siteId === 'KANPUR_APEX'
+  const doctorName = currentUser?.name || (isKanpur ? 'Dr. Rajeev Chauhan' : 'Dr. A. Jayachandra')
+  const facilityName = isKanpur ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune'
+  const registryLabel = isKanpur ? 'Cath Lab & Interventional Registry' : 'Heart Failure Registry'
 
   const load = useCallback(() => {
     setLoading(true)
     Promise.all([getPatients(), getAllLatestVisits()])
       .then(([pts, vmap]) => {
-        setPatients(pts)
+        const accessible = currentUser ? filterPatientsByAccess(currentUser, pts) : pts
+        setPatients(accessible)
         setVisitMap(vmap)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }, [currentUser])
 
   useEffect(() => { load() }, [load])
 
@@ -211,8 +220,8 @@ export default function AnalyticsDashboardPage() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-white leading-tight">Cardiology Intelligence & Analytics</h2>
-            <p className="text-xs text-gray-400 mt-1">Heart Failure Registry — all metrics computed live from enrolled patients</p>
-            <p className="text-[10px] text-gray-500 mt-0.5">Registry Owner View · Dr. A. Jayachandra · AICTS Pune</p>
+            <p className="text-xs text-gray-400 mt-1">{registryLabel} — all metrics computed live from enrolled patients</p>
+            <p className="text-[10px] text-gray-500 mt-0.5">Registry Owner View · {doctorName} · {facilityName}</p>
           </div>
         </div>
         <Button size="sm" onClick={load} disabled={loading}>
