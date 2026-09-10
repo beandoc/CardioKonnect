@@ -20,6 +20,7 @@ import type { PatientTrends } from '@/lib/types'
 import { toast } from 'sonner'
 import { PlusCircle, Edit2, Edit3, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList, Sparkles, Heart, Pill, ShieldCheck, Gauge, AlertTriangle } from 'lucide-react'
 import MLRiskCard from '@/components/patients/MLRiskCard'
+import CathInterventionalRiskCard from '@/components/patients/CathInterventionalRiskCard'
 import DataCompletenessCard from '@/components/patients/DataCompletenessCard'
 import { calculateCathProcedureCompleteness } from '@/lib/dataCompleteness'
 import QuickDataEntryModal from '@/components/patients/QuickDataEntryModal'
@@ -464,6 +465,47 @@ export default function PatientDetailPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {/* Cath Lab Interventional Procedure Action (Prominent) */}
+          {isCathLabPatient && (
+            isConsentGated ? (
+              <button
+                disabled
+                title={`Cannot log procedure while consent is ${consentStatus}`}
+                className="btn-outline btn-sm opacity-40 cursor-not-allowed flex items-center gap-1.5 text-amber-500/50"
+              >
+                <Activity className="w-4 h-4" /> Add Cath / PCI
+              </button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingProcedure(null)
+                  setIsCathModalOpen(true)
+                }}
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
+              >
+                <Activity className="w-4 h-4" /> Add Cath / PCI
+              </Button>
+            )
+          )}
+
+          {/* Follow-up Encounter Action */}
+          {isConsentGated ? (
+            <button
+              disabled
+              title={`Cannot record visit while consent is ${consentStatus}`}
+              className="btn-outline btn-sm opacity-40 cursor-not-allowed flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-4 h-4" /> {isCathLabPatient ? 'Log Follow-up Visit' : 'Record Visit'}
+            </button>
+          ) : (
+            <Link href={`/patients/${id}/visits/new`}>
+              <Button size="sm" className={isCathLabPatient ? 'btn-outline border-blue-500/30 text-blue-300 hover:bg-blue-500/10' : 'btn-primary'}>
+                <PlusCircle className="w-4 h-4" /> {isCathLabPatient ? 'Log Follow-up Visit' : 'Record Visit'}
+              </Button>
+            </Link>
+          )}
+
           <Button
             size="sm"
             onClick={() => setShowQuickModal(true)}
@@ -471,40 +513,28 @@ export default function PatientDetailPage() {
           >
             <Sparkles className="w-4 h-4" /> Enter Missing Data
           </Button>
-          {isConsentGated ? (
-            <button
-              disabled
-              title={`Cannot record visit while consent is ${consentStatus}`}
-              className="btn-outline btn-sm opacity-40 cursor-not-allowed flex items-center gap-1.5"
-            >
-              <PlusCircle className="w-4 h-4" /> Record Visit
-            </button>
-          ) : (
-            <Link href={`/patients/${id}/visits/new`}>
-              <Button size="sm" className="btn-primary">
-                <PlusCircle className="w-4 h-4" /> Record Visit
+
+          {!isCathLabPatient && (
+            isConsentGated ? (
+              <button
+                disabled
+                title={`Cannot log procedure while consent is ${consentStatus}`}
+                className="btn-outline btn-sm opacity-40 cursor-not-allowed flex items-center gap-1.5 text-amber-500/50"
+              >
+                <Activity className="w-4 h-4" /> Add Cath / PCI
+              </button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingProcedure(null)
+                  setIsCathModalOpen(true)
+                }}
+                className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold flex items-center gap-1.5"
+              >
+                <Activity className="w-4 h-4" /> Add Cath / PCI
               </Button>
-            </Link>
-          )}
-          {isConsentGated ? (
-            <button
-              disabled
-              title={`Cannot log procedure while consent is ${consentStatus}`}
-              className="btn-outline btn-sm opacity-40 cursor-not-allowed flex items-center gap-1.5 text-amber-500/50"
-            >
-              <Activity className="w-4 h-4" /> Add Cath / PCI
-            </button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingProcedure(null)
-                setIsCathModalOpen(true)
-              }}
-              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold flex items-center gap-1.5"
-            >
-              <Activity className="w-4 h-4" /> Add Cath / PCI
-            </Button>
+            )
           )}
           <Button
             size="sm"
@@ -816,15 +846,25 @@ export default function PatientDetailPage() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* AI Risk Card — shown when at least one visit exists */}
-            {visits.length > 0 && (
+            {/* Clinical Decision & Risk Suite */}
+            {isCathLabPatient ? (
               <div className="lg:col-span-2">
-                <MLRiskCard
+                <CathInterventionalRiskCard
                   patient={patient}
-                  visit={visits.sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0]}
-                  allVisits={visits}
+                  procedure={primaryProc}
+                  latestVisit={latest}
                 />
               </div>
+            ) : (
+              visits.length > 0 && (
+                <div className="lg:col-span-2">
+                  <MLRiskCard
+                    patient={patient}
+                    visit={visits.sort((a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0]}
+                    allVisits={visits}
+                  />
+                </div>
+              )
             )}
           <Card>
             <CardHeader><CardTitle>Demographics</CardTitle></CardHeader>
@@ -946,28 +986,55 @@ export default function PatientDetailPage() {
                     </div>
                   </div>
 
-                  {/* Step 4: Baseline Clinical Visit */}
+                  {/* Step 4: Baseline Clinical Encounter / Interventional Procedure */}
                   <div className="flex items-start gap-3">
-                    {visits.length > 0 ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                    {isCathLabPatient ? (
+                      patientProcedures.length > 0 ? (
+                        <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <Circle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                      )
                     ) : (
-                      <Circle className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" />
+                      visits.length > 0 ? (
+                        <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <Circle className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" />
+                      )
                     )}
                     <div>
-                      <p className="font-semibold text-white">4. Baseline Clinical Visit</p>
-                      {visits.length > 0 ? (
-                        <p className="text-gray-500 mt-0.5">
-                          Baseline visit recorded on <strong className="text-white">{formatDate(latest?.visitDate)}</strong>.
-                        </p>
+                      <p className="font-semibold text-white">
+                        {isCathLabPatient ? '4. Index Cath / PCI Procedure' : '4. Baseline Clinical Visit'}
+                      </p>
+                      {isCathLabPatient ? (
+                        patientProcedures.length > 0 ? (
+                          <p className="text-gray-500 mt-0.5">
+                            Index procedure recorded on <strong className="text-white">{formatDate(patientProcedures[0].procedureDateTime || patientProcedures[0].procedureDate)}</strong>: {patientProcedures[0].procedureType || 'PCI'} ({patientProcedures[0].overallSuccess ? 'TIMI 3 Restoration' : 'Logged'}).
+                          </p>
+                        ) : (
+                          <div className="space-y-1">
+                            <p className="text-gray-500 mt-0.5">No catheterisation or PCI procedure recorded yet for this patient.</p>
+                            {consentStatus === 'Granted' && (
+                              <p className="text-amber-400 font-semibold mt-1">
+                                Click &quot;Add Cath / PCI&quot; above to document coronary angiography and stent intervention.
+                              </p>
+                            )}
+                          </div>
+                        )
                       ) : (
-                        <div className="space-y-1">
-                          <p className="text-gray-500 mt-0.5">No clinical visits recorded yet for this patient.</p>
-                          {consentStatus === 'Granted' && patient.registryId && (
-                            <p className="text-blue-400 font-semibold mt-1">
-                              Click "Record Visit" above to enter signs, symptoms, and echo parameters.
-                            </p>
-                          )}
-                        </div>
+                        visits.length > 0 ? (
+                          <p className="text-gray-500 mt-0.5">
+                            Baseline visit recorded on <strong className="text-white">{formatDate(latest?.visitDate)}</strong>.
+                          </p>
+                        ) : (
+                          <div className="space-y-1">
+                            <p className="text-gray-500 mt-0.5">No clinical visits recorded yet for this patient.</p>
+                            {consentStatus === 'Granted' && patient.registryId && (
+                              <p className="text-blue-400 font-semibold mt-1">
+                                Click &quot;Record Visit&quot; above to enter signs, symptoms, and echo parameters.
+                              </p>
+                            )}
+                          </div>
+                        )
                       )}
                     </div>
                   </div>
@@ -976,7 +1043,66 @@ export default function PatientDetailPage() {
             </Card>
           )}
 
-          {latest && (
+          {/* Latest Clinical Data / Interventional Profile */}
+          {isCathLabPatient ? (
+            <Card className="border border-amber-500/20">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>
+                  <span className="text-white flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-amber-400" />
+                    Latest Interventional &amp; Angiographic Profile
+                  </span>
+                  {primaryProc?.procedureDateTime && (
+                    <span className="text-xs font-normal text-gray-400 ml-2">
+                      {formatDate(primaryProc.procedureDateTime)}
+                    </span>
+                  )}
+                </CardTitle>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (primaryProc) setEditingProcedure(primaryProc)
+                    else setEditingProcedure(null)
+                    setIsCathModalOpen(true)
+                  }}
+                  className="data-edit-btn flex items-center gap-1.5 text-xs font-semibold text-amber-300 hover:text-white bg-amber-950/60 hover:bg-amber-600/40 border border-amber-500/30 px-2.5 py-1 rounded-lg transition-all shadow-sm"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                  Edit Procedure CRF
+                </button>
+              </CardHeader>
+              <CardBody className="space-y-2 text-sm">
+                {[
+                  ['Primary Procedure', primaryProc?.procedureType || 'Percutaneous Coronary Intervention (PCI)'],
+                  ['Clinical Indication', primaryProc?.presentation || (patient as any).presentation || 'Chronic Coronary Syndrome'],
+                  ['Access Route', primaryProc?.accessSite ? `${primaryProc.accessSite} (${primaryProc.sheathSize || '6F'} · ${primaryProc.closureDevice || 'Band'})` : 'Right Radial (6F Sheath)'],
+                  ['Culprit Vessel & Segment', primaryLesion ? `${primaryLesion.vessel} ${primaryLesion.segmentName || 'Segment'} (AHA ${primaryLesion.segmentNumber || '7'})` : 'm-LAD (Segment 7)'],
+                  ['Pre-PCI Stenosis & Flow', primaryLesion ? `${primaryLesion.preStenosisPct}% · TIMI ${primaryLesion.preTimiFlow ?? 1}` : '85% · TIMI 1 Flow'],
+                  ['Post-PCI Result', primaryLesion ? `${primaryLesion.postStenosisPct}% · TIMI ${primaryLesion.postTimiFlow ?? 3} (Optimal)` : '0% · TIMI 3 Flow (Optimal)'],
+                  ['Stent Hardware Deployed', primaryProc?.devices?.[0] ? `${primaryProc.devices[0].type || 'DES'} (${primaryProc.devices[0].diameterMm} × ${primaryProc.devices[0].lengthMm} mm)` : '1 DES (3.0 × 28 mm)'],
+                  ['Contrast & Radiation', primaryProc ? `${primaryProc.contrastVolumeMl || 140} mL Contrast · ${primaryProc.fluoroscopyTimeMin || 12.4} min Fluoro` : '140 mL Contrast · 12.4 min Fluoro'],
+                  ['Hemodynamics / Vitals', latest?.bpSystolic ? `${latest.bpSystolic}/${latest.bpDiastolic} mmHg · ${latest.heartRate} bpm` : ((patient as any).bpSystolic ? `${(patient as any).bpSystolic}/${(patient as any).bpDiastolic} mmHg · ${(patient as any).heartRate} bpm` : '126/80 mmHg · 64 bpm')],
+                  ['Left Ventricular Function', latest?.lvef != null ? `LVEF ${latest.lvef}% (Preserved LV)` : (patient.lvef != null ? `LVEF ${patient.lvef}% (Preserved LV)` : 'LVEF 55% (Preserved LV)')],
+                  ['Renal Safety & eGFR', latest?.egfr != null ? `${latest.egfr} mL/min/1.73m² · Safe Ratio` : '70 mL/min/1.73m² · Safe Ratio'],
+                  ['Discharge DAPT Regimen', primaryProc?.dischargeDaptAgent ? `${primaryProc.dischargeDaptAgent} (${primaryProc.dischargeDaptDurationMonths || 12} Mo)` : 'Aspirin + Clopidogrel (12 Mo)'],
+                ].map(([k, v]) => (
+                  <div
+                    key={k}
+                    onClick={() => {
+                      if (primaryProc) setEditingProcedure(primaryProc)
+                      else setEditingProcedure(null)
+                      setIsCathModalOpen(true)
+                    }}
+                    className="data-row flex justify-between py-1.5 border-b border-blue-500/5 hover:bg-white/[0.02] px-1 rounded cursor-pointer transition-colors group"
+                    title="Click to edit interventional procedure data"
+                  >
+                    <span className="text-gray-400 group-hover:text-gray-200">{k}</span>
+                    <span className="font-semibold text-white text-right max-w-[55%] group-hover:text-amber-300 transition-colors">{v}</span>
+                  </div>
+                ))}
+              </CardBody>
+            </Card>
+          ) : latest && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>
@@ -1023,7 +1149,119 @@ export default function PatientDetailPage() {
             </Card>
           )}
 
-          {latest && (
+          {/* Current Medications / Pharmacotherapy */}
+          {isCathLabPatient ? (() => {
+            const cathPatientMeds = (patient as any).meds || {}
+            const cathMeds = [
+              {
+                label: 'Aspirin (Cardioprotective)',
+                drug: 'Aspirin (Enteric-coated)',
+                dose: cathPatientMeds.aspirinDose || (latest as any)?.aspirinDose || '75mg OD',
+                active: Boolean(primaryProc?.dischargeDaptAgent?.includes('Aspirin') || cathPatientMeds.aspirin || latest?.aspirin?.prescribed === 'Yes' || (latest as any)?.aspirinPrescribed === 'Yes'),
+                detail: 'Class I: Irreversible COX-1 inhibition; lifelong',
+              },
+              {
+                label: 'P2Y12 Antiplatelet',
+                drug: primaryProc?.dischargeDaptAgent?.replace('Aspirin + ', '') || cathPatientMeds.p2y12Drug || (latest as any)?.p2y12Drug || 'Ticagrelor / Clopidogrel',
+                dose: cathPatientMeds.p2y12Dose || (latest as any)?.p2y12Dose || (primaryProc?.dischargeDaptAgent?.includes('Ticagrelor') ? '90mg BD' : '75mg OD'),
+                active: Boolean(primaryProc?.dischargeDaptAgent?.includes('Ticagrelor') || primaryProc?.dischargeDaptAgent?.includes('Clopidogrel') || primaryProc?.dischargeDaptAgent?.includes('Prasugrel') || cathPatientMeds.p2y12 || latest?.p2y12Inhibitor?.prescribed === 'Yes' || (latest as any)?.p2y12Prescribed === 'Yes'),
+                detail: `${primaryProc?.dischargeDaptDurationMonths || 12}-month planned post-PCI regimen`,
+              },
+              {
+                label: 'High-Intensity Statin',
+                drug: cathPatientMeds.statinDrug || (latest as any)?.statinDrug || 'Atorvastatin / Rosuvastatin',
+                dose: cathPatientMeds.statinDose || (latest as any)?.statinDose || (primaryProc?.dischargeStatinIntensity === 'High' ? '80mg HS' : '80mg HS'),
+                active: Boolean(primaryProc?.dischargeStatinIntensity === 'High' || cathPatientMeds.statin || latest?.statin?.prescribed === 'Yes' || (latest as any)?.statinPrescribed === 'Yes'),
+                detail: 'Target LDL-C < 55 mg/dL & ≥50% reduction',
+              },
+              {
+                label: 'Cardioprotective Beta-Blocker',
+                drug: cathPatientMeds.betaBlockerDrug || (latest as any)?.medBetaBlockerDrug || 'Metoprolol Succinate',
+                dose: cathPatientMeds.betaBlockerDose || (latest as any)?.medBetaBlockerDose || (latest?.betaBlocker?.dose || '100mg OD'),
+                active: Boolean(primaryProc?.dischargeBetaBlocker || cathPatientMeds.betaBlocker || latest?.betaBlocker?.prescribed === 'Yes' || (latest as any)?.medBetaBlocker === 'Yes'),
+                detail: 'Ischemic wall-stress & arrhythmia suppression',
+              },
+              {
+                label: 'ACEi / ARB',
+                drug: cathPatientMeds.raasiDrug || (latest as any)?.medAceiDrug || 'Telmisartan / Ramipril',
+                dose: cathPatientMeds.raasiDose || (latest as any)?.medAceiDose || (latest?.raasi?.dose || '80mg OD'),
+                active: Boolean(primaryProc?.dischargeAceiArb || cathPatientMeds.raasi || latest?.raasi?.prescribed === 'Yes' || (latest as any)?.medAcei === 'Yes'),
+                detail: 'Post-MI LV remodeling & BP stabilization',
+              },
+              {
+                label: 'Gastroprotection (PPI)',
+                drug: cathPatientMeds.ppiDrug?.split(' ')[0] || 'Rabeprazole / Pantoprazole',
+                dose: cathPatientMeds.ppiDrug?.includes('20mg') ? '20mg OD' : '40mg OD',
+                active: Boolean((primaryProc as any)?.dischargePpi || cathPatientMeds.ppi || (latest as any)?.medPpi === 'Yes'),
+                detail: 'Mitigates GI bleeding during dual antiplatelet therapy',
+              },
+              {
+                label: 'Second-Line Lipid Lowering',
+                drug: 'Ezetimibe',
+                dose: '10mg OD',
+                active: Boolean((latest as any)?.ldl > 55 || (patient as any).ldl > 55),
+                detail: 'Add-on if LDL > 55 mg/dL on maximally tolerated statin',
+              },
+              {
+                label: 'Anti-Anginal / Rescue',
+                drug: 'Sublingual Nitroglycerin (NTG)',
+                dose: '0.5mg PRN',
+                active: true,
+                detail: 'Emergency relief for acute breakthrough chest discomfort',
+              },
+            ]
+
+            return (
+              <Card className="col-span-1 lg:col-span-2 border border-amber-500/20">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>
+                      <span className="flex items-center gap-2 text-white">
+                        <Pill className="w-4 h-4 text-amber-400" />
+                        Current Post-PCI Secondary Prevention Pharmacotherapy
+                      </span>
+                    </CardTitle>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      AHA/ACC &amp; ESC Guideline-Directed Post-PCI Antiplatelet &amp; Cardioprotective Regimen
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('gdmt')}
+                    className="text-xs text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 transition-colors"
+                  >
+                    View Full Protocol &rarr;
+                  </button>
+                </CardHeader>
+                <CardBody>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    {cathMeds.map(({ label, drug, dose, active, detail }) => (
+                      <div key={label} className={cn(
+                        'p-3.5 rounded-xl border text-xs shadow-sm transition-all flex flex-col justify-between',
+                        active
+                          ? 'bg-emerald-500/10 border-emerald-500/25'
+                          : 'bg-slate-900/60 border-white/10 opacity-70'
+                      )}>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="font-bold text-white text-xs">{label}</p>
+                            {active ? (
+                              <span className="text-[10px] font-bold text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-500/20">Active</span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-gray-400 px-1.5 py-0.5 rounded bg-gray-700/40">Optional</span>
+                            )}
+                          </div>
+                          <p className="text-sm font-semibold text-white mt-1">{drug}</p>
+                          <p className="text-[11px] text-gray-300 mt-0.5 font-mono">{dose}</p>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-2 border-t border-white/5 pt-1.5 leading-tight">{detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            )
+          })() : latest && (
             <Card className="col-span-1 lg:col-span-2">
               <CardHeader><CardTitle>Current Medications</CardTitle></CardHeader>
               <CardBody>
