@@ -3,19 +3,37 @@ import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { usePathname, useRouter } from 'next/navigation'
+import { cn } from '@/lib/utils'
 
 interface AppLayoutProps {
   children: React.ReactNode
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  // On desktop, default to open; on mobile, default to collapsed
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const pathname = usePathname()
   const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
 
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
+  const toggleSidebar = () => setSidebarOpen(prev => !prev)
   const closeSidebar = () => setSidebarOpen(false)
+
+  // Auto-collapse sidebar on mobile screen size on initial load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.innerWidth < 1024) {
+        setSidebarOpen(false)
+      }
+    }
+  }, [])
+
+  // Auto-collapse sidebar on route change for smaller screens
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+  }, [pathname])
 
   useEffect(() => {
     const auth = localStorage.getItem('cardiokonnect_auth') === 'true'
@@ -48,11 +66,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a1931] text-gray-300">
-      {/* Sidebar Overlay backdrop (mobile/tablet only) */}
+      {/* Backdrop overlay (mobile/tablet) */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-45 lg:hidden transition-opacity" 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300" 
           onClick={closeSidebar}
+          aria-label="Close sidebar overlay"
         />
       )}
 
@@ -60,11 +79,25 @@ export default function AppLayout({ children }: AppLayoutProps) {
         {/* Sidebar Component */}
         <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
-        {/* Main Workspace Area */}
-        <div className="flex-1 flex flex-col min-w-0 transition-all duration-300 lg:pl-[260px]">
-          <TopBar onToggleSidebar={toggleSidebar} />
+        {/* Main Workspace Area — dynamically adjusts padding based on sidebarOpen */}
+        <div className={cn(
+          "flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out",
+          sidebarOpen ? "lg:pl-[260px]" : "lg:pl-0"
+        )}>
+          <TopBar 
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={toggleSidebar} 
+          />
           
-          <main className="flex-1 p-4 md:p-6 overflow-auto min-h-[calc(100vh-64px)]">
+          <main 
+            onClick={() => {
+              // If sidebar is open on mobile/tablet, clicking anywhere in main screen collapses it
+              if (typeof window !== 'undefined' && window.innerWidth < 1024 && sidebarOpen) {
+                closeSidebar()
+              }
+            }}
+            className="flex-1 p-4 md:p-6 overflow-auto min-h-[calc(100vh-64px)]"
+          >
             {children}
           </main>
         </div>
@@ -72,3 +105,4 @@ export default function AppLayout({ children }: AppLayoutProps) {
     </div>
   )
 }
+

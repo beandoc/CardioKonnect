@@ -43,10 +43,11 @@ const BREADCRUMBS: Record<string, string[]> = {
 }
 
 interface TopBarProps {
+  sidebarOpen?: boolean
   onToggleSidebar?: () => void
 }
 
-export default function TopBar({ onToggleSidebar }: TopBarProps) {
+export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarProps) {
   const path = usePathname()
   const router = useRouter()
   const [time, setTime] = useState<Date | null>(null)
@@ -94,13 +95,14 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
 
   return (
     <header className="topbar flex items-center justify-between px-4 md:px-6 gap-4">
-      {/* Left — breadcrumb */}
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Left — breadcrumb & sidebar toggle */}
+      <div className="flex items-center gap-2.5 min-w-0">
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
-            className="p-2 -ml-2 rounded-xl flex items-center justify-center btn-ghost lg:hidden"
-            aria-label="Open sidebar"
+            className="p-2 -ml-2 rounded-xl flex items-center justify-center btn-ghost text-gray-300 hover:text-white transition-colors"
+            title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
           >
             <Menu className="w-5 h-5 text-gray-300" />
           </button>

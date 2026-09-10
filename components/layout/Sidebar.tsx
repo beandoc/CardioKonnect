@@ -86,7 +86,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
   return (
     <aside role="complementary" aria-label="Main sidebar" className={cn(
-      "sidebar fixed top-0 left-0 bottom-0 flex flex-col z-50 w-[260px] bg-[#0f2444] transition-transform duration-300 ease-in-out lg:translate-x-0",
+      "sidebar fixed top-0 left-0 bottom-0 flex flex-col z-50 w-[260px] bg-[#0f2444] transition-transform duration-300 ease-in-out border-r border-blue-500/15 shadow-xl",
       isOpen ? "translate-x-0" : "-translate-x-full"
     )}>
       {/* ── Logo / Branding ── */}
@@ -108,10 +108,11 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           {onClose && (
             <button 
               onClick={onClose} 
-              className="lg:hidden p-1.5 rounded-xl btn-ghost flex items-center justify-center text-gray-400 hover:text-white"
-              aria-label="Close sidebar"
+              className="p-1.5 rounded-xl btn-ghost flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
