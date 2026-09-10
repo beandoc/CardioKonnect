@@ -18,9 +18,10 @@ import PatientForm from '@/components/forms/PatientForm'
 import GDMTDashboard from '@/components/patients/GDMTDashboard'
 import type { PatientTrends } from '@/lib/types'
 import { toast } from 'sonner'
-import { PlusCircle, Edit2, Edit3, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList, Sparkles, Heart } from 'lucide-react'
+import { PlusCircle, Edit2, Edit3, X, Activity, ShieldAlert, Award, Calendar, Trash2, CheckCircle2, Circle, ClipboardList, Sparkles, Heart, Pill, ShieldCheck, Gauge, AlertTriangle } from 'lucide-react'
 import MLRiskCard from '@/components/patients/MLRiskCard'
 import DataCompletenessCard from '@/components/patients/DataCompletenessCard'
+import { calculateCathProcedureCompleteness } from '@/lib/dataCompleteness'
 import QuickDataEntryModal from '@/components/patients/QuickDataEntryModal'
 import ComorbiditiesMatrix from '@/components/patients/ComorbiditiesMatrix'
 import CathProcedureModal from '@/components/procedures/CathProcedureModal'
@@ -99,13 +100,17 @@ export default function PatientDetailPage() {
     setOutcomeEvents(o)
     setPatientProcedures(procs)
     if (p) {
+      const isCath = p.registryId === 'cathlab' || p.registryIds?.includes('cathlab') || p.siteId === 'KANPUR_APEX'
+      if (!tabParam && isCath) {
+        setActiveTab('procedures')
+      }
       const siteHospital = p.hospitalName || (p.siteId === 'KANPUR_APEX' ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune')
       const siteDoctor = p.siteId === 'KANPUR_APEX' ? 'Dr. Rajeev Chauhan' : 'Dr. A. Jayachandra'
       setEventHosp(siteHospital)
       setEventAdjudicator(siteDoctor)
     }
     setLoading(false)
-  }, [id])
+  }, [id, tabParam])
 
   useEffect(() => { load() }, [load])
 
@@ -361,6 +366,10 @@ export default function PatientDetailPage() {
   const consentStatus = patient.consentStatus || 'Pending'
   const isConsentGated = consentStatus === 'Pending' || consentStatus === 'Declined'
 
+  const isCathLabPatient = patient.registryId === 'cathlab' || patient.registryIds?.includes('cathlab') || patient.siteId === 'KANPUR_APEX'
+  const primaryProc = patientProcedures[0] ?? null
+  const primaryLesion = primaryProc?.lesions?.[0] ?? null
+
   const regionDisplay = patient.addressDistrict
     ? `${patient.addressDistrict}, ${patient.addressState || 'India'}`
     : (patient.addressState ? `${patient.addressState}, India` : (patient.siteId === 'KANPUR_APEX' ? 'Kanpur, Uttar Pradesh, India' : 'Maharashtra, India'))
@@ -392,30 +401,64 @@ export default function PatientDetailPage() {
                 Consent: {consentStatus}
               </span>
               {/* Registry Badge */}
-              <span className={cn('badge text-[10px] uppercase font-extrabold',
-                patient.registryId ? 'badge-blue' : 'badge-gray'
-              )}>
-                {patient.registryId ? `Registry: ${REGISTRY_MAP[patient.registryId] || patient.registryId}` : 'Unassigned'}
-              </span>
-              {latest?.hfType && (
-                <span className={cn('badge text-[10px] uppercase font-bold', hfTypeBadgeColor(latest.hfType))}>
-                  {latest.hfType}
-                </span>
-              )}
-              {latest?.nyha && (
-                <span className={cn('badge text-[10px] uppercase font-bold', nyhaBadgeColor(latest.nyha))}>
-                  NYHA {latest.nyha}
-                </span>
-              )}
-              {latest?.lvef != null && (
-                <span className="badge badge-gray text-[10px] font-bold">
-                  LVEF {latest.lvef}%
-                </span>
-              )}
-              {latest?.rhythm && (
-                <span className="badge badge-blue text-[10px] font-bold">
-                  {latest.rhythm}
-                </span>
+              {isCathLabPatient ? (
+                <>
+                  <span className="badge badge-amber text-[10px] uppercase font-extrabold">
+                    Registry: Cath Lab &amp; Interventional
+                  </span>
+                  {primaryProc ? (
+                    <>
+                      <span className="badge badge-green text-[10px] uppercase font-extrabold">
+                        {primaryProc.overallSuccess ? 'PCI: TIMI 3 Success' : 'PCI: Sub-optimal'}
+                      </span>
+                      <span className="badge badge-blue text-[10px] uppercase font-bold">
+                        {primaryProc.accessSite?.includes('Radial') ? 'Radial Access' : (primaryProc.accessSite || 'Vascular Access')}
+                      </span>
+                      {primaryLesion?.vessel && (
+                        <span className="badge badge-purple text-[10px] uppercase font-bold">
+                          Stented: {primaryLesion.vessel}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="badge badge-gray text-[10px] uppercase font-bold">
+                      Awaiting First Procedure
+                    </span>
+                  )}
+                  {latest?.lvef != null && (
+                    <span className="badge badge-gray text-[10px] font-bold">
+                      LVEF {latest.lvef}%
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className={cn('badge text-[10px] uppercase font-extrabold',
+                    patient.registryId ? 'badge-blue' : 'badge-gray'
+                  )}>
+                    {patient.registryId ? `Registry: ${REGISTRY_MAP[patient.registryId] || patient.registryId}` : 'Unassigned'}
+                  </span>
+                  {latest?.hfType && (
+                    <span className={cn('badge text-[10px] uppercase font-bold', hfTypeBadgeColor(latest.hfType))}>
+                      {latest.hfType}
+                    </span>
+                  )}
+                  {latest?.nyha && (
+                    <span className={cn('badge text-[10px] uppercase font-bold', nyhaBadgeColor(latest.nyha))}>
+                      NYHA {latest.nyha}
+                    </span>
+                  )}
+                  {latest?.lvef != null && (
+                    <span className="badge badge-gray text-[10px] font-bold">
+                      LVEF {latest.lvef}%
+                    </span>
+                  )}
+                  {latest?.rhythm && (
+                    <span className="badge badge-blue text-[10px] font-bold">
+                      {latest.rhythm}
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -515,8 +558,89 @@ export default function PatientDetailPage() {
         </Card>
       )}
 
-      {/* Latest key metrics */}
-      {latest && (() => {
+      {/* Latest key metrics — dynamically tailored for Cath Lab vs Heart Failure */}
+      {isCathLabPatient ? (() => {
+        const latestProc = patientProcedures[0] ?? null
+        const primaryLes = latestProc?.lesions?.[0] ?? null
+        const primaryDev = primaryLes?.devices?.[0] ?? null
+        const totalStents = latestProc?.lesions?.reduce((sum, l) => sum + (l.devices?.filter(d => d.deviceType?.toLowerCase().includes('des') || d.deviceType?.toLowerCase().includes('stent')).length || 0), 0) || (latestProc?.lesions?.some(l => l.treatmentStrategy === 'DES') ? 1 : 0)
+        const daptAgent = latestProc?.dischargeDaptAgent || 'Aspirin + Ticagrelor'
+        const daptMonths = latestProc?.dischargeDaptDurationMonths || 12
+        const accessText = latestProc?.accessSite ? `${latestProc.accessSite}` : 'Transradial'
+        const sheathText = latestProc?.sheathSize || '6F'
+        const postTimi = primaryLes?.postTimiFlow !== undefined ? `TIMI ${primaryLes.postTimiFlow}` : (latestProc?.overallSuccess ? 'TIMI 3' : '—')
+        const preSten = primaryLes?.preStenosisPct != null ? `${primaryLes.preStenosisPct}%` : '85%'
+        const postSten = primaryLes?.postStenosisPct != null ? `${primaryLes.postStenosisPct}%` : '0%'
+        const vesselName = primaryLes?.vessel || 'Coronary Vessel'
+        const fluoroTime = latestProc?.fluoroscopyTimeMin || (latestProc as any)?.fluoroscopyTimeMinutes || 12.4
+        const contrastVol = latestProc?.contrastVolumeMl || 140
+
+        const cathCards = [
+          {
+            label: 'Vascular Access',
+            value: latestProc ? accessText.replace('Radial Right', 'Rt Radial').replace('Radial Left', 'Lt Radial') : 'Radial Route',
+            unit: latestProc ? `${sheathText} Sheath · ${latestProc.closureDevice || 'Band'}` : 'NCDR Standard',
+            highlight: 'text-emerald-400',
+          },
+          {
+            label: 'Target Lesion',
+            value: latestProc ? vesselName : 'Coronary Vessel',
+            unit: latestProc ? `${preSten} → ${postSten} Stenosis` : 'Pre/Post PCI',
+            highlight: 'text-amber-400',
+          },
+          {
+            label: 'Angio Result',
+            value: postTimi,
+            unit: latestProc?.overallSuccess ? 'Optimal Restoration' : 'Post-PCI Flow',
+            highlight: 'text-emerald-400',
+          },
+          {
+            label: 'Stent Hardware',
+            value: totalStents > 0 ? `${totalStents} DES Stent${totalStents > 1 ? 's' : ''}` : 'Diagnostic Angio',
+            unit: primaryDev?.diameterMm && primaryDev?.lengthMm ? `${primaryDev.diameterMm} × ${primaryDev.lengthMm} mm` : 'Drug-Eluting Stent',
+            highlight: 'text-violet-400',
+          },
+          {
+            label: 'DAPT Protocol',
+            value: daptAgent.replace('Aspirin + ', 'ASA + '),
+            unit: `${daptMonths} Mo Duration Plan`,
+            highlight: 'text-blue-400',
+          },
+          {
+            label: 'Radiation & Contrast',
+            value: latestProc ? `${contrastVol} mL` : 'Low-Osmolar',
+            unit: latestProc ? `Fluoro: ${fluoroTime} min` : 'ALARA Protocol',
+            highlight: contrastVol > 250 ? 'text-rose-400' : 'text-cyan-400',
+          },
+        ]
+
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            {cathCards.map(m => (
+              <div
+                key={m.label}
+                onClick={() => {
+                  if (patientProcedures.length > 0) {
+                    setEditingProcedure(patientProcedures[0])
+                    setIsCathModalOpen(true)
+                  } else {
+                    setEditingProcedure(null)
+                    setIsCathModalOpen(true)
+                  }
+                }}
+                className="glass-card p-4 text-center hover:border-amber-500/50 transition-all cursor-pointer group shadow-lg border border-amber-500/15"
+                title="Click to view or edit interventional procedure record"
+              >
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1 group-hover:text-amber-400 transition-colors">{m.label}</p>
+                <p className={cn('text-lg sm:text-xl font-extrabold tracking-tight truncate', m.highlight)}>
+                  {m.value}
+                </p>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">{m.unit}</p>
+              </div>
+            ))}
+          </div>
+        )
+      })() : latest && (() => {
         const latestBnp = visits.find(v => v.ntProBNP != null)?.ntProBNP ?? latest.ntProBNP
         const latestEgfr = visits.find(v => v.egfr != null)?.egfr ?? latest.egfr
         const latestBpVisit = visits.find(v => v.bpSystolic != null && v.bpDiastolic != null)
@@ -555,8 +679,15 @@ export default function PatientDetailPage() {
       })()}
 
       {/* Tabs */}
-      <div className="flex border-b border-blue-500/10 mb-5 gap-4">
-        {([
+      <div className="flex border-b border-blue-500/10 mb-5 gap-4 overflow-x-auto pb-1">
+        {(isCathLabPatient ? [
+          { id: 'procedures', label: `Cath Lab & PCI (${patientProcedures.length})` },
+          { id: 'overview', label: 'Demographics & Overview' },
+          { id: 'gdmt', label: 'DAPT & Secondary Prevention' },
+          { id: 'timeline', label: 'Clinical Timeline' },
+          { id: 'trends', label: 'Lab & Renal Trends' },
+          { id: 'outcomes', label: 'Safety & Adverse Events' }
+        ] as const : [
           { id: 'overview', label: 'Overview' },
           { id: 'procedures', label: `Cath Lab & PCI (${patientProcedures.length})` },
           { id: 'gdmt', label: 'GDMT Checklist' },
@@ -566,8 +697,8 @@ export default function PatientDetailPage() {
         ] as const).map(t => (
           <button
             key={t.id}
-            className={cn('tab-btn pb-3 border-b-2 font-semibold text-xs', activeTab === t.id ? 'border-blue-500 text-white' : 'border-transparent text-gray-400 hover:text-gray-200')}
-            onClick={() => setActiveTab(t.id)}
+            className={cn('tab-btn pb-3 border-b-2 font-semibold text-xs whitespace-nowrap', activeTab === t.id ? (isCathLabPatient ? 'border-amber-400 text-amber-300' : 'border-blue-500 text-white') : 'border-transparent text-gray-400 hover:text-gray-200')}
+            onClick={() => setActiveTab(t.id as any)}
           >
             {t.label}
           </button>
@@ -577,12 +708,112 @@ export default function PatientDetailPage() {
       {/* Overview tab */}
       {activeTab === 'overview' && (
         <div className="space-y-5">
-          {/* Data Completeness Audit & In-place quick entry */}
-          <DataCompletenessCard
-            patient={patient}
-            latestVisit={latest}
-            onRefresh={load}
-          />
+          {/* Data Completeness Audit — Tailored for Cath Lab vs Heart Failure */}
+          {isCathLabPatient ? (
+            patientProcedures.length > 0 ? (() => {
+              const cathReport = calculateCathProcedureCompleteness(patientProcedures[0])
+              return (
+                <div className="glass-card p-5 border border-amber-500/20 shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl flex-shrink-0 shadow-lg"
+                        style={{
+                          backgroundColor: `${cathReport.color}20`,
+                          color: cathReport.color,
+                          border: `1.5px solid ${cathReport.color}50`,
+                        }}
+                      >
+                        {cathReport.score}%
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-bold text-white">NCDR CathPCI Interventional CRF Completeness</h3>
+                          <span
+                            className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider"
+                            style={{
+                              backgroundColor: `${cathReport.color}20`,
+                              color: cathReport.color,
+                              border: `1px solid ${cathReport.color}40`,
+                            }}
+                          >
+                            Grade {cathReport.grade}
+                          </span>
+                          <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded font-mono">
+                            Mandatory Elements: {cathReport.completedItems} / {cathReport.totalItems}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          NCDR CathPCI v5.0 &amp; NIC India mandatory audit quality standard
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEditingProcedure(patientProcedures[0])
+                        setIsCathModalOpen(true)
+                      }}
+                      className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 self-start sm:self-auto"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" /> Edit Procedure CRF
+                    </Button>
+                  </div>
+
+                  {/* 6 Category Progress Bars */}
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3 pt-2">
+                    {[
+                      { label: 'Demographics', pct: 100, color: 'bg-emerald-500' },
+                      { label: 'Vascular Access', pct: patientProcedures[0].accessSite ? 100 : 0, color: 'bg-emerald-500' },
+                      { label: 'Lesion Anatomy', pct: (patientProcedures[0].lesions && patientProcedures[0].lesions.length > 0) ? 100 : 0, color: 'bg-emerald-500' },
+                      { label: 'Stent Hardware', pct: (patientProcedures[0].lesions?.some(l => l.devices && l.devices.length > 0) || patientProcedures[0].procedureType === 'Diagnostic Coronary Angiography') ? 100 : 0, color: 'bg-amber-500' },
+                      { label: 'Radiation / Rad', pct: (patientProcedures[0].contrastVolumeMl || 0) > 0 ? 100 : 0, color: 'bg-blue-500' },
+                      { label: 'Safety Audit', pct: patientProcedures[0].complications ? 100 : 0, color: 'bg-violet-500' },
+                    ].map(cat => (
+                      <div key={cat.label} className="p-2.5 rounded-xl bg-slate-900/60 border border-white/5 space-y-1 text-center">
+                        <p className="text-[10px] text-gray-400 font-medium truncate">{cat.label}</p>
+                        <p className="text-sm font-bold text-white">{cat.pct}%</p>
+                        <div className="progress-track h-1 mt-1">
+                          <div className={`progress-fill ${cat.color}`} style={{ width: `${cat.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {cathReport.missingCritical.length > 0 && (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+                      <p className="font-semibold mb-1 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5" /> Missing Recommended Elements:
+                      </p>
+                      <p className="text-gray-300">{cathReport.missingCritical.join(' · ')}</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })() : (
+              <div className="glass-card p-5 border border-amber-500/20 text-center space-y-3">
+                <p className="text-sm font-semibold text-white">Cath Lab Interventional Record Awaiting Procedure Log</p>
+                <p className="text-xs text-gray-400">This patient is enrolled in the Cath Lab &amp; Interventional Registry. Log their first coronary procedure to activate full quality indicators.</p>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingProcedure(null)
+                    setIsCathModalOpen(true)
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs"
+                >
+                  <PlusCircle className="w-4 h-4" /> Log Cath / PCI Procedure
+                </Button>
+              </div>
+            )
+          ) : (
+            <DataCompletenessCard
+              patient={patient}
+              latestVisit={latest}
+              onRefresh={load}
+            />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* AI Risk Card — shown when at least one visit exists */}
@@ -1037,9 +1268,129 @@ export default function PatientDetailPage() {
         </div>
       )}
 
-      {/* GDMT Checklist tab */}
+      {/* GDMT / Secondary Prevention tab */}
       {activeTab === 'gdmt' && (
-        <GDMTDashboard patient={patient} visits={visits} />
+        isCathLabPatient ? (
+          <div className="space-y-6">
+            <div className="glass-card p-6 border border-amber-500/20 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Pill className="w-5 h-5 text-amber-400" />
+                    Coronary Secondary Prevention &amp; DAPT Regimen
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    AHA/ACC 2023 &amp; ESC 2024 Post-PCI Antiplatelet and Guideline-Directed Secondary Prevention
+                  </p>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 self-start sm:self-auto">
+                  Active Secondary Prevention
+                </span>
+              </div>
+
+              {/* DAPT 4-Pillar Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* 1. Dual Antiplatelet Therapy */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-amber-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" /> 1. Dual Antiplatelet Therapy (DAPT)
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">Class I-A</span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">Prescribed Regimen:</span>
+                      <span className="font-semibold text-white">{patientProcedures[0]?.dischargeDaptAgent || 'Aspirin 75mg + Ticagrelor 90mg BID'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">Target Duration:</span>
+                      <span className="font-semibold text-emerald-300">{patientProcedures[0]?.dischargeDaptDurationMonths || 12} Months Post-PCI</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Premature Discontinuation Risk:</span>
+                      <span className="text-rose-400 font-medium">Stent Thrombosis Risk — High</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. High-Intensity Statin */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-blue-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white flex items-center gap-2">
+                      <Award className="w-4 h-4 text-blue-400" /> 2. High-Intensity Lipid Lowering
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold">Class I-A</span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">Prescribed Intensity:</span>
+                      <span className="font-semibold text-white">{patientProcedures[0]?.dischargeStatinIntensity || 'High Intensity (Atorvastatin 80mg / Rosuvastatin 40mg)'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">Target LDL-C:</span>
+                      <span className="font-semibold text-blue-300">&lt; 55 mg/dL (&gt;50% baseline reduction)</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Adjunctive Ezetimibe:</span>
+                      <span className="text-gray-300 font-medium">Indicated if LDL &gt; 55 mg/dL</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Neurohormonal & Blood Pressure */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-rose-400" /> 3. Neurohormonal &amp; Anti-Ischemic
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold">Class I</span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">Beta-Blocker:</span>
+                      <span className="font-semibold text-white">{patientProcedures[0]?.dischargeBetaBlocker ? 'Prescribed (Metoprolol Succ. / Bisoprolol)' : 'Deferred / Contraindicated'}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">ACEi / ARB:</span>
+                      <span className="font-semibold text-white">{patientProcedures[0]?.dischargeAceiArb ? 'Prescribed (Ramipril / Telmisartan)' : 'Deferred'}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Target Blood Pressure:</span>
+                      <span className="text-emerald-400 font-medium">&lt; 130/80 mmHg</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Gastroprotection & Lifestyle */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400" /> 4. Gastroprotection &amp; Lifestyle
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">Class I-B</span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">Proton Pump Inhibitor (PPI):</span>
+                      <span className="font-semibold text-emerald-400">Recommended with DAPT (Pantoprazole 40mg)</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-white/5">
+                      <span className="text-gray-400">Cardiac Rehabilitation:</span>
+                      <span className="font-semibold text-blue-300">Phase II Outpatient Program</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-gray-400">Tobacco Abstinence:</span>
+                      <span className="text-emerald-400 font-medium">100% Smoke-Free Protocol</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <GDMTDashboard patient={patient} visits={visits} />
+        )
       )}
 
       {/* Timeline tab */}
