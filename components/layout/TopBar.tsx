@@ -66,7 +66,7 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
   const [searchQuery, setSearchQuery] = useState('')
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const switcherRef = useRef<HTMLDivElement>(null)
-  const { user, logout } = useAppUser()
+  const { user, setUser, allUsers, logout } = useAppUser()
 
   useEffect(() => {
     setTime(new Date())
@@ -262,6 +262,46 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
                 <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] flex items-center gap-2">
                   <Shield className="w-4 h-4 flex-shrink-0 text-emerald-400" />
                   <span className="leading-tight">Discrete Hospital Registry: Patient data strictly isolated per institutional governance.</span>
+                </div>
+
+                {/* Switch Investigator / Multi-Center Fast Switcher */}
+                <div className="pt-2 border-t border-white/[0.06] space-y-1">
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider px-1">
+                    Switch Active Investigator
+                  </p>
+                  {allUsers.map((u) => {
+                    const isSelected = u.id === user?.id
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          setUser(u)
+                          toast.success(`Active Investigator switched to ${u.name}`)
+                          setSwitcherOpen(false)
+                        }}
+                        className={cn(
+                          "w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-all",
+                          isSelected
+                            ? "bg-blue-600/20 text-blue-300 font-medium border border-blue-500/30 shadow-xs"
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
+                        )}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-xs"
+                            style={{ background: u.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
+                          >
+                            {u.shortName}
+                          </span>
+                          <span className="truncate max-w-[130px] text-left">{u.name}</span>
+                        </span>
+                        <span className="text-[10px] font-mono text-gray-400">
+                          {u.siteId === 'KANPUR_APEX' ? 'Apex Kanpur' : 'AICTS Pune'}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 

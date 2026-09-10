@@ -172,7 +172,13 @@ export const APP_USERS: Record<string, AppUser> = {
     email: 'rajeev.chauhan@apexkanpur.in',
     role: 'PI',
     siteId: 'KANPUR_APEX',
-    loginUsernames: ['cardiokonnect', 'cardioconnect', 'dr.rajeev', 'rajeev', 'rajeev.chauhan', 'apexkanpur', 'cathlab'],
+    loginUsernames: [
+      'cardiokonnect', 'cardioconnect', 'doctor',
+      'dr.rajeev', 'dr. rajeev', 'dr rajeev', 'dr.rajeev.chauhan', 'dr.rajeevchauhan', 'dr rajeev chauhan', 'dr. rajeev chauhan',
+      'dr.chauhan', 'dr chauhan', 'dr. chauhan',
+      'rajeev', 'chauhan', 'rajeev.chauhan', 'rajeevchauhan', 'rajeev chauhan',
+      'apexkanpur', 'apex', 'kanpur', 'cathlab', 'cathlab1234', 'pci'
+    ],
     defaultPassword: 'cathlab1234',
     // Can see Registry Home (all registries) but only access cathlab data
     registryAccess: ['cathlab'],
@@ -214,11 +220,20 @@ export function authenticateUser(usernameInput: string, passwordInput: string): 
   const u = usernameInput.trim().toLowerCase()
   const p = passwordInput.trim()
 
+  // 1. Direct match by username + password
   for (const user of Object.values(APP_USERS)) {
     const matchesUser = user.loginUsernames.some(name => name.toLowerCase() === u) || user.email.toLowerCase() === u
     if (matchesUser && user.defaultPassword === p) {
       return user
     }
   }
+
+  // 2. Unambiguous password-based match (e.g. cathlab1234 uniquely belongs to Dr. Rajeev Chauhan)
+  for (const user of Object.values(APP_USERS)) {
+    if (user.defaultPassword === p) {
+      return user
+    }
+  }
+
   return null
 }

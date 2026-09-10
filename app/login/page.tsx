@@ -3,10 +3,12 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ShieldCheck, Lock, User, AlertCircle, HeartPulse, RefreshCw, ArrowRight, Shield } from 'lucide-react'
 import { toast } from 'sonner'
-import { authenticateUser } from '@/lib/appConfig'
+import { authenticateUser, APP_USERS } from '@/lib/appConfig'
+import { useAppUser } from '@/context/AppUserContext'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { setUser } = useAppUser()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -42,9 +44,8 @@ export default function LoginPage() {
     // 1. Check DEO special case
     const isDeoDirect = (trimmedUser.toLowerCase() === 'dataentry' || trimmedUser.toLowerCase() === 'deo') && trimmedPass === 'deo1234'
     if (isDeoDirect) {
-      localStorage.setItem('cardiokonnect_auth', 'true')
+      setUser(APP_USERS['DR_ARSHDEEP'])
       localStorage.setItem('cardiokonnect_role', 'deo')
-      localStorage.setItem('cardio_active_user_id', 'DR_ARSHDEEP')
       toast.success('Access Granted — Data Entry Operator Portal', {
         style: {
           background: 'rgba(6, 182, 212, 0.95)',
@@ -60,8 +61,7 @@ export default function LoginPage() {
     const authenticated = authenticateUser(trimmedUser, trimmedPass)
 
     if (authenticated) {
-      localStorage.setItem('cardiokonnect_auth', 'true')
-      localStorage.setItem('cardio_active_user_id', authenticated.id)
+      setUser(authenticated)
       localStorage.setItem('cardiokonnect_role', authenticated.role === 'DEO' ? 'deo' : 'doctor')
 
       toast.success(`Access Granted — Welcome, ${authenticated.name}`, {

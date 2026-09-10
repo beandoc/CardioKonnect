@@ -43,17 +43,23 @@ export function AppUserProvider({ children }: { children: ReactNode }) {
     return APP_USERS[DEFAULT_USER_ID]
   })
 
-  // Hydrate from localStorage after mount
+  // Hydrate from localStorage after mount and keep in sync
   useEffect(() => {
-    try {
-      const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored && APP_USERS[stored]) {
-        setUserState(APP_USERS[stored])
-      } else if (isAuth) {
-        setUserState(APP_USERS[DEFAULT_USER_ID])
-      }
-    } catch {}
+    const syncFromStorage = () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY)
+        const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
+        if (stored && APP_USERS[stored]) {
+          setUserState((prev) => (prev?.id === stored ? prev : APP_USERS[stored]))
+        } else if (isAuth) {
+          setUserState((prev) => (prev?.id === DEFAULT_USER_ID ? prev : APP_USERS[DEFAULT_USER_ID]))
+        }
+      } catch {}
+    }
+
+    syncFromStorage()
+    window.addEventListener('storage', syncFromStorage)
+    return () => window.removeEventListener('storage', syncFromStorage)
   }, [])
 
   const setUser = useCallback((u: AppUser) => {
