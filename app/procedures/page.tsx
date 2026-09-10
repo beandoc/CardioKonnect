@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
-import { cn, formatDate, initials } from '@/lib/utils'
+import { cn, formatDate, initials, getAge, fullName } from '@/lib/utils'
 import Button from '@/components/ui/Button'
 import CathProcedureModal from '@/components/procedures/CathProcedureModal'
 
@@ -83,8 +83,8 @@ export default function ProceduralAuditPage() {
         isCathProcedure: true,
         cathData: proc,
         mrn: patient?.mrn || '—',
-        patientName: patient ? `${patient.firstName} ${patient.lastName}` : `Patient #${proc.patientId.slice(0, 6)}`,
-        age: patient?.dob ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) : (patient?.age ?? '—'),
+        patientName: patient ? fullName(patient) : `Patient #${proc.patientId.slice(0, 6)}`,
+        age: (patient?.dob ? getAge(patient.dob) : null) ?? (patient?.age ?? '—'),
         sex: patient?.sex ?? '—',
         category: 'coronary' as CategoryId,
         procedureName: `${proc.procedureType} (${proc.accessSite})`,
@@ -105,8 +105,8 @@ export default function ProceduralAuditPage() {
         patientId: p.id,
         isCathProcedure: false,
         mrn: p.mrn || '—',
-        patientName: `${p.firstName} ${p.lastName}`,
-        age: p.age ?? '—',
+        patientName: fullName(p),
+        age: (p.dob ? getAge(p.dob) : null) ?? p.age ?? '—',
         sex: p.sex ?? '—',
         category: 'device' as CategoryId,
         procedureName: p.crtPresence ? 'CRT-D Cardiac Resynchronization' : 'ICD Primary Prevention Device',

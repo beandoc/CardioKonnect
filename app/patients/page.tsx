@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Users, Search, PlusCircle, UserX, Activity, Database } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { cn, formatDate, initials, nyhaBadgeColor, hfTypeBadgeColor, lvefColor } from '@/lib/utils'
+import { cn, formatDate, initials, nyhaBadgeColor, hfTypeBadgeColor, lvefColor, fullName } from '@/lib/utils'
 import { getPatients, updatePatient } from '@/lib/firestore'
 import type { Patient } from '@/lib/types'
 import { toast } from 'sonner'
@@ -50,7 +50,7 @@ function PatientList() {
 
   const filtered = useMemo(() => {
     return accessiblePatients.filter(p => {
-      const name = `${p.firstName} ${p.lastName}`.toLowerCase()
+      const name = fullName(p).toLowerCase()
       const email = (p.email || '').toLowerCase()
       const matchSearch = name.includes(search.toLowerCase()) || email.includes(search.toLowerCase())
       const matchStatus = statusFilter === 'All' || (p.status || 'Active') === statusFilter
@@ -182,7 +182,7 @@ function PatientList() {
                               </div>
                               <div>
                                 <Link href={`/patients/${p.id}`} className="font-semibold text-white hover:text-blue-400 hover:underline transition-all">
-                                  {p.firstName} {p.lastName}
+                                  {fullName(p)}
                                 </Link>
                                 <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono">
                                   <span>{p.mrn || 'MRN: —'}</span>

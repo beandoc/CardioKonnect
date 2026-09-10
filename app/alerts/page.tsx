@@ -4,6 +4,7 @@ import { Bell, ShieldAlert, Sparkles, Filter, CheckCircle, Activity } from 'luci
 import Button from '@/components/ui/Button'
 import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
+import { fullName } from '@/lib/utils'
 
 interface AlertItem {
   id: string
@@ -50,7 +51,7 @@ export default function ClinicalAlertsPage() {
             return (!isNaN(currentTime) && currentTime > latestTime) ? currentVisit : latestVisit
           }, patientVisits[0])
 
-          const pName = `${p.firstName} ${p.lastName}`
+          const pName = fullName(p)
           const mrn = p.mrn || '—'
 
           // 1. NT-proBNP > 2000

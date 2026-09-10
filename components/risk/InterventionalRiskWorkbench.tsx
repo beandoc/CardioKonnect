@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
+import { cn, getAge } from '@/lib/utils'
 import {
   calculateGRACE2, calculateTIMIRiskSTEMI, calculateTIMIRiskNSTEMI,
   calculateCRUSADE, calculateARCHBR, calculatePRECISEDAPT, calculateACEF,
@@ -30,7 +30,7 @@ export default function InterventionalRiskWorkbench({ patient, visit }: Props) {
   // Patient base demographics
   const age = useMemo(() => {
     if (patient?.dob) {
-      return Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000))
+      return getAge(patient.dob) ?? patient?.age ?? 62
     }
     return patient?.age || 62
   }, [patient])

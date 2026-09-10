@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import Button from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { cn } from '@/lib/utils'
+import { cn, getAge, fullName } from '@/lib/utils'
 import { calculateMAGGIC, calculateH2FPEF, calculateHFAPEFF, calculateCHARM, calculateCHADSVASc, calculateHASBLED, calculateExploratoryPostPCIRiskIndex, calculateContrastNephropathyRisk, calculateReadmissionRisk, calculateASCVDRisk } from '@/lib/riskScores'
 import type { KillipClass, TIMIFlow, CulpritVessel, ASCVDRace } from '@/lib/riskScores'
 import { getPatient, getVisits, updateVisit, getPatients, getAllLatestVisits } from '@/lib/firestore'
@@ -311,12 +311,7 @@ function RiskCalculatorContent() {
     if (vt) setConnectedVisit(vt)
 
     // Age calculation
-    let age = 65
-    if (pt.dob) {
-      age = Math.floor((Date.now() - new Date(pt.dob).getTime()) / (365.25 * 86400000))
-    } else if (pt.age) {
-      age = pt.age
-    }
+    let age = (pt.dob ? getAge(pt.dob) : null) ?? pt.age ?? 65
 
     // BMI calculation
     let bmi = 24
@@ -882,10 +877,10 @@ function RiskCalculatorContent() {
                   <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Live Registry Data Loaded
                 </span>
                 <span className="font-bold text-white text-xs">
-                  {connectedPatient.firstName} {connectedPatient.lastName}
+                  {fullName(connectedPatient)}
                 </span>
                 <span className="text-gray-400 text-xs">
-                  ({connectedPatient.sex || 'Male'}, {connectedPatient.dob ? `${Math.floor((Date.now() - new Date(connectedPatient.dob).getTime()) / (365.25 * 86400000))} yrs` : `${connectedPatient.age || '—'} yrs`})
+                  ({connectedPatient.sex || 'Male'}, {connectedPatient.dob && getAge(connectedPatient.dob) !== null ? `${getAge(connectedPatient.dob)} yrs` : `${connectedPatient.age || '—'} yrs`})
                 </span>
               </div>
               <p className="text-[11px] text-cyan-300">

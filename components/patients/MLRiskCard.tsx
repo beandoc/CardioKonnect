@@ -5,7 +5,7 @@ import {
   Heart, Activity, TrendingUp, TrendingDown, ShieldCheck,
   AlertTriangle, Info, CheckCircle2, ChevronRight, Stethoscope, Sparkles
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, getAge } from '@/lib/utils'
 import { computeMLRiskProfile, evaluateGDMT, generateClinicalAlerts } from '@/lib/clinicalIntelligence'
 import { calculateMAGGIC } from '@/lib/riskScores'
 import type { Patient, Visit } from '@/lib/types'
@@ -29,7 +29,7 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
   const gdmt = useMemo(() => evaluateGDMT(patient, visit), [patient, visit])
   const alerts = useMemo(() => generateClinicalAlerts(patient, visit, allVisits), [patient, visit, allVisits])
 
-  const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) || patient.age || 65
+  const age = (patient.dob ? getAge(patient.dob) : null) || patient.age || 65
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
 
   // Calculate exact validated MAGGIC scores

@@ -5,7 +5,7 @@ import {
   Play, ArrowRight, CheckCircle2, XCircle, Plus, Pill, Activity,
   TrendingUp, TrendingDown, ChevronRight, User, ShieldCheck, Sliders, PlayCircle
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, getAge } from '@/lib/utils'
 import { getPatients, getVisits } from '@/lib/firestore'
 import type { Patient, Visit, MedEntry } from '@/lib/types'
 import {
@@ -174,7 +174,7 @@ export default function AIEnginePage() {
 
         // Update diagnostic parameters
         const pt = patientsRef.current.find(p => p.id === selectedPatientId)
-        const age = pt ? Math.floor((Date.now() - new Date(pt.dob).getTime()) / (365.25 * 86400000)) : 65
+        const age = pt?.dob ? (getAge(pt.dob) ?? pt.age ?? 65) : (pt?.age || 65)
         const sex = pt?.sex || 'Male'
         const weight = baseVisit.weight || 75
         const height = baseVisit.height || 170
@@ -378,7 +378,7 @@ export default function AIEnginePage() {
   const handleResetKaggle = () => {
     if (!selectedPatient || !baselineVisit) return
     const pt = selectedPatient
-    const age = Math.floor((Date.now() - new Date(pt.dob).getTime()) / (365.25 * 86400000))
+    const age = pt.dob ? (getAge(pt.dob) ?? pt.age ?? 60) : (pt.age || 60)
     const sex = pt.sex || 'Male'
     const comorbStr = (pt.comorbidities ?? []).join(' ').toLowerCase()
     
@@ -413,7 +413,7 @@ export default function AIEnginePage() {
   const handleResetDiagnostics = () => {
     if (!selectedPatient || !baselineVisit) return
     const pt = selectedPatient
-    const age = Math.floor((Date.now() - new Date(pt.dob).getTime()) / (365.25 * 86400000))
+    const age = pt.dob ? (getAge(pt.dob) ?? pt.age ?? 60) : (pt.age || 60)
     const sex = pt.sex || 'Male'
     const weight = baselineVisit.weight || 75
     const height = baselineVisit.height || 170

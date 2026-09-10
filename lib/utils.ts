@@ -63,6 +63,11 @@ export function safeTime(dateStr: string | undefined | null): number {
   return isNaN(t) ? 0 : t
 }
 
+export function fullName(patient: { firstName?: string; lastName?: string } | null | undefined): string {
+  if (!patient) return ''
+  return [patient.firstName, patient.lastName].filter(Boolean).join(' ').trim() || '—'
+}
+
 export function formatDate(iso: string | undefined, fmt = 'dd MMM yyyy'): string {
   if (!iso) return '—'
   try {

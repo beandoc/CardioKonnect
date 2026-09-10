@@ -6,6 +6,7 @@ import {
 import { db } from './firebase'
 import type { Patient, PatientInput, Visit, VisitInput, PopulationStats, PatientTrends, TrendPoint, RegistryField, OutcomeEvent, OutcomeEventInput, CathProcedure, CathProcedureInput } from './types'
 import { BUILT_IN_FIELDS } from './types'
+import { getAge } from './utils'
 
 // ─── Local Storage Fallback for Offline Demo Mode ────────────────────────────
 
@@ -409,8 +410,8 @@ export async function getPopulationStats(): Promise<PopulationStats> {
   patients.forEach((p) => {
     // Age
     if (p.dob) {
-      const age = Math.floor((Date.now() - new Date(p.dob).getTime()) / (365.25 * 86400000))
-      ageVals.push(age)
+      const age = getAge(p.dob)
+      if (age !== null) ageVals.push(age)
     }
 
     const patientVisits = visitsByPatient[p.id] || []

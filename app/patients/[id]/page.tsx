@@ -8,7 +8,7 @@ import {
   getCathProceduresByPatient, deleteProcedure
 } from '@/lib/firestore'
 import type { Patient, Visit, OutcomeEvent, OutcomeEventInput, EventType, CathProcedure } from '@/lib/types'
-import { getAge, formatDate, nyhaBadgeColor, hfTypeBadgeColor, lvefColor, initials, cn } from '@/lib/utils'
+import { getAge, formatDate, nyhaBadgeColor, hfTypeBadgeColor, lvefColor, initials, cn, fullName } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card'
 import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
 import Button from '@/components/ui/Button'
@@ -375,7 +375,7 @@ export default function PatientDetailPage() {
           </div>
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">
-              {patient.firstName} {patient.lastName}
+              {fullName(patient)}
             </h2>
             <p className="text-xs font-semibold text-gray-300">
               {(patient.mrn && patient.mrn !== '—') ? `HID: ${patient.mrn}` : (patient.srNo ? `Sr. No. ${patient.srNo}` : 'HID: —')} &bull; {age ? `${age} years` : '—'} &bull; {patient.sex} &bull; DOB: {formatDate(patient.dob)}
@@ -599,7 +599,7 @@ export default function PatientDetailPage() {
             <CardHeader><CardTitle>Demographics</CardTitle></CardHeader>
             <CardBody className="space-y-2 text-sm">
               {([
-                ['Full Name', `${patient.firstName} ${patient.lastName}`.trim() || '—'],
+                ['Full Name', fullName(patient)],
                 ['Hospital ID (HID)', (patient.mrn && patient.mrn !== '—') ? patient.mrn : '—'],
                 ['Serial No.', patient.srNo ? String(patient.srNo) : '—'],
                 ['ABHA ID', patient.abhaId || '—'],

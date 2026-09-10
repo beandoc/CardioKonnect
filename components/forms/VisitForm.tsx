@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
 import { RadioChipGroup, CheckChipGroup } from '@/components/ui/ChipGroup'
 import Button from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
+import { cn, getAge } from '@/lib/utils'
 import { getPatient } from '@/lib/firestore'
 import type { VisitInput, Patient } from '@/lib/types'
 import { calculateCHADSVASc, calculateHASBLED } from '@/lib/riskScores'
@@ -806,7 +806,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
     if (rhythm !== 'AF' && !hasAFComorbidity) return null
 
     // Determine age, sex, comorbidities from patient demographics
-    const age = patient?.dob ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) : 60
+    const age = (patient?.dob ? getAge(patient.dob) : null) ?? (patient?.age || 60)
     const sex = patient?.sex || 'Male'
     const hasHTN = (patient?.comorbidities || []).some(c => c.toLowerCase() === 'htn' || c.toLowerCase().includes('hypertension'))
     const hasDM = (patient?.comorbidities || []).some(c => c.toLowerCase() === 'dm' || c.toLowerCase().includes('diabetes'))
@@ -864,7 +864,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
   // Auto-calculate eGFR via 2021 CKD-EPI Formula
   useEffect(() => {
     if (creatinine && Number(creatinine) > 0) {
-      const age = patient?.dob ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) : (patient?.age || 60)
+      const age = (patient?.dob ? getAge(patient.dob) : null) ?? (patient?.age || 60)
       const sex = patient?.sex || 'Male'
       const res = calculateCKDEPI_eGFR({
         age,

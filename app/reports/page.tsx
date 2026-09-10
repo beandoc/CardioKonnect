@@ -4,7 +4,7 @@ import {
   FileText, Search, BarChart3, Heart, ShieldAlert, Award, Compass, Sparkles, Download, ArrowUpRight, TrendingUp, X, Printer, Calendar, AlertTriangle, Users, Database
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
+import { cn, fullName } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
@@ -889,7 +889,7 @@ export default function ReportsArchitecturePage() {
         return [
           p.srNo ?? '',
           `"${p.mrn || '—'}"`,
-          `"${p.firstName} ${p.lastName}"`,
+          `"${fullName(p)}"`,
           p.age ?? '',
           `"${p.sex || ''}"`,
           `"${p.dob || ''}"`,
@@ -942,7 +942,7 @@ export default function ReportsArchitecturePage() {
         const isQuad = vt?.raasi?.prescribed === 'Yes' && vt?.betaBlocker?.prescribed === 'Yes' && vt?.mra?.prescribed === 'Yes' && vt?.sglt2i?.prescribed === 'Yes' ? 'Active (4/4)' : 'Partial'
         return [
           p.srNo ?? '',
-          `"${p.firstName} ${p.lastName}"`,
+          `"${fullName(p)}"`,
           p.age ?? '',
           `"${p.sex || ''}"`,
           vt?.lvef ?? p.lvef ?? '',

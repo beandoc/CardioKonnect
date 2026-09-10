@@ -12,6 +12,7 @@
 
 import type { Patient, Visit } from './types'
 import { calculateMAGGIC, calculateCHADSVASc, calculateHASBLED as calcHASBLEDCanonical } from './riskScores'
+import { getAge } from './utils'
 import rfModel from '../scratch/heart_failure_rf.json'
 
 
@@ -114,7 +115,7 @@ export function calculateCHA2DS2VAScForPatient(
   patient: Pick<Patient, 'dob' | 'sex' | 'comorbidities'>,
   visit: Pick<Visit, 'rhythm' | 'bpSystolic' | 'hfType'>
 ): CHA2DS2VASCResult {
-  const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000))
+  const age = (patient.dob ? getAge(patient.dob) : null) || 65
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
 
   const result = calculateCHADSVASc({
@@ -154,7 +155,7 @@ export function calculateHASBLEDForPatient(
   patient: Pick<Patient, 'dob' | 'comorbidities'>,
   visit: Pick<Visit, 'bpSystolic' | 'egfr' | 'creatinine' | 'sodium'>
 ): HASBLEDResult {
-  const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000))
+  const age = (patient.dob ? getAge(patient.dob) : null) || 65
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
 
   const hasRenalImpairment = visit.egfr ? visit.egfr < 30 :
@@ -792,7 +793,7 @@ export function computeMLRiskProfile(
   visit: Visit,
   allVisits: Visit[]
 ): MLRiskProfile {
-  const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) || patient.age || 65
+  const age = (patient.dob ? getAge(patient.dob) : null) || patient.age || 65
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
   const isDM = Boolean(patient.comorbidDiabetes || comorbStr.includes('dm') || comorbStr.includes('diabetes'))
   const isCOPD = Boolean(patient.comorbidCOPD || comorbStr.includes('copd'))
@@ -1135,7 +1136,7 @@ export function predictKaggleHeartFailure(
   customCpk?: number
 ): HeartFailureKaggleResult {
   const dob = patient.dob || '1960-01-01';
-  const age = Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 86400000));
+  const age = getAge(dob) ?? 60;
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase();
 
   // 1. anaemia

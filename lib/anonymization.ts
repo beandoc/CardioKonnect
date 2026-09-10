@@ -7,6 +7,8 @@
  * and when exporting registry datasets for cross-center research.
  */
 
+import { getAge } from './utils'
+
 // Common regex patterns for personal identifiers
 const PHONE_REGEX = /(\+?91[\-\s]?)?[6-9]\d{9}|\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g
 const EMAIL_REGEX = /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g
@@ -50,7 +52,7 @@ export function sanitizePatientForEgress(patient: any): Record<string, any> {
 
   const anonPatient: Record<string, any> = {
     anonymousSubjectId: anonymizeId(patient.id || patient.mrn),
-    age: patient.dob ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000)) : patient.age,
+    age: (patient.dob ? getAge(patient.dob) : null) ?? patient.age,
     sex: patient.sex || 'Unknown',
     registryId: patient.registryId,
     hfType: patient.hfType,
