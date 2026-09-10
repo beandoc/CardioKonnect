@@ -129,6 +129,15 @@ export interface Patient {
   registryEnrollments?: Record<string, RegistryEnrollment> // keyed by registryId
   siteId?: string                                          // Primary hospital site (e.g. 'AICTS_PUNE' | 'KANPUR_APEX')
   hospitalName?: string
+  primaryDoctor?: string                                   // Attending / PI physician
+  attendingDoctor?: string                                 // Treating doctor
+  currentSmoker?: boolean                                  // Active smoking status
+  birthYear?: number                                       // Exact birth year when day/month not provided
+  dobPrecision?: 'exact' | 'year' | 'approximate'          // Precision of DOB
+  registrySerialId?: string                                // Synthetic registry code (e.g. AICTS-2026-0124)
+  importBatchId?: string                                   // Provenance: batch run identifier
+  sourceFile?: string                                      // Provenance: original source file name
+  sourceRow?: number                                       // Provenance: Excel 1-based row number
   transferredToSite?: string                              // Explicit inter-hospital transfer destination
   sharedWithSites?: string[]                               // Explicitly shared hospital sites
   sharedWithDoctors?: string[]                             // Explicitly shared doctor IDs or names
@@ -214,7 +223,7 @@ export interface Visit {
   id: string
   patientId: string
   visitDate: string    // ISO date
-  visitType: 'OPD' | 'Telemedicine' | 'Inpatient' | ''
+  visitType: 'OPD' | 'Telemedicine' | 'Inpatient' | 'Follow-up' | ''
   echoDoneToday?: boolean
   labsDrawnToday?: boolean
   icuDays?: number
@@ -396,8 +405,14 @@ export interface Visit {
 
   // ── Follow-up & Notes ────────────────────────────────────────────────────────
   followupDate?: string
-  followupType?: 'OPD' | 'Telemedicine' | 'Inpatient' | ''
+  followupType?: 'OPD' | 'Telemedicine' | 'Inpatient' | 'Follow-up' | ''
   clinicalNotes?: string
+
+  // Provenance & Audit
+  importBatchId?: string
+  sourceFile?: string
+  sourceRow?: number
+  importedAt?: string
 
   // ── Advanced Biomarkers (Novel) ──────────────────────────────────────────────
   hsTnT?: number           // High-sensitivity Troponin T (pg/mL) — PARADIGM-HF, EMPEROR standard

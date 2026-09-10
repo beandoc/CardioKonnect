@@ -4,6 +4,26 @@ import * as path from 'path'
 import { initializeApp, getApps } from 'firebase/app'
 import { getFirestore, collection, getDocs, doc, writeBatch, Timestamp } from 'firebase/firestore'
 import { cleanMilitaryRanks, splitPatientName } from '../lib/utils'
+import {
+  parseMedication,
+  parseEcg,
+  parseDevice,
+  parseEtiology,
+  parseHospitalisationHistory,
+  parseTsh,
+  parseBiomarker,
+  parseLvef,
+  calcEgfr,
+  calcBmi,
+  parseDaptFromAnticoagulantColumn,
+  parseOacFromAntiarrhythmicColumn
+} from '../lib/registryParsers'
+import type { Patient, Visit, OutcomeEvent, MedEntry } from '../lib/types'
+
+// CLI Flags
+const args = process.argv.slice(2)
+const isCommit = args.includes('--commit')
+const isDryRun = !isCommit
 
 // Load environment variables from .env.local
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -32,7 +52,7 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
 const db = getFirestore(app)
 
-// --- Helper Functions ---
+// Date Helpers
 function parseDate(val: any): string {
   if (!val) return ''
   if (val instanceof Date) return val.toISOString().split('T')[0]
@@ -49,16 +69,23 @@ function parseDate(val: any): string {
   return ''
 }
 
-function parseMed(val: any) {
-  if (!val) return { prescribed: 'No' as const }
-  const s = String(val).trim()
-  if (s.toUpperCase() === 'NO' || s.toUpperCase() === 'N' || s.toUpperCase() === 'NONE' || s === '-' || s === '0') {
-    return { prescribed: 'No' as const }
-  }
-  return { prescribed: 'Yes' as const, type: s, dose: s }
+function addDays(isoDate: string, days: number): string {
+  if (!isoDate) return ''
+  const d = new Date(isoDate)
+  if (isNaN(d.getTime())) return ''
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
 }
 
-function clean(obj: any): any {
+function daysDiff(d1: string, d2: string): number | undefined {
+  if (!d1 || !d2) return undefined
+  const dt1 = new Date(d1).getTime()
+  const dt2 = new Date(d2).getTime()
+  if (isNaN(dt1) || isNaN(dt2)) return undefined
+  return Math.max(0, Math.round((dt2 - dt1) / (1000 * 60 * 60 * 24)))
+}
+
+function clean<T extends Record<string, any>>(obj: T): T {
   if (obj === null || typeof obj !== 'object') return obj
   const res: any = Array.isArray(obj) ? [] : {}
   Object.keys(obj).forEach(key => {
@@ -74,161 +101,101 @@ function clean(obj: any): any {
   return res
 }
 
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-function normalizePhone(phone: any): string {
-  if (!phone) return ''
-  return String(phone).replace(/\D/g, '')
+function extractNumericDose(doseStr?: string): number | undefined {
+  if (!doseStr) return undefined
+  const m = doseStr.match(/(\d+(?:\.\d+)?)/)
+  return m ? parseFloat(m[1]) : undefined
 }
 
 async function run() {
-  console.log('====================================================')
-  console.log('  CardioKonnect HF Registry Import — Dr. A. Jayachandra')
+  console.log('========================================================================')
+  console.log('  CardioKonnect HF Registry Clinical Import — Dr. A. Jayachandra')
+  console.log(`  Mode: ${isDryRun ? '🔍 DRY-RUN (0 database writes)' : '🚀 LIVE COMMIT (Writing to Firestore)'}`)
   console.log('  File: /Users/sachinsrivastava/Downloads/HF1 2.xlsx')
-  console.log('====================================================\n')
+  console.log('========================================================================\n')
 
-  // Step 1: Read existing patients from Firestore
-  console.log('Fetching existing patients from Firestore...')
-  const snap = await getDocs(collection(db, 'patients'))
-  const existingPatients: any[] = []
-  const existingNameSet = new Set<string>()
-  const existingPhoneSet = new Set<string>()
-  const existingMrnSet = new Set<string>()
+  const excelPath = '/Users/sachinsrivastava/Downloads/HF1 2.xlsx'
+  if (!fs.existsSync(excelPath)) {
+    console.error(`Excel file not found at ${excelPath}`)
+    process.exit(1)
+  }
 
-  snap.docs.forEach(d => {
+  const wb = xlsx.readFile(excelPath)
+  const sheet = wb.Sheets[wb.SheetNames[0]]
+  const excelRows = xlsx.utils.sheet_to_json(sheet) as any[]
+  console.log(`Loaded ${excelRows.length} source records from Excel.\n`)
+
+  // Step 1: Existing patients in AICTS_PUNE for scoped deduplication & mapping
+  const pSnap = await getDocs(collection(db, 'patients'))
+  const existingByHid = new Map<string, string>() // hid -> docId
+  const existingBySr = new Map<string, string>()  // srNo -> docId
+  const existingByPhone = new Map<string, string>()
+
+  pSnap.forEach(d => {
     const data = d.data()
-    const p = { id: d.id, ...data }
-    existingPatients.push(p)
-    const fullName = normalizeName(`${data.firstName || ''} ${data.lastName || ''}`)
-    if (fullName) existingNameSet.add(fullName)
-    const contactNorm = normalizePhone(data.contact)
-    if (contactNorm) existingPhoneSet.add(contactNorm)
-    if (data.mrn) existingMrnSet.add(data.mrn.trim().toLowerCase())
+    if (data.siteId === 'AICTS_PUNE') {
+      if (data.mrn) existingByHid.set(data.mrn.trim().toLowerCase(), d.id)
+      if (data.srNo) existingBySr.set(String(data.srNo), d.id)
+      const ph = String(data.contact || '').replace(/\D/g, '')
+      if (ph.length >= 10) existingByPhone.set(ph.slice(0, 10), d.id)
+    }
   })
 
-  console.log(`Found ${existingPatients.length} existing patients in database.\n`)
+  console.log(`Existing AICTS_PUNE patients in Firestore: ${existingBySr.size || existingByHid.size}\n`)
 
-  // Step 2: Read Excel
-  const filePath = '/Users/sachinsrivastava/Downloads/HF1 2.xlsx'
-  const wb = xlsx.readFile(filePath, { cellDates: true })
-  const sheetName = wb.SheetNames[0]
-  const rows: any[] = xlsx.utils.sheet_to_json(wb.Sheets[sheetName])
-  console.log(`Read ${rows.length} total rows from Excel sheet "${sheetName}".\n`)
+  const importBatchId = `batch_hf_${Date.now()}`
+  const nowIso = new Date().toISOString()
+  let processedCount = 0
+  let visitsCount = 0
+  let outcomesCount = 0
 
-  const now = new Date().toISOString()
-  const batch = writeBatch(db)
+  let batch = writeBatch(db)
+  let opsInBatch = 0
 
-  let duplicateCount = 0
-  let newPatientCount = 0
-  let newVisitCount = 0
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
+  for (let i = 0; i < excelRows.length; i++) {
+    const row = excelRows[i]
     const rowIdx = i + 2
+    const srNo = parseInt(String(row['SR. NO.'] || '').replace(/\*/g, ''), 10)
     const rawName = String(row['NAME'] || '').trim()
     if (!rawName) continue
 
-    const srNo = row['SR. NO.']
+    processedCount++
     const rawPhone = String(row['PHONE'] || '').trim()
-    const normPhone = normalizePhone(rawPhone)
-    const normName = normalizeName(rawName)
-    const expectedMrn = `AICTS-2026-${String(srNo || 1000 + i).padStart(4, '0')}`
+    const rawHid = String(row['HID NO.'] || '').trim()
+    const syntheticMrn = `AICTS-2026-${String(srNo || 1000 + i).padStart(4, '0')}`
+    const mrn = rawHid || syntheticMrn
 
-    // Deduplication check
-    const isNameDuplicate = existingNameSet.has(normName)
-    const isPhoneDuplicate = normPhone.length >= 8 && existingPhoneSet.has(normPhone)
-    const isMrnDuplicate = existingMrnSet.has(expectedMrn.toLowerCase()) || (srNo && existingMrnSet.has(`mrn-${1000 + srNo}`.toLowerCase()))
-
-    if (isNameDuplicate || isPhoneDuplicate || isMrnDuplicate) {
-      duplicateCount++
-      console.log(`⏭️  SKIP DUPLICATE [Row ${rowIdx} | Sr ${srNo}]: ${rawName} | Phone: ${rawPhone || '—'} | ${isNameDuplicate ? '[Name Match]' : ''} ${isPhoneDuplicate ? '[Phone Match]' : ''}`)
-      continue
-    }
-
-    // Name formatting (sanitized of all military ranks and sensitive prefixes)
+    // Cleaned Name
     const cleanedName = cleanMilitaryRanks(rawName)
     const { firstName, lastName } = splitPatientName(cleanedName)
 
+    // Age & Birth year (precision: 'year')
     const age = parseInt(row['AGE'], 10)
+    const doaDate = parseDate(row['DOA'])
+    const enrolmentRaw = String(row['ENROLMENT'] || '').trim()
+    const enrolmentDate = parseDate(enrolmentRaw)
+    const indexDate = doaDate || enrolmentDate || ''
+
+    let birthYear: number | undefined = undefined
     let dob = ''
     if (!isNaN(age) && age > 0) {
-      dob = `${new Date().getFullYear() - age}-01-01`
+      const anchorYear = indexDate ? new Date(indexDate).getFullYear() : 2026
+      birthYear = anchorYear - age
+      dob = `${birthYear}-01-01`
     }
 
     const gender = String(row['GENDER'] || '').trim().toUpperCase()
-    const sex = (gender === 'M' || gender === 'MALE') ? 'Male' : 'Female'
+    const sex: 'Male' | 'Female' = (gender === 'M' || gender === 'MALE') ? 'Male' : 'Female'
     const contact = rawPhone
     const address = String(row['ADDRESS'] || '').trim() || 'Pune, Maharashtra'
 
-    // Enrolment / Admission date
-    const enrolmentDate = parseDate(row['ENROLMENT']) || parseDate(row['DOA']) || now.split('T')[0]
-
-    // Comorbidities analysis
-    const hospVal = String(row['H/O OF HOSPITALIZATION'] || '').toUpperCase()
-    const etVal = String(row['ETIOLOGY'] || '').toUpperCase()
-    const dmVal = String(row['IF DM IS DIAGNOSED'] || '').toUpperCase()
-    const lipidVal = String(row['IN CASE DYSLIPIDEMIA'] || '').toUpperCase()
-    const mraVal = String(row['MRAs'] || '').toUpperCase()
-
-    const comorbidDiabetes = (dmVal !== 'NO' && dmVal !== '' && dmVal !== 'NONE') || etVal.includes('DIABET') || hospVal.includes('DM')
-    const comorbidCAD = hospVal.includes('CAD') || hospVal.includes('PCI') || hospVal.includes('CABG') || hospVal.includes('MI') || etVal.includes('ISCHEMIC') || etVal.includes('CAD')
-    const comorbidPriorPCI = hospVal.includes('PCI')
-    const comorbidPriorCABG = hospVal.includes('CABG')
-    const comorbidPriorMI = hospVal.includes('MI') || hospVal.includes('AWMI') || hospVal.includes('IWMI')
-    const comorbidHypertension = hospVal.includes('HTN') || etVal.includes('HYPERTENSION') || hospVal.includes('HYPERTENSION')
-    const comorbidCKD = hospVal.includes('CKD') || mraVal.includes('CKD') || etVal.includes('CKD')
-    const comorbidCOPD = hospVal.includes('COPD') || hospVal.includes('ASTHMA')
-    const comorbidAF = hospVal.includes('AF') || hospVal.includes('ATRIAL FIBRILLATION') || String(row['ECG'] || '').toUpperCase().includes('AF')
-    const comorbidDyslipidemia = lipidVal !== 'NO' && lipidVal !== '' && lipidVal !== 'NONE'
-
-    const comorbidities: string[] = []
-    if (comorbidHypertension) comorbidities.push('HTN')
-    if (comorbidDiabetes) comorbidities.push('DM2')
-    if (comorbidCAD) comorbidities.push('CAD')
-    if (comorbidPriorMI) comorbidities.push('Prior MI')
-    if (comorbidPriorPCI) comorbidities.push('Prior PCI')
-    if (comorbidPriorCABG) comorbidities.push('Prior CABG')
-    if (comorbidCKD) comorbidities.push('CKD')
-    if (comorbidCOPD) comorbidities.push('COPD')
-    if (comorbidAF) comorbidities.push('AF')
-    if (comorbidDyslipidemia) comorbidities.push('Dyslipidemia')
-
-    // NYHA
-    const nyhaRaw = String(row['NYHA CLASS'] || '').trim().replace(/\s+/g, '')
-    const nyha = ['I', 'II', 'III', 'IV'].includes(nyhaRaw) ? (nyhaRaw as 'I' | 'II' | 'III' | 'IV') : 'II'
-
-    // LVEF & HF type
-    const lvef = parseFloat(row['LVEF']) || undefined
-    let hfType: 'HFrEF' | 'HFmrEF' | 'HFpEF' = 'HFrEF'
-    if (lvef !== undefined) {
-      if (lvef >= 50) hfType = 'HFpEF'
-      else if (lvef >= 40) hfType = 'HFmrEF'
-      else hfType = 'HFrEF'
-    }
-
-    // ECG
-    const ecgUpper = String(row['ECG'] || '').toUpperCase()
-    let bbb = 'None'
-    if (ecgUpper.includes('LBBB')) bbb = 'LBBB'
-    else if (ecgUpper.includes('RBBB')) bbb = 'RBBB'
-
-    // Labs
-    const ntProBNP = parseFloat(row['NT-Pro BNP'] || row['NT proBNP']) || undefined
-    const potassium = parseFloat(row['POTASSIUM']) || undefined
-    const creatinine = parseFloat(row['CREAT']) || undefined
-    const egfr = parseFloat(row['eGFR']) || undefined
-    const hb = parseFloat(row['HB']) || undefined
-    const mcv = parseFloat(row['MCV']) || undefined
-    const hba1c = parseFloat(row['HbA1C']) || undefined
-    const tft = String(row['TFT'] || '').trim() || undefined
+    // Anthropometrics
     const weight = parseFloat(row['WEIGHT']) || undefined
     const height = parseFloat(row['HEIGHT']) || undefined
-    const heartRate = parseInt(row['HR'], 10) || undefined
-    const sixMWT = parseInt(row['6MWT'], 10) || undefined
-    const isSmoker = String(row['SMOKING '] || '').toUpperCase().includes('YES')
+    const bmi = calcBmi(weight, height)
 
+    // Vitals
+    const heartRate = parseInt(row['HR'], 10) || undefined
     let bpSystolic: number | undefined
     let bpDiastolic: number | undefined
     const bpParts = String(row['BP'] || '').split('/')
@@ -237,186 +204,356 @@ async function run() {
       bpDiastolic = parseInt(bpParts[1], 10) || undefined
     }
 
-    // Medications
-    const diuretic = parseMed(row['DIURETICS'])
-    const raasi = parseMed(row['ACEi/ARNi'])
-    const betaBlocker = parseMed(row['BETA BLOCKERS'])
-    const mra = parseMed(row['MRAs'])
-    const digoxin = parseMed(row['DIGOXIN'])
-    const ivabradine = parseMed(row['IVABRADINE'])
-    const statin = (lipidVal !== 'NO' && lipidVal !== '' && lipidVal !== 'NONE')
-      ? { prescribed: 'Yes' as const, type: String(row['IN CASE DYSLIPIDEMIA']).trim(), dose: String(row['IN CASE DYSLIPIDEMIA']).trim() }
-      : { prescribed: 'No' as const }
-    
-    const antiArrhVal = String(row['ANTI-arrhythmic therapy'] || '').trim()
-    const antiarrhythmic = (antiArrhVal.toUpperCase() !== 'NO' && antiArrhVal !== '') ? antiArrhVal : ''
-    const anticoVal = String(row['ANTICOGULANT'] || '').trim()
-    const anticoagulation = (anticoVal.toUpperCase() !== 'NO' && anticoVal !== '') ? anticoVal : ''
+    // NYHA (no default 'II' fallback)
+    const nyhaRaw = String(row['NYHA CLASS'] || '').trim().toUpperCase()
+    const nyha = ['I', 'II', 'III', 'IV'].includes(nyhaRaw) ? (nyhaRaw as 'I' | 'II' | 'III' | 'IV') : undefined
 
-    // SGLT2i from DM diagnosed field
-    const dmDrug = String(row['IF DM IS DIAGNOSED'] || '').trim().toUpperCase()
-    const isSglt2 = dmDrug.includes('DAPA') || dmDrug.includes('EMPA') || dmDrug.includes('FORXIGA') || dmDrug.includes('JARDIANCE')
-    const sglt2i = isSglt2
-      ? { prescribed: 'Yes' as const, type: String(row['IF DM IS DIAGNOSED']).trim(), dose: String(row['IF DM IS DIAGNOSED']).trim() }
-      : { prescribed: 'No' as const }
+    // 6MWT
+    const sixMWT = parseInt(row['6MWT'], 10) || undefined
 
-    const vericiguat = parseMed(row['VERICIGUAT'])
+    // LVEF (Baseline)
+    const { lvef: baselineLvef } = parseLvef(row['LVEF'])
+    let hfType: 'HFrEF' | 'HFmrEF' | 'HFpEF' = 'HFrEF'
+    if (baselineLvef !== undefined) {
+      if (baselineLvef >= 50) hfType = 'HFpEF'
+      else if (baselineLvef >= 40) hfType = 'HFmrEF'
+      else hfType = 'HFrEF'
+    }
 
-    // Device
-    const deviceVal = String(row['DEVICE'] || '').toUpperCase()
-    const icdPresence = deviceVal.includes('ICD') || deviceVal.includes('AICD')
-    const crtPresence = deviceVal.includes('CRT')
+    // Labs (Baseline)
+    const creatinine = parseFloat(row['CREAT']) || undefined
+    const egfr = calcEgfr(creatinine, age, sex)
+    const potassium = parseFloat(row['POTASSIUM']) || undefined
+    const hb = parseFloat(row['HB']) || undefined
+    const mcv = parseFloat(row['MCV']) || undefined
+    const hba1c = parseFloat(row['HbA1C']) || undefined
+    const tft = parseTsh(row['TFT'])
+    const biomarker = parseBiomarker(row['NT-Pro BNP'])
+
+    // ECG (Baseline)
+    const ecg = parseEcg(row['ECG'])
+
+    // Etiology
+    const etiologies = parseEtiology(row['ETIOLOGY'])
+
+    // Revascularization & Hospitalization History
+    const hospHistory = parseHospitalisationHistory(row['H/O OF HOSPITALIZATION'])
+
+    // Device Therapy
+    const dev = parseDevice(row['DEVICE'])
+
+    // Smoking
+    const smokingStr = String(row['SMOKING '] || '').trim().toUpperCase()
+    const isSmoker = smokingStr === 'YES' || smokingStr === 'Y'
+
+    // Core GDMT Medications (Baseline)
+    const diuretic = parseMedication(row['DIURETICS'], 'diuretic')
+    const raasi = parseMedication(row['ACEi/ARNi'], 'raasi')
+    const betaBlocker = parseMedication(row['BETA BLOCKERS'], 'betaBlocker')
+    const mra = parseMedication(row['MRAs'], 'mra')
+    const digoxin = parseMedication(row['DIGOXIN'], 'digoxin')
+    const ivabradine = parseMedication(row['IVABRADINE'], 'ivabradine')
+    const vericiguat = parseMedication(row['VERICIGUAT'], 'vericiguat')
+
+    // SGLT2i
+    const dmField = String(row['IF DM IS DIAGNOSED'] || '').trim()
+    const sglt2i = parseMedication(dmField, 'sglt2i')
+
+    // Statin
+    const statinField = String(row['IN CASE DYSLIPIDEMIA'] || '').trim()
+    const statin = parseMedication(statinField, 'statin')
+
+    // DAPT (Aspirin + P2Y12) from ANTICOGULANT
+    const dapt = parseDaptFromAnticoagulantColumn(row['ANTICOGULANT'])
+
+    // OAC & Antiarrhythmics from ANTI-arrhythmic therapy
+    const oac = parseOacFromAntiarrhythmicColumn(row['ANTI-arrhythmic therapy'])
+
+    // Numeric GDMT Doses
+    const raasiDoseMg = extractNumericDose(raasi.dose)
+    const betablockerDoseMg = extractNumericDose(betaBlocker.dose)
+    const mraDoseMg = extractNumericDose(mra.dose)
+    const sglt2iDoseMg = extractNumericDose(sglt2i.dose)
+    const furosemideDoseMgDaily = extractNumericDose(diuretic.dose)
+
+    // Functional Grip (Baseline)
+    const gripLeft = parseFloat(row['HARD GRIP TEST L HAND']) || undefined
+    const gripRight = parseFloat(row['R HAND']) || undefined
 
     // Vaccination
     const vaccVal = String(row['VACCINATION'] || '').toUpperCase()
     const vaccInfluenza = (vaccVal.includes('INFLUENZA') || vaccVal.includes('DONE')) ? 'Yes' : 'No'
     const vaccPneumo = (vaccVal.includes('PNEUMO') || vaccVal.includes('DONE')) ? 'Yes' : 'No'
 
-    // Functional Grip Test
-    const gripLeft = parseFloat(row['HARD GRIP TEST L HAND']) || undefined
-    const gripRight = parseFloat(row['R HAND']) || undefined
-    const fuGripLeft = parseFloat(row['3 MONTHS FU L HAND']) || undefined
-    const fuGripRight = parseFloat(row['R HAND_1']) || undefined
+    // Match or create patient ID
+    let patientId = existingByHid.get(mrn.toLowerCase()) || (srNo ? existingBySr.get(String(srNo)) : undefined)
+    if (!patientId && rawPhone) {
+      const ph = rawPhone.replace(/\D/g, '')
+      if (ph.length >= 10) patientId = existingByPhone.get(ph.slice(0, 10))
+    }
+    if (!patientId) {
+      patientId = doc(collection(db, 'patients')).id
+    }
 
-    const etiologies = etVal ? etVal.split(/[,\n]/).map(s => s.trim()).filter(Boolean) : []
-
-    // --- Create Firestore Patient Doc for Dr. A. Jayachandra ---
-    const patientRef = doc(collection(db, 'patients'))
-    const assignedMrn = `AICTS-2026-${String(srNo || 1000 + i).padStart(4, '0')}`
-
-    const patientData = clean({
+    // ── Build Patient Document ───────────────────────────────────────────────
+    const patientDoc: Partial<Patient> = clean({
       firstName,
       lastName,
       dob,
+      birthYear,
+      dobPrecision: 'year',
       sex,
       age: !isNaN(age) ? age : undefined,
-      mrn: assignedMrn,
+      mrn,
+      registrySerialId: syntheticMrn,
+      srNo: !isNaN(srNo) ? srNo : undefined,
       contact,
       address,
       addressDistrict: 'Pune',
       addressState: 'Maharashtra',
-      hospitalName: 'All India Institute of Cardiothoracic Sciences (AICTS), Pune',
+      hospitalName: 'AICTS, Pune',
+      siteId: 'AICTS_PUNE',
       primaryDoctor: 'Dr. A. Jayachandra',
       attendingDoctor: 'Dr. A. Jayachandra',
-      siteId: 'AICTS_PUNE',
-      registryId: 'hf',
-      registryIds: ['hf'],
+      currentSmoker: isSmoker,
       status: 'Active',
       consentStatus: 'Granted',
       studyConsented: true,
       indianCitizen: true,
-      hfConfirmationDate: enrolmentDate,
+      ethnicity: 'Indian',
+      registryId: 'hf',
+      registryIds: ['hf'],
+      registryEnrollments: {
+        hf: {
+          enrolledAt: indexDate ? `${indexDate}T00:00:00.000Z` : nowIso,
+          enrolledBy: 'importer_script_v2',
+          siteId: 'AICTS_PUNE',
+          piName: 'Dr. A. Jayachandra',
+          status: 'Active'
+        }
+      },
+      hfConfirmationDate: indexDate || undefined,
+      indexEtiology: etiologies,
       hfType,
       nyha,
-      lvef,
-      comorbidities,
-      comorbidHypertension,
-      comorbidDiabetes,
-      comorbidDyslipidemia,
-      comorbidCAD,
-      comorbidPriorMI,
-      comorbidPriorPCI,
-      comorbidPriorCABG,
-      comorbidAF,
-      comorbidCKD,
-      comorbidCOPD,
-      icdPresence,
-      crtPresence,
-      anticoagulation,
-      antiarrhythmic,
-      currentSmoker: isSmoker,
-      visitCount: 1,
-      lastVisitDate: enrolmentDate,
-      createdAt: now,
-      updatedAt: now,
+      lvef: baselineLvef,
+      icdPresence: dev.hasIcd,
+      crtPresence: dev.hasCrt,
+      comorbidCAD: hospHistory.priorPci || hospHistory.priorCabg || etiologies.includes('Ischaemic CAD'),
+      comorbidPriorMI: hospHistory.raw.includes('MI') || hospHistory.raw.includes('AWMI') || hospHistory.raw.includes('IWMI'),
+      comorbidPriorPCI: hospHistory.priorPci,
+      comorbidPriorCABG: hospHistory.priorCabg,
+      comorbidAF: ecg.rhythm === 'AF',
+      comorbidDiabetes: String(row['IF DM IS DIAGNOSED'] || '').trim().toUpperCase() !== 'NO' && String(row['IF DM IS DIAGNOSED'] || '').trim() !== '',
+      comorbidHypertension: etiologies.includes('Hypertensive Heart Disease'),
+      comorbidCKD: (creatinine !== undefined && creatinine >= 1.5) || (egfr !== undefined && egfr < 60),
+      comorbidDyslipidemia: statin.prescribed === 'Yes',
+      importBatchId,
+      sourceFile: 'HF1 2.xlsx',
+      sourceRow: rowIdx,
+      createdAt: indexDate ? `${indexDate}T00:00:00.000Z` : nowIso,
+      updatedAt: nowIso
     })
 
-    batch.set(patientRef, patientData)
-    newPatientCount++
-
-    // --- Create Visit Doc in subcollection ---
-    const visitRef = doc(collection(db, 'patients', patientRef.id, 'visits'))
-    const visitData = clean({
-      patientId: patientRef.id,
-      visitDate: enrolmentDate,
-      visitType: 'Outpatient',
+    // ── Build Visit 1 (Baseline Visit) ───────────────────────────────────────
+    const baselineVisitDate = indexDate || nowIso.split('T')[0]
+    const baselineVisitId = `visit_base_${patientId}`
+    const baselineVisit: Partial<Visit> = clean({
+      id: baselineVisitId,
+      patientId,
+      visitDate: baselineVisitDate,
+      visitType: doaDate ? 'Inpatient' : 'OPD',
       weight,
       height,
-      heartRate,
+      bmi,
       bpSystolic,
       bpDiastolic,
+      heartRate,
       nyha,
       sixMWT,
-      lvef,
+      lvef: baselineLvef,
       hfType,
-      ntProBNP,
-      potassium,
+      etiology: etiologies,
+      hospHistory: hospHistory.hospHistory,
+      hospCount: hospHistory.hospCount,
+      hospDetails: hospHistory.raw || undefined,
       creatinine,
       egfr,
+      potassium,
       hb,
       mcv,
       hba1c,
       tft,
-      bbb,
+      ntProBNP: biomarker.assay === 'NT-proBNP' ? biomarker.value : undefined,
+      bnp: biomarker.assay === 'BNP' ? biomarker.value : undefined,
+      qrsDuration: ecg.qrsDuration,
+      qtcInterval: ecg.qtcInterval,
+      bbb: ecg.bbb || undefined,
+      rhythm: ecg.rhythm,
+      device: dev.deviceTypes.length ? dev.deviceTypes : undefined,
+      deviceNotes: dev.advisedOnly ? 'Advised / Pending Implant' : dev.implantDate ? `Implanted ${dev.implantDate}` : undefined,
       diuretic,
       raasi,
       betaBlocker,
       mra,
-      sglt2i,
-      statin,
       digoxin,
       ivabradine,
       vericiguat,
-      noac: { prescribed: 'No' },
-      vki: { prescribed: 'No' },
-      aspirin: { prescribed: 'No' },
-      fibrate: { prescribed: 'No' },
-      pcsk9: { prescribed: 'No' },
-      ivIron: { prescribed: 'No' },
-      anticoagulation,
-      antiarrhythmic,
-      device: [],
-      vaccInfluenza,
-      vaccPneumo,
+      sglt2i,
+      statin: { prescribed: statin.prescribed, dose: statin.dose, type: statin.type },
+      aspirin: dapt.aspirin,
+      p2y12Inhibitor: dapt.p2y12Inhibitor,
+      noac: oac.noac,
+      vki: oac.vki,
+      raasiDoseMg,
+      betablockerDoseMg,
+      mraDoseMg,
+      sglt2iDoseMg,
+      furosemideDoseMgDaily,
       gripLeft,
       gripRight,
-      fuGripLeft,
-      fuGripRight,
-      hospHistory: (comorbidCAD || comorbidPriorMI || hospVal.includes('HOSPITAL')) ? 'Yes' : 'No',
-      clinicalNotes: `Etiology: ${etiologies.join(', ') || 'Ischemic / Hypertensive'}. H/O: ${String(row['H/O OF HOSPITALIZATION'] || 'None documented')}. ECG: ${String(row['ECG'] || 'N/A')}.`,
-      createdAt: now,
-      updatedAt: now,
+      vaccPneumo,
+      vaccInfluenza,
+      tobaccoStatus: isSmoker ? 'Current' : 'Never',
+      clinicalNotes: `Baseline encounter at AICTS Pune. Etiology: ${etiologies.join(', ') || 'Idiopathic'}. ECG: ${ecg.raw || '—'}. Device status: ${dev.raw || 'None'}.`,
+      importBatchId,
+      sourceFile: 'HF1 2.xlsx',
+      sourceRow: rowIdx,
+      importedAt: nowIso
     })
+    visitsCount++
 
-    batch.set(visitRef, visitData)
-    newVisitCount++
+    // ── Build Visit 2 (3-Month Follow-Up Visit) ──────────────────────────────
+    const fuGripLeft = parseFloat(row['3 MONTHS FU L HAND']) || undefined
+    const fuGripRight = parseFloat(row['R HAND_1'] !== undefined ? row['R HAND_1'] : row['R HAND']) || undefined
+    const fuWeight = parseFloat(row['WEIGHT_1'] !== undefined ? row['WEIGHT_1'] : row['WEIGHT']) || undefined
+    const fuSixMwt = parseInt(row['6MWT_1'] !== undefined ? row['6MWT_1'] : row['6MWT'], 10) || undefined
+    const fuBiomarker = parseBiomarker(row['NT proBNP'])
+    const { lvef: fuLvef } = parseLvef(row['ECHO'])
 
-    // Add to local sets to prevent duplicate rows within the same sheet
-    existingNameSet.add(normName)
-    if (normPhone) existingPhoneSet.add(normPhone)
-    existingMrnSet.add(assignedMrn.toLowerCase())
+    let fuVisit: Partial<Visit> | null = null
+    const hasFollowUpData = fuGripLeft !== undefined || fuGripRight !== undefined || fuWeight !== undefined || fuSixMwt !== undefined || fuBiomarker.value !== undefined || fuLvef !== undefined
 
-    console.log(`✅ [ADD Row ${rowIdx} | Sr ${srNo}]: ${firstName} ${lastName} | MRN: ${assignedMrn} | LVEF: ${lvef || '—'}% | NYHA: ${nyha} | Site: AICTS Pune`)
+    if (hasFollowUpData) {
+      const fuVisitDate = addDays(baselineVisitDate, 90) || nowIso.split('T')[0]
+      const fuVisitId = `visit_fu3m_${patientId}`
+
+      let fuHfType = hfType
+      if (fuLvef !== undefined) {
+        if (baselineLvef !== undefined && baselineLvef < 40 && fuLvef >= 40) {
+          fuHfType = 'HFimpEF' as any // Heart Failure with Improved Ejection Fraction
+        } else if (fuLvef >= 50) fuHfType = 'HFpEF'
+        else if (fuLvef >= 40) fuHfType = 'HFmrEF'
+        else fuHfType = 'HFrEF'
+      }
+
+      fuVisit = clean({
+        id: fuVisitId,
+        patientId,
+        visitDate: fuVisitDate,
+        visitType: 'Follow-up' as const,
+        weight: fuWeight,
+        sixMWT: fuSixMwt,
+        gripLeft: fuGripLeft,
+        gripRight: fuGripRight,
+        lvef: fuLvef,
+        priorLvef: baselineLvef, // preserves trajectory for delta LVEF & HFimpEF
+        hfType: fuHfType,
+        ntProBNP: fuBiomarker.assay === 'NT-proBNP' ? fuBiomarker.value : undefined,
+        bnp: fuBiomarker.assay === 'BNP' ? fuBiomarker.value : undefined,
+        diuretic,
+        raasi,
+        betaBlocker,
+        mra,
+        sglt2i,
+        aspirin: dapt.aspirin,
+        p2y12Inhibitor: dapt.p2y12Inhibitor,
+        noac: oac.noac,
+        vki: oac.vki,
+        clinicalNotes: `3-Month scheduled follow-up. Delta Grip R: ${fuGripRight && gripRight ? (fuGripRight - gripRight).toFixed(1) : '—'}kg, Delta 6MWT: ${fuSixMwt && sixMWT ? fuSixMwt - sixMWT : '—'}m, Delta LVEF: ${fuLvef && baselineLvef ? fuLvef - baselineLvef : '—'}%.`,
+        importBatchId,
+        sourceFile: 'HF1 2.xlsx',
+        sourceRow: rowIdx,
+        importedAt: nowIso
+      })
+      visitsCount++
+      patientDoc.visitCount = 2
+    } else {
+      patientDoc.visitCount = 1
+    }
+
+    // ── Build OutcomeEvent (if DOA + DOD present) ────────────────────────────
+    let outcomeEvent: Partial<OutcomeEvent> | null = null
+    const dodDate = parseDate(row['DOD'])
+    if (doaDate && dodDate) {
+      const los = daysDiff(doaDate, dodDate)
+      outcomeEvent = clean({
+        id: `outcome_${patientId}_hosp`,
+        patientId,
+        eventType: 'HF hospitalisation' as const,
+        admissionDate: doaDate,
+        dischargeDate: dodDate,
+        lengthOfStayDays: los,
+        eventDate: doaDate,
+        hospitalName: 'AICTS, Pune',
+        facilityType: 'Military/ECHS' as const,
+        primaryReasonDescription: 'Acute decompensated heart failure / Index inpatient admission',
+        hfConfirmationCriteriaMet: true,
+        adjudicated: false,
+        adjudicationStatus: 'Pending Review' as const,
+        createdAt: nowIso
+      })
+      outcomesCount++
+    }
+
+    // Dry Run logging
+    if (isDryRun) {
+      console.log(`[DRY-RUN Row ${String(rowIdx).padStart(2)}] MRN: ${mrn.padEnd(16)} | Patient: "${firstName} ${lastName}" | LVEF: ${baselineLvef ?? '—'}% -> FU LVEF: ${fuLvef ?? '—'}% | Baseline Visit: YES | 3-Mo FU Visit: ${fuVisit ? 'YES' : 'NO'} | Outcome: ${outcomeEvent ? 'YES (LOS ' + outcomeEvent.lengthOfStayDays + 'd)' : 'NO'}`)
+    } else {
+      // Live Commit to Firestore
+      batch.set(doc(db, 'patients', patientId), patientDoc, { merge: true })
+      opsInBatch++
+
+      batch.set(doc(db, 'visits', baselineVisitId), baselineVisit, { merge: true })
+      opsInBatch++
+
+      if (fuVisit) {
+        batch.set(doc(db, 'visits', fuVisit.id!), fuVisit, { merge: true })
+        opsInBatch++
+      }
+
+      if (outcomeEvent) {
+        batch.set(doc(db, 'patients', patientId, 'outcomes', outcomeEvent.id!), outcomeEvent, { merge: true })
+        opsInBatch++
+      }
+
+      if (opsInBatch >= 400) {
+        await batch.commit()
+        batch = writeBatch(db)
+        opsInBatch = 0
+      }
+    }
   }
 
-  console.log('\n----------------------------------------------------')
-  console.log(`Summary of Import:`)
-  console.log(`  - Total Rows Processed: ${rows.length}`)
-  console.log(`  - Duplicates Skipped:    ${duplicateCount}`)
-  console.log(`  - New Patients to Save: ${newPatientCount}`)
-  console.log(`  - New Visits to Save:   ${newVisitCount}`)
-  console.log('----------------------------------------------------\n')
-
-  if (newPatientCount > 0) {
-    console.log(`Committing batch of ${newPatientCount} patients to Firestore...`)
+  if (!isDryRun && opsInBatch > 0) {
     await batch.commit()
-    console.log('🎉 Successfully saved all new patients and visits to Firestore!')
-  } else {
-    console.log('ℹ️ No new unique patients to add (all were already present).')
   }
+
+  console.log('\n========================================================================')
+  console.log(`Summary: Processed ${processedCount} patients.`)
+  console.log(`Visits planned: ${visitsCount} (Baseline + Longitudinal Follow-up).`)
+  console.log(`Outcome Events planned: ${outcomesCount}.`)
+  if (isDryRun) {
+    console.log(`🛡️  DRY-RUN COMPLETE: 0 writes made to Firestore.`)
+    console.log(`To write to Firestore, re-run with: npx tsx scripts/import_hf1_2_jayachandra.ts --commit`)
+  } else {
+    console.log(`✅ LIVE COMMIT COMPLETE: Successfully committed to Firestore.`)
+  }
+  console.log('========================================================================\n')
+  process.exit(0)
 }
 
 run().catch(err => {
-  console.error('Fatal Import Error:', err)
+  console.error('Error during clinical import:', err)
   process.exit(1)
 })
