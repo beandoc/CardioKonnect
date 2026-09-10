@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { initializeApp, getApps } from 'firebase/app'
 import { getFirestore, collection, getDocs, doc, writeBatch, Timestamp } from 'firebase/firestore'
+import { cleanMilitaryRanks, splitPatientName } from '../lib/utils'
 
 // Load environment variables from .env.local
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -146,10 +147,9 @@ async function run() {
       continue
     }
 
-    // Name formatting
-    const nameParts = rawName.split(/\s+/)
-    const firstName = nameParts[0] || ''
-    const lastName = nameParts.slice(1).join(' ') || ''
+    // Name formatting (sanitized of all military ranks and sensitive prefixes)
+    const cleanedName = cleanMilitaryRanks(rawName)
+    const { firstName, lastName } = splitPatientName(cleanedName)
 
     const age = parseInt(row['AGE'], 10)
     let dob = ''

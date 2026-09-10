@@ -93,8 +93,129 @@ export function lvefColor(lvef: number | undefined): string {
   return 'font-bold'
 }
 
+// Comprehensive military rank & sensitive prefix sanitization
+export function cleanMilitaryRanks(rawName: string): string {
+  if (!rawName) return ''
+  let str = String(rawName).trim()
+
+  // 1. Check for hyphen with relationship prefix (e.g. W/O, M/O, F/O, S/O, D/O, H/O ... - PATIENT_NAME)
+  if (str.includes('-')) {
+    const parts = str.split('-').map(p => p.trim()).filter(Boolean)
+    if (parts.length >= 2) {
+      const prefixPart = parts[0]
+      let patientPart = parts.slice(1).join(' ').trim()
+      
+      // If patient part is a single name like PREMVATHI, inherit surname from prefix if available
+      if (!patientPart.includes(' ')) {
+        const prefixWords = prefixPart
+          .replace(/\b(M\/O|W\/O|F\/O|S\/O|D\/O|H\/O|LT|COL|MAJ|GEN|BRIG|CAPT|HAV|NK|SUB|SGT|NB)\b/gi, ' ')
+          .trim().split(/\s+/).filter(Boolean)
+        const surname = prefixWords[prefixWords.length - 1]
+        if (surname && surname.length > 1 && !/^[A-Z]$/i.test(surname)) {
+          patientPart = `${patientPart} ${surname}`
+        }
+      }
+      str = patientPart
+    }
+  }
+
+  // 2. Clean relationship prefixes: W/O, M/O, F/O, S/O, D/O, H/O, SELF
+  str = str.replace(/\b(?:M\/O|F\/O|W\/O|S\/O|D\/O|H\/O|SELF)\b/gi, ' ')
+
+  // 3. Clean retired / ex designations
+  str = str.replace(/\b(?:RTD\.?|RETIRED|EX[-\s]|EX\b|NCE\b)/gi, ' ')
+
+  // 4. Clean all military ranks (Army, Air Force, Navy, JCO, NCO, OR, etc.)
+  const militaryPatterns = [
+    /\bMAJOR\s+GENERAL\b/gi,
+    /\bMAJ\.?\s*GEN\.?\b/gi,
+    /\bLIEUTENANT\s+COLONEL\b/gi,
+    /\bLT\.?\s*COL\.?\b/gi,
+    /\bBRIGADIER\b/gi,
+    /\bBRIG\.?\b/gi,
+    /\bCOLONEL\b/gi,
+    /\bCOL\.?\b/gi,
+    /\bGROUP\s+CAPTAIN\b/gi,
+    /\bGP\.?\s*CAPT\.?\b/gi,
+    /\bGP\b/gi,
+    /\bAIR\s+COMMODORE\b/gi,
+    /\bCOMMODORE\b/gi,
+    /\bCMDE\.?\b/gi,
+    /\bWING\s+COMMANDER\b/gi,
+    /\bWG\.?\s*CDR\.?\b/gi,
+    /\bSQUADRON\s+LEADER\b/gi,
+    /\bSQN\.?\s*LDR\.?\b/gi,
+    /\bFLIGHT\s+LIEUTENANT\b/gi,
+    /\bFLT\.?\s*LT\.?\b/gi,
+    /\bFLYING\s+OFFICER\b/gi,
+    /\bFG\.?\s*OFFR\.?\b/gi,
+    /\bSUBEDAR\s+MAJOR\b/gi,
+    /\bSUB\.?\s*MAJ\.?\b/gi,
+    /\bNAIB\s+SUBEDAR\b/gi,
+    /\bNB[\s\/\.]+SUB\.?\b/gi,
+    /\bNB\b/gi,
+    /\bSUBEDAR\b/gi,
+    /\bSUB\.?\b/gi,
+    /\bHAVILDAR\b/gi,
+    /\bHAVALDAR\b/gi,
+    /\bHAV\.?\b/gi,
+    /\bNAIK\b/gi,
+    /\bNK\.?\b/gi,
+    /\bSEPOY\b/gi,
+    /\bSEP\.?\b/gi,
+    /\bMAJOR\b/gi,
+    /\bMAJ\.?\b/gi,
+    /\bCAPTAIN\b/gi,
+    /\bCAPT\.?\b/gi,
+    /\bLIEUTENANT\b/gi,
+    /\bLT\.?\b/gi,
+    /\bJUNIOR\s+WARRANT\s+OFFICER\b/gi,
+    /\bJWO\b/gi,
+    /\bMASTER\s+WARRANT\s+OFFICER\b/gi,
+    /\bMWO\b/gi,
+    /\bWARRANT\s+OFFICER\b/gi,
+    /\bWO\b/gi,
+    /\bLEADING\s+AIRCRAFTMAN\b/gi,
+    /\bLAC\b/gi,
+    /\bAIRCRAFTMAN\b/gi,
+    /\bAC\b/gi,
+    /\bSERGEANT\b/gi,
+    /\bSGT\.?\b/gi,
+    /\bCOMMANDER\b/gi,
+    /\bCDR\.?\b/gi,
+    /\bADMIRAL\b/gi,
+    /\bADM\.?\b/gi,
+    /\bJCO\b/gi,
+    /\bNCO\b/gi,
+  ]
+
+  for (const pat of militaryPatterns) {
+    str = str.replace(pat, ' ')
+  }
+
+  // 5. Clean punctuation, slashes, extra spaces
+  str = str.replace(/[\\\/_]/g, ' ').replace(/\s+/g, ' ').trim()
+  str = str.replace(/^[\/\-\.\s]+/, '').trim()
+  str = str.replace(/[\/\-\.]+$/, '').trim()
+
+  return str
+}
+
+export function splitPatientName(cleanFullName: string): { firstName: string; lastName: string } {
+  const words = cleanFullName.split(/\s+/).filter(Boolean)
+  if (words.length <= 1) {
+    return { firstName: words[0] || '', lastName: '' }
+  }
+  return {
+    firstName: words.slice(0, -1).join(' '),
+    lastName: words[words.length - 1],
+  }
+}
+
 export function initials(firstName: string, lastName: string): string {
-  return ((firstName?.[0] ?? '') + (lastName?.[0] ?? '')).toUpperCase()
+  const cleanFirst = cleanMilitaryRanks(firstName || '')
+  const cleanLast = cleanMilitaryRanks(lastName || '')
+  return ((cleanFirst?.[0] ?? '') + (cleanLast?.[0] ?? '')).toUpperCase()
 }
 
 export function generateMRN(siteId?: string, registryId?: string): string {
@@ -105,3 +226,4 @@ export function generateMRN(siteId?: string, registryId?: string): string {
   }
   return `AICTS-${year}-${rand}`
 }
+

@@ -47,29 +47,7 @@ function cleanUndefined(obj: any): any {
   return res
 }
 
-function cleanMilitaryRanks(rawName: string): string {
-  if (!rawName) return '';
-  let str = String(rawName).trim();
-  str = str.replace(/\b(?:M\/O|F\/O|W\/O|S\/O|D\/O|SELF|EX|EX-|NCE)\b/gi, ' ');
-  const militaryPatterns = [
-    /\bMAJOR\s+GENERAL\b/gi, /\bMAJ\s+GEN\b/gi, /\bLIEUTENANT\s+COLONEL\b/gi, /\bLT\s+COL\b/gi,
-    /\bBRIGADIER\b/gi, /\bBRIG\b/gi, /\bCOLONEL\b/gi, /\bCOL\b/gi, /\bMAJOR\b/gi, /\bMAJ\b/gi,
-    /\bCAPTAIN\b/gi, /\bCAPT\b/gi, /\bLIEUTENANT\b/gi, /\bLT\b/gi, /\bSUBEDAR\s+MAJOR\b/gi,
-    /\bSUB\s+MAJ\b/gi, /\bNAIB\s+SUBEDAR\b/gi, /\bNB\s+SUB\b/gi, /\bSUBEDAR\b/gi, /\bSUB\b/gi,
-    /\bHAVILDAR\b/gi, /\bHAVALDAR\b/gi, /\bHAV\b/gi, /\bNAIK\b/gi, /\bNK\b/gi, /\bSEPOY\b/gi,
-    /\bSEP\b/gi, /\bJCO\b/gi, /\bNCO\b/gi, /\bAIR\s+COMMODORE\b/gi, /\bWING\s+COMMANDER\b/gi,
-  ];
-  for (const pattern of militaryPatterns) {
-    str = str.replace(pattern, ' ');
-  }
-  if (str.includes('-')) {
-    const parts = str.split('-').map(s => s.trim()).filter(Boolean);
-    if (parts.length === 2 && parts[1].length > 2) {
-      str = parts[1] + ' ' + parts[0].replace(/^[A-Z]\s+[A-Z]\s+/, '');
-    }
-  }
-  return str.replace(/[.\-_]/g, ' ').replace(/\s+/g, ' ').trim();
-}
+import { cleanMilitaryRanks, splitPatientName } from './utils'
 
 function clampOrUndefined(val: number | undefined, min: number, max: number): number | undefined {
   if (val === undefined || isNaN(val)) return undefined;
@@ -93,9 +71,7 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     if (!nameVal || nameVal.toLowerCase() === 'unknown' || nameVal.toLowerCase() === 'nil' || nameVal === '-') {
       continue;
     }
-    const nameParts = nameVal.split(/\s+/);
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    const { firstName, lastName } = splitPatientName(nameVal);
 
     const doa = parseExcelDate(row['DOA']);
     const dod = parseExcelDate(row['DOD']);
