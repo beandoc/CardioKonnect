@@ -14,6 +14,125 @@ import { getPatient, getVisits, updateVisit, getPatients, getAllLatestVisits } f
 import type { Patient, Visit } from '@/lib/types'
 import { toast } from 'sonner'
 import InterventionalRiskWorkbench from '@/components/risk/InterventionalRiskWorkbench'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
+
+const DUMMY_CATH_PATIENTS: { id: string; label: string; tag: string; patient: Patient; visit: Visit }[] = [
+  {
+    id: 'demo-cath-stemi',
+    label: '⚡ Demo Case 1: Acute Anterior STEMI (Primary PCI · Apex Kanpur)',
+    tag: 'Primary PCI / STEMI',
+    patient: {
+      id: 'demo-cath-stemi',
+      firstName: 'Ramesh',
+      lastName: 'Verma (Demo Case)',
+      mrn: '7AFH-DEMO-001',
+      dob: '1968-04-12',
+      sex: 'Male',
+      age: 58,
+      registryId: 'cathlab',
+      siteId: 'KANPUR_APEX',
+      comorbidDiabetes: true,
+      comorbidHypertension: true,
+      comorbidCAD: true,
+      vitalStatus: 'Alive',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as unknown as Patient,
+    visit: {
+      id: 'demo-visit-stemi',
+      patientId: 'demo-cath-stemi',
+      visitDate: new Date().toISOString(),
+      bpSystolic: 110,
+      bpDiastolic: 72,
+      heartRate: 96,
+      weight: 74,
+      height: 170,
+      creatinine: 1.15,
+      egfr: 72,
+      lvef: 38,
+      nyha: 'III',
+      ntProBNP: 1950,
+      killipClass: 'II',
+      rhythm: 'Sinus',
+      visitType: 'Inpatient',
+    } as unknown as Visit
+  },
+  {
+    id: 'demo-cath-nstemi',
+    label: '⚡ Demo Case 2: High-Risk NSTEMI Multi-Vessel CAD (Radial Access)',
+    tag: 'High-Risk NSTEMI',
+    patient: {
+      id: 'demo-cath-nstemi',
+      firstName: 'Sunita',
+      lastName: 'Agarwal (Demo Case)',
+      mrn: '7AFH-DEMO-002',
+      dob: '1960-08-20',
+      sex: 'Female',
+      age: 66,
+      registryId: 'cathlab',
+      siteId: 'KANPUR_APEX',
+      comorbidDiabetes: true,
+      comorbidHypertension: true,
+      comorbidPriorPCI: true,
+      vitalStatus: 'Alive',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as unknown as Patient,
+    visit: {
+      id: 'demo-visit-nstemi',
+      patientId: 'demo-cath-nstemi',
+      visitDate: new Date().toISOString(),
+      bpSystolic: 142,
+      bpDiastolic: 86,
+      heartRate: 82,
+      weight: 62,
+      height: 156,
+      creatinine: 1.35,
+      egfr: 44,
+      lvef: 45,
+      nyha: 'II',
+      visitType: 'Inpatient',
+    } as unknown as Visit
+  },
+  {
+    id: 'demo-cath-hbr',
+    label: '⚡ Demo Case 3: Complex Left Main PCI + High Bleeding Risk (ARC-HBR / Mehran)',
+    tag: 'ARC-HBR / Mehran',
+    patient: {
+      id: 'demo-cath-hbr',
+      firstName: 'Mohammad',
+      lastName: 'Tariq (Demo Case)',
+      mrn: '7AFH-DEMO-003',
+      dob: '1952-01-15',
+      sex: 'Male',
+      age: 74,
+      registryId: 'cathlab',
+      siteId: 'KANPUR_APEX',
+      comorbidDiabetes: true,
+      comorbidCKD: true,
+      comorbidAF: true,
+      vitalStatus: 'Alive',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as unknown as Patient,
+    visit: {
+      id: 'demo-visit-hbr',
+      patientId: 'demo-cath-hbr',
+      visitDate: new Date().toISOString(),
+      bpSystolic: 108,
+      bpDiastolic: 64,
+      heartRate: 88,
+      weight: 60,
+      height: 165,
+      creatinine: 2.1,
+      egfr: 33,
+      lvef: 32,
+      nyha: 'III',
+      visitType: 'Inpatient',
+    } as unknown as Visit
+  }
+]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomSurvivalTooltip({ active, payload }: any) {
@@ -28,18 +147,27 @@ function CustomSurvivalTooltip({ active, payload }: any) {
 }
 
 function RiskCalculatorContent() {
+  const { currentUser } = useAppUser()
   const searchParams = useSearchParams()
   const router = useRouter()
   
   const patientId = searchParams.get('patientId')
   const visitId = searchParams.get('visitId')
+  const isKanpur = currentUser?.siteId === 'KANPUR_APEX'
 
-  const [domainTrack, setDomainTrack] = useState<'hf' | 'interventional'>('hf')
+  const [domainTrack, setDomainTrack] = useState<'hf' | 'interventional'>(isKanpur ? 'interventional' : 'hf')
   const [activeCalculator, setActiveCalculator] = useState<'maggic' | 'h2fpef' | 'hfapeff' | 'charm' | 'chads' | 'hasbled' | 'mace' | 'cin' | 'readmission' | 'ascvd'>('maggic')
   const [crUnit, setCrUnit] = useState<'mg/dL' | 'umol/L'>('mg/dL')
 
   const [connectedPatient, setConnectedPatient] = useState<Patient | null>(null)
   const [connectedVisit, setConnectedVisit] = useState<Visit | null>(null)
+
+  useEffect(() => {
+    if (currentUser?.siteId === 'KANPUR_APEX') {
+      setDomainTrack('interventional')
+      setSelectedRegistry('cathlab')
+    }
+  }, [currentUser])
 
   // MAGGIC inputs state
   const [maggicAge, setMaggicAge] = useState(65)
@@ -157,16 +285,25 @@ function RiskCalculatorContent() {
 
   const [allPatients, setAllPatients] = useState<Patient[]>([])
   const [allVisitsMap, setAllVisitsMap] = useState<Map<string, Visit>>(new Map())
-  const [selectedRegistry, setSelectedRegistry] = useState<string>('hf')
+  const [selectedRegistry, setSelectedRegistry] = useState<string>(isKanpur ? 'cathlab' : 'hf')
   const [selectedPatientId, setSelectedPatientId] = useState<string>(patientId || '')
 
   const [saving, setSaving] = useState(false)
 
   // Derived filtered patients by selected registry track
   const selectablePatients = useMemo(() => {
-    if (selectedRegistry === 'all') return allPatients
-    return allPatients.filter(p => (p.registryId || 'hf').toLowerCase() === selectedRegistry.toLowerCase())
-  }, [allPatients, selectedRegistry])
+    const list = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
+    if (selectedRegistry === 'all') return list
+    return list.filter(p => {
+      if (selectedRegistry === 'cathlab') {
+        return p.registryId === 'cathlab' || p.registryIds?.includes('cathlab') || p.siteId === 'KANPUR_APEX'
+      }
+      if (selectedRegistry === 'cad' || selectedRegistry === 'acs') {
+        return p.registryId === 'cad' || p.registryId === 'acs' || p.registryIds?.includes('cad') || p.registryIds?.includes('acs') || p.registryId === 'cathlab' || p.siteId === 'KANPUR_APEX'
+      }
+      return (p.registryId || 'hf').toLowerCase() === selectedRegistry.toLowerCase() || p.registryIds?.includes(selectedRegistry)
+    })
+  }, [allPatients, selectedRegistry, currentUser])
 
   // Populate all calculators from a given patient and visit
   const populateFromPatientAndVisit = (pt: Patient, vt?: Visit | null) => {
@@ -335,6 +472,12 @@ function RiskCalculatorContent() {
       setConnectedPatient(null)
       setConnectedVisit(null)
       toast.info('Switched to manual simulation mode')
+      return
+    }
+    const dummy = DUMMY_CATH_PATIENTS.find(d => d.id === id)
+    if (dummy) {
+      populateFromPatientAndVisit(dummy.patient, dummy.visit)
+      toast.success(`Loaded ${dummy.tag} dummy simulation data`)
       return
     }
     const pt = allPatients.find(p => p.id === id)
@@ -623,17 +766,21 @@ function RiskCalculatorContent() {
               <select
                 value={selectedRegistry}
                 onChange={e => {
-                  setSelectedRegistry(e.target.value)
-                  if (e.target.value === 'cathlab') setDomainTrack('interventional')
-                  else setDomainTrack('hf')
+                  const val = e.target.value
+                  setSelectedRegistry(val)
+                  if (val === 'cathlab' || val === 'cad') setDomainTrack('interventional')
+                  else if (val === 'hf') setDomainTrack('hf')
                   setSelectedPatientId('')
                   setConnectedPatient(null)
                   setConnectedVisit(null)
                 }}
                 className="w-full bg-slate-950 border border-blue-500/30 rounded-xl px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-blue-400 cursor-pointer shadow-inner"
               >
-                <option value="hf">Heart Failure Registry (HF • {allPatients.filter(p => (p.registryId || 'hf') === 'hf').length} pts)</option>
+                <option value="cathlab">
+                  Cath Lab & Interventional PCI (Apex Hospital Kanpur · {allPatients.filter(p => p.siteId === 'KANPUR_APEX' || p.registryId === 'cathlab').length} pts)
+                </option>
                 <option value="cad">Coronary Artery Disease & ACS (CAD)</option>
+                <option value="hf">Heart Failure Registry (AICTS Pune · {allPatients.filter(p => (p.registryId || 'hf') === 'hf' && p.siteId !== 'KANPUR_APEX').length} pts)</option>
                 <option value="af">Atrial Fibrillation & Arrhythmias (AF)</option>
                 <option value="vhd">Valvular & Structural Heart (VHD)</option>
                 <option value="all">All Registries & Cohorts ({allPatients.length} pts)</option>
@@ -644,7 +791,7 @@ function RiskCalculatorContent() {
           {/* 2. Patient from Registry Selector */}
           <div className="md:col-span-5 space-y-1">
             <label className="text-[11px] font-semibold text-gray-300 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-cyan-400" /> 2. Select Patient from Registry
+              <User className="w-3.5 h-3.5 text-cyan-400" /> 2. Select Patient / Demo Case
             </label>
             <div className="relative">
               <select
@@ -655,14 +802,25 @@ function RiskCalculatorContent() {
                 <option value="" className="text-gray-400">
                   — Manual Simulation Mode (Enter custom parameters) —
                 </option>
-                {selectablePatients.map((p) => {
-                  const hidTxt = p.mrn && p.mrn !== '—' ? ` (HID: ${p.mrn})` : ' (HID: —)'
-                  return (
-                    <option key={p.id} value={p.id} className="text-white">
-                      {p.firstName} {p.lastName}{hidTxt}
+                <optgroup label="⚡ Cath Lab Registry Dummy Simulation Presets (Apex Kanpur)">
+                  {DUMMY_CATH_PATIENTS.map(dp => (
+                    <option key={dp.id} value={dp.id} className="text-amber-300 font-semibold bg-slate-900">
+                      {dp.label}
                     </option>
-                  )
-                })}
+                  ))}
+                </optgroup>
+                {selectablePatients.length > 0 && (
+                  <optgroup label={`Enrolled Registry Patients (${selectablePatients.length})`}>
+                    {selectablePatients.map((p) => {
+                      const hidTxt = p.mrn && p.mrn !== '—' ? ` (HID: ${p.mrn})` : ' (HID: —)'
+                      return (
+                        <option key={p.id} value={p.id} className="text-white">
+                          {p.firstName} {p.lastName}{hidTxt}
+                        </option>
+                      )
+                    })}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>
@@ -684,6 +842,34 @@ function RiskCalculatorContent() {
                 <Save className="w-3.5 h-3.5" /> Save to Visit
               </Button>
             )}
+          </div>
+        </div>
+
+        {/* Quick Cath Lab Demo Presets Bar */}
+        <div className="pt-2 border-t border-blue-500/10 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5 fill-amber-400" /> Quick Cath Lab Demo Presets:
+            </span>
+            {DUMMY_CATH_PATIENTS.map(dp => (
+              <button
+                key={dp.id}
+                type="button"
+                onClick={() => {
+                  if (domainTrack !== 'interventional') setDomainTrack('interventional')
+                  setSelectedRegistry('cathlab')
+                  handleSelectPatient(dp.id)
+                }}
+                className={cn(
+                  "text-[11px] px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1.5 font-semibold",
+                  selectedPatientId === dp.id
+                    ? "bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold"
+                    : "bg-slate-800/90 border-amber-500/30 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400"
+                )}
+              >
+                <span>{dp.tag}</span>
+              </button>
+            ))}
           </div>
         </div>
 
