@@ -13,6 +13,7 @@ import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/fir
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { useAppUser } from '@/context/AppUserContext'
 import { filterPatientsByAccess } from '@/lib/accessControl'
+import { calculateLesionSuccess } from '@/lib/interventionalMetrics'
 
 // Left Navigation sections
 const REPORT_SECTIONS = [
@@ -680,7 +681,7 @@ export default function ReportsArchitecturePage() {
   const successfulLesions = pciProcedures.flatMap(p => {
     const hasMace = !!(p.complications?.inLabDeath || p.complications?.emergencyCabg || p.complications?.acuteStentThrombosis || p.complications?.periproceduralMi)
     if (hasMace) return []
-    return (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy' && l.postTimiFlow === 3 && (l.postStenosisPct ?? 100) < 20)
+    return (p.lesions || []).filter(l => calculateLesionSuccess(l))
   })
   const livePciSuccess = allTreatedLesions.length > 0 ? `${Math.round((successfulLesions.length / allTreatedLesions.length) * 100)}%` : '—'
   const radialCount = procedures.filter(p => p.accessSite && p.accessSite.includes('Radial')).length

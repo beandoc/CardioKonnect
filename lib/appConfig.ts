@@ -106,6 +106,32 @@ export const REGISTRY_CONFIG: Record<string, RegistryConfig> = {
     accentColor: '#34d399',
     enrollmentCriteria: 'explicit',
   },
+  arrhythmia: {
+    id: 'arrhythmia',
+    name: 'Atrial Fibrillation & Arrhythmia Registry',
+    shortName: 'Arrhythmia Registry',
+    siteId: 'AICTS_PUNE',
+    piId: 'DR_JAYACHANDRA',
+    piName: 'Dr. A. Jayachandra',
+    piRoleTitle: 'Principal Investigator',
+    welcomeMessage: 'Tracking rhythm disorders, ablation follow-up data, anticoagulation management, and stroke prevention protocols at AICTS, Pune.',
+    gradient: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+    accentColor: '#818cf8',
+    enrollmentCriteria: 'explicit',
+  },
+  structural: {
+    id: 'structural',
+    name: 'Structural Heart & Valve Registry',
+    shortName: 'Structural Registry',
+    siteId: 'AICTS_PUNE',
+    piId: 'DR_JAYACHANDRA',
+    piName: 'Dr. A. Jayachandra',
+    piRoleTitle: 'Principal Investigator',
+    welcomeMessage: 'Monitoring transcatheter aortic/mitral valve interventions (TAVI/TEER), structural repairs, and hemodynamic outcomes at AICTS, Pune.',
+    gradient: 'linear-gradient(135deg, #0284c7 0%, #06b6d4 100%)',
+    accentColor: '#38bdf8',
+    enrollmentCriteria: 'explicit',
+  },
 }
 
 // ─── Application Users ────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import CathStatisticalBenchmarking from '@/components/analytics/CathStatisticalB
 import { useAppUser } from '@/context/AppUserContext'
 import { canAccessRegistry, registryAccessDeniedReason } from '@/lib/accessControl'
 import { REGISTRY_CONFIG, SITES } from '@/lib/appConfig'
+import { calculateLesionSuccess } from '@/lib/interventionalMetrics'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartItem { name: string; value: number }
@@ -917,12 +918,7 @@ export default function RegistryDetailPage() {
             p.complications?.periproceduralMi
           )
           if (hasInLabMace) return []
-          return (p.lesions || []).filter(
-            l => l.treatmentStrategy !== 'Medical Therapy' &&
-                 l.postTimiFlow === 3 &&
-                 l.postStenosisPct != null &&
-                 l.postStenosisPct < 20
-          )
+          return (p.lesions || []).filter(l => calculateLesionSuccess(l))
         })
         const pciSuccessRate = allTreatedLesions.length > 0
           ? Math.round((successfulLesions.length / allTreatedLesions.length) * 100)
@@ -2004,7 +2000,7 @@ export default function RegistryDetailPage() {
       console.error('HF analytics calculation error:', err)
       return null
     }
-  }, [id, patients, visits])
+  }, [id, patients, visits, procedures])
 
   // Explicit handling for uncomputed registries or not-yet-collecting-data states
   const uncollectedRegistries: Record<string, { name: string; desc: string }> = {

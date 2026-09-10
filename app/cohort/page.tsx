@@ -94,7 +94,7 @@ export default function RegistryFrameworkPage() {
       schemaStatus: 'Production Implemented',
       description: 'Tracks coronary anatomic burden from stable angina to multivessel ischemia, mapping stenosis and bifurcation anatomy.',
       keyModules: ['SYNTAX Score Distribution', 'Left Main Disease Protocol', 'Bifurcation Medina Classification', 'CTO J-CTO Score'],
-      linkHref: '/registry-home/cad',
+      linkHref: '/registry-home/cathlab',
       cardioVars: [
         { name: 'SYNTAX Score', fieldPath: 'Visit.coronaryAnatomy.syntaxScore', status: 'Production Active' },
         { name: 'Vessel Stenosis % (LM/LAD/LCx/RCA)', fieldPath: 'Visit.coronaryAnatomy.*Stenosis', status: 'Production Active' },

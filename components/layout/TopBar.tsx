@@ -28,18 +28,30 @@ const TITLES: Record<string, string> = {
 }
 
 const BREADCRUMBS: Record<string, string[]> = {
-  '/':               ['Home'],
-  '/patients':       ['Home', 'Patients'],
-  '/analytics':      ['Home', 'Research Tools', 'Analytics'],
-  '/reports':        ['Home', 'Registry Tools', 'Reports'],
-  '/registry':       ['Home', 'Registry', 'Fields Setup'],
-  '/registry-home':  ['Home', 'Registry', 'Registry Home'],
+  '/':                    ['Home'],
+  '/patients':            ['Home', 'Patients'],
+  '/patients/new':        ['Home', 'Patients', 'New Patient'],
+  '/analytics':           ['Home', 'Research Tools', 'Analytics'],
+  '/analytics-dashboard': ['Home', 'Research Tools', 'Analytics Dashboard'],
+  '/reports':             ['Home', 'Registry Tools', 'Reports'],
+  '/registry':            ['Home', 'Registry', 'Fields Setup'],
+  '/registry-home':       ['Home', 'Registry', 'Registry Home'],
   '/procedures':          ['Home', 'Registry', 'Procedural Audit'],
   '/complication-audit':  ['Home', 'Registry', 'Complication Audit'],
-  '/alerts':         ['Home', 'Registry Tools', 'Clinical Alerts'],
-  '/admin':          ['Home', 'Admin'],
-  '/languages':      ['Home', 'Admin', 'Language Master'],
-  '/deo':            ['Home', 'Operator', 'DEO Portal'],
+  '/cohort':              ['Home', 'Registry Tools', 'Cohort Builder'],
+  '/alerts':              ['Home', 'Registry Tools', 'Clinical Alerts'],
+  '/risk':                ['Home', 'Clinical Tools', 'Risk Calculators'],
+  '/triage':              ['Home', 'Clinical Tools', 'Triage'],
+  '/ai-engine':           ['Home', 'Clinical Tools', 'AI Engine Simulator'],
+  '/research-board':      ['Home', 'Research Tools', 'Research Board'],
+  '/insights':            ['Home', 'Research Tools', 'Clinical Insights'],
+  '/appointments':        ['Home', 'Clinical Tools', 'Appointments'],
+  '/admin':               ['Home', 'Admin'],
+  '/settings':            ['Home', 'System', 'Settings'],
+  '/languages':           ['Home', 'Admin', 'Language Master'],
+  '/deo':                 ['Home', 'Operator', 'DEO Portal'],
+  '/home':                ['Home', 'Overview'],
+  '/log-categories':      ['Home', 'System', 'Log Categories'],
 }
 
 interface TopBarProps {
@@ -51,6 +63,7 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
   const path = usePathname()
   const router = useRouter()
   const [time, setTime] = useState<Date | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const switcherRef = useRef<HTMLDivElement>(null)
   const { user, logout } = useAppUser()
@@ -81,10 +94,6 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
   const isPatientDetail   = path.startsWith('/patients/') && path !== '/patients/new' && !path.includes('/visits/')
   const isVisitRecord     = path.includes('/visits/')
   const isRegistryDetail  = path.startsWith('/registry-home/') && path !== '/registry-home'
-  const title = isVisitRecord ? 'Record Visit'
-    : isPatientDetail ? 'Patient Profile'
-    : isRegistryDetail ? 'Registry Analytics'
-    : TITLES[path] ?? 'Cardio-Konnect'
 
   const crumbs = isPatientDetail ? ['Home', 'Patients', 'Profile']
     : isVisitRecord ? ['Home', 'Patients', 'Profile', 'Visit']
@@ -124,14 +133,24 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
       </div>
 
       {/* Centre — search */}
-      <div className="relative flex-1 max-w-xs hidden md:block">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (searchQuery.trim()) {
+            router.push(`/patients?search=${encodeURIComponent(searchQuery.trim())}`)
+          }
+        }}
+        className="relative flex-1 max-w-xs hidden md:block"
+      >
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: 'rgba(148,163,184,0.4)' }} />
         <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search patients, MRN…"
           className="search-input text-xs"
           style={{ width: '100%' }}
         />
-      </div>
+      </form>
 
       {/* Right — actions */}
       <div className="flex items-center gap-3">
@@ -155,7 +174,14 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
         </button>
 
         {/* Notifications */}
-        <button className="relative w-9 h-9 rounded-xl flex items-center justify-center btn-ghost">
+        <button
+          onClick={() => {
+            toast.info('Navigating to clinical alerts')
+            router.push('/alerts')
+          }}
+          className="relative w-9 h-9 rounded-xl flex items-center justify-center btn-ghost cursor-pointer"
+          title="Clinical Alerts"
+        >
           <Bell className="w-4 h-4" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: '#f43f5e' }} />
         </button>

@@ -347,7 +347,7 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     const lvef = clampOrUndefined(rawLvef, 5, 90);
 
     const typeOfHF = String(row['TYPE OF HF'] || '').trim().toUpperCase();
-    const hfType = typeOfHF.includes('REDUCED') ? 'HFrEF' : (typeOfHF.includes('MID') ? 'HFmrEF' : (typeOfHF.includes('PRESERVED') ? 'HFpEF' : (lvef != null ? (lvef <= 40 ? 'HFrEF' : (lvef <= 49 ? 'HFmrEF' : 'HFpEF')) : undefined)));
+    const hfType = typeOfHF.includes('REDUCED') ? 'HFrEF' : (typeOfHF.includes('MID') ? 'HFmrEF' : (typeOfHF.includes('PRESERVED') ? 'HFpEF' : (lvef != null ? (lvef < 40 ? 'HFrEF' : (lvef <= 49 ? 'HFmrEF' : 'HFpEF')) : undefined)));
 
     // NYHA
     const nyhaStr = String(row['NYHA CLASS'] || '').trim();

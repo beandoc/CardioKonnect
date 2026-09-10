@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Brain, Info, AlertTriangle, Heart, Zap, Settings, RefreshCw,
   Play, ArrowRight, CheckCircle2, XCircle, Plus, Pill, Activity,
@@ -10,7 +10,7 @@ import { getPatients, getVisits } from '@/lib/firestore'
 import type { Patient, Visit, MedEntry } from '@/lib/types'
 import {
   computeMLRiskProfile, evaluateGDMT, generateClinicalAlerts,
-  calculateCHA2DS2VASc, calculateHASBLED, predictKaggleHeartFailure
+  calculateCHA2DS2VAScForPatient, calculateHASBLEDForPatient, predictKaggleHeartFailure
 } from '@/lib/clinicalIntelligence'
 import {
   calculateH2FPEF, calculateHFAPEFF
@@ -59,6 +59,11 @@ const DEFAULT_SIMULATION_VISIT = (patientId: string): Visit => ({
 
 export default function AIEnginePage() {
   const [patients, setPatients] = useState<Patient[]>([])
+  const patientsRef = useRef<Patient[]>([])
+  useEffect(() => {
+    patientsRef.current = patients
+  }, [patients])
+
   const [selectedPatientId, setSelectedPatientId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [visits, setVisits] = useState<Visit[]>([])
@@ -168,7 +173,7 @@ export default function AIEnginePage() {
         setSimSglt2Dose(baseVisit.sglt2i?.dose || '10mg')
 
         // Update diagnostic parameters
-        const pt = patients.find(p => p.id === selectedPatientId)
+        const pt = patientsRef.current.find(p => p.id === selectedPatientId)
         const age = pt ? Math.floor((Date.now() - new Date(pt.dob).getTime()) / (365.25 * 86400000)) : 65
         const sex = pt?.sex || 'Male'
         const weight = baseVisit.weight || 75
@@ -226,7 +231,7 @@ export default function AIEnginePage() {
       }
     }
     loadVisits()
-  }, [selectedPatientId, patients])
+  }, [selectedPatientId])
 
   const selectedPatient = useMemo(() => {
     return patients.find(p => p.id === selectedPatientId) || null

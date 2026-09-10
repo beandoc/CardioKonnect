@@ -26,7 +26,8 @@ import {
 import {
   calculateDoorToBalloonMin,
   calculateAngiographicSuccess,
-  calculateProceduralSuccess
+  calculateProceduralSuccess,
+  calculateLesionSuccess
 } from '@/lib/interventionalMetrics'
 
 interface Props {
@@ -367,7 +368,7 @@ function ProcedureCard({
                           {(l.cto || (l as any).chronicTotalOcclusion) ? ' · CTO' : ''}
                         </td>
                         <td className="py-2 px-3">
-                          {l.postStenosisPct < 20 && l.postTimiFlow === 3 ? (
+                          {calculateLesionSuccess(l) ? (
                             <span className="text-emerald-400 font-bold flex items-center gap-1">
                               <Check className="w-3 h-3" /> Success
                             </span>

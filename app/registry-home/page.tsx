@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
 import type { CathProcedure, Patient } from '@/lib/types'
+import { calculateLesionSuccess } from '@/lib/interventionalMetrics'
 
 
 
@@ -362,7 +363,7 @@ export default function RegistryHomePage() {
             const pciProcedures = allProcedures.filter(p => p.procedureType !== 'Diagnostic Coronary Angiography')
             const allTreatedLesions = pciProcedures.flatMap(p => (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy'))
             
-            // True Angiographic Success: TIMI 3 flow + residual stenosis < 20% with NO in-lab MACE
+            // True Angiographic Success: TIMI 3 flow + residual stenosis threshold with NO in-lab MACE
             const successfulLesions = pciProcedures.flatMap(p => {
               const hasInLabMace = !!(
                 p.complications?.inLabDeath ||
@@ -371,12 +372,7 @@ export default function RegistryHomePage() {
                 p.complications?.periproceduralMi
               )
               if (hasInLabMace) return []
-              return (p.lesions || []).filter(
-                l => l.treatmentStrategy !== 'Medical Therapy' &&
-                     l.postTimiFlow === 3 &&
-                     l.postStenosisPct != null &&
-                     l.postStenosisPct < 20
-              )
+              return (p.lesions || []).filter(l => calculateLesionSuccess(l))
             })
             const pciSuccessRate = allTreatedLesions.length > 0
               ? Math.round((successfulLesions.length / allTreatedLesions.length) * 100)
@@ -478,7 +474,7 @@ export default function RegistryHomePage() {
           } else if (r.id === 'acs') {
             const acsProcedures = allProcedures.filter(p => p.clinicalIndication === 'STEMI' || p.clinicalIndication === 'NSTEMI' || p.clinicalIndication === 'Unstable Angina')
             const stemiCases = acsProcedures.filter(p => p.clinicalIndication === 'STEMI' && p.stemiTimelines?.dtbMinutes != null)
-            const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) < 90).length
+            const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) <= 90).length
             const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
 
             const acsTreatedLesions = acsProcedures.flatMap(p => p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy')

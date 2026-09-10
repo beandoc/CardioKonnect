@@ -14,9 +14,11 @@ import { scoreDataCompleteness } from '@/lib/clinicalIntelligence'
 import { generateMRN, getAge, initials } from '@/lib/utils'
 import type { Patient, Visit, PatientInput, VisitInput, MedEntry } from '@/lib/types'
 import { toast } from 'sonner'
+import { useAppUser } from '@/context/AppUserContext'
 
 export default function DEOPortalPage() {
   const router = useRouter()
+  const { logout } = useAppUser()
   const [activeTab, setActiveTab] = useState<'worklist' | 'register' | 'encounter' | 'directory'>('worklist')
   const [loading, setLoading] = useState(true)
   const [patients, setPatients] = useState<Patient[]>([])
@@ -435,13 +437,14 @@ export default function DEOPortalPage() {
             <ArrowUpRight className="w-3 h-3 opacity-70" />
           </Link>
 
-          <Link
-            href="/login"
-            className="p-2 rounded-xl text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-all"
+          <button
+            type="button"
+            onClick={() => logout()}
+            className="p-2 rounded-xl text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-all cursor-pointer"
             title="Logout"
           >
             <LogOut className="w-4 h-4" />
-          </Link>
+          </button>
         </div>
       </header>
 

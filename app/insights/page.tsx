@@ -8,7 +8,7 @@ import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import {
   summarisePopulationML, evaluateGDMT, generateClinicalAlerts,
-  computeMLRiskProfile, calculateCHA2DS2VASc, calculateHASBLED,
+  computeMLRiskProfile,
   scoreDataCompleteness,
 } from '@/lib/clinicalIntelligence'
 import Link from 'next/link'

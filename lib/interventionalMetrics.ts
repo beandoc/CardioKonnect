@@ -129,10 +129,10 @@ export function calculateVesselsDiseased(proc: CathProcedure): {
  * TIMI 3 flow restored with residual diameter stenosis < 20% (< 50% for balloon-only/POBA).
  */
 export function calculateLesionSuccess(lesion: LesionRecord): boolean {
-  if (!lesion.treated) return false
+  if (lesion.treated === false || lesion.treatmentStrategy === 'Medical Therapy') return false
   const isPoba = !lesion.deviceIds || lesion.deviceIds.length === 0
   const stenosisThreshold = isPoba ? 50 : 20
-  return lesion.postTimiFlow === 3 && lesion.postStenosisPct < stenosisThreshold
+  return lesion.postTimiFlow === 3 && (lesion.postStenosisPct != null && lesion.postStenosisPct < stenosisThreshold)
 }
 
 /**

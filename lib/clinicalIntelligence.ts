@@ -78,11 +78,14 @@ export interface HASBLEDResult {
 
 // ─── Data completeness ────────────────────────────────────────────────────────
 
-export interface CompletenessReport {
+export interface DomainCompletenessReport {
   overallPct: number
   domains: { name: string; pct: number; missing: string[] }[]
   dataGrade: 'A' | 'B' | 'C' | 'D'
 }
+
+/** @deprecated Use DomainCompletenessReport to avoid collision with dataCompleteness.ts */
+export type CompletenessReport = DomainCompletenessReport
 
 // ─── Research-Only Exploratory Risk Summary ──────────────────────────────────
 // Note: Statistical composite summary for research exploration.
@@ -102,13 +105,12 @@ export interface ExploratoryRiskSummary {
 export type MLRiskProfile = ExploratoryRiskSummary
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
 // CHA₂DS₂-VASc Score (AF patients only)
 // Reference: ESC 2023 AF Guidelines, Lip GY et al. Chest. 2010
 // Single source of truth delegated to lib/riskScores.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function calculateCHA2DS2VASc(
+export function calculateCHA2DS2VAScForPatient(
   patient: Pick<Patient, 'dob' | 'sex' | 'comorbidities'>,
   visit: Pick<Visit, 'rhythm' | 'bpSystolic' | 'hfType'>
 ): CHA2DS2VASCResult {
@@ -140,13 +142,15 @@ export function calculateCHA2DS2VASc(
   return { score: result.score, strokeRiskPctPerYear: result.strokeRiskPctPerYear, recommendation, detail }
 }
 
+export const calculateCHA2DS2VASc = calculateCHA2DS2VAScForPatient
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HAS-BLED Bleeding Risk Score
 // Reference: Pisters R et al. Chest. 2010;138(5):1093-100
 // Single source of truth delegated to lib/riskScores.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function calculateHASBLED(
+export function calculateHASBLEDForPatient(
   patient: Pick<Patient, 'dob' | 'comorbidities'>,
   visit: Pick<Visit, 'bpSystolic' | 'egfr' | 'creatinine' | 'sodium'>
 ): HASBLEDResult {
@@ -203,6 +207,8 @@ export function calculateHASBLED(
     detail
   }
 }
+
+export const calculateHASBLED = calculateHASBLEDForPatient
 
 // Helper to compute dose achievement percentage
 function getDosePct(drugName?: string, doseStr?: string): number | undefined {
