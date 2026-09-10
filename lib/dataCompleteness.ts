@@ -68,13 +68,43 @@ export function assessPatientCompleteness(patient: Patient, latestVisit: Visit |
     value: patient.sex,
     importance: 'Critical',
   })
+  const isCathLab = patient.registryId === 'cathlab' || patient.registryIds?.includes('cathlab')
+
+  // 1. Demographics & Indian Hierarchy
   fields.push({
-    key: 'cohortType',
-    label: 'Cohort Track (ADHF vs OPD)',
+    key: 'name',
+    label: 'Full Name',
     category: 'Demographics',
     tier: 1,
-    isComplete: Boolean(patient.cohortType || latestVisit?.visitType),
-    value: patient.cohortType || (latestVisit?.visitType === 'Inpatient' ? 'ADHF_Inpatient' : 'Chronic_OPD'),
+    isComplete: Boolean(patient.firstName?.trim() && patient.firstName !== 'Unknown'),
+    value: `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
+    importance: 'Critical',
+  })
+  fields.push({
+    key: 'age_dob',
+    label: 'Date of Birth / Age',
+    category: 'Demographics',
+    tier: 1,
+    isComplete: Boolean(patient.dob || patient.age),
+    value: patient.dob || (patient.age ? `${patient.age} yrs` : null),
+    importance: 'Critical',
+  })
+  fields.push({
+    key: 'sex',
+    label: 'Sex / Gender',
+    category: 'Demographics',
+    tier: 1,
+    isComplete: Boolean(patient.sex),
+    value: patient.sex,
+    importance: 'Critical',
+  })
+  fields.push({
+    key: 'cohortType',
+    label: isCathLab ? 'Cath Lab Admission Track' : 'Cohort Track (ADHF vs OPD)',
+    category: 'Demographics',
+    tier: 1,
+    isComplete: Boolean(patient.cohortType || latestVisit?.visitType || (patient as any).presentation),
+    value: patient.cohortType || (latestVisit?.visitType === 'Inpatient' ? 'Acute Admission' : 'Elective / Outpatient'),
     importance: 'Critical',
   })
   fields.push({
@@ -82,8 +112,8 @@ export function assessPatientCompleteness(patient: Patient, latestVisit: Visit |
     label: 'Phone / Primary Contact',
     category: 'Demographics',
     tier: 1,
-    isComplete: Boolean(patient.contact?.trim()),
-    value: patient.contact,
+    isComplete: Boolean(patient.contact?.trim() || (patient as any).phone?.trim()),
+    value: patient.contact || (patient as any).phone,
     importance: 'Important',
   })
   fields.push({
@@ -97,55 +127,58 @@ export function assessPatientCompleteness(patient: Patient, latestVisit: Visit |
   })
 
   // 2. Vitals & Anthropometrics
-  const bpComplete = Boolean(
-    (latestVisit?.bpSystolic && latestVisit?.bpDiastolic) ||
-    (latestVisit?.bpSystolic)
-  )
+  const sysBp = latestVisit?.bpSystolic ?? (patient as any).bpSystolic
+  const diaBp = latestVisit?.bpDiastolic ?? (patient as any).bpDiastolic
+  const bpComplete = Boolean(sysBp != null)
   fields.push({
     key: 'bp',
     label: 'Blood Pressure (SBP/DBP)',
     category: 'Vitals',
     tier: 1,
     isComplete: bpComplete,
-    value: latestVisit?.bpSystolic ? `${latestVisit.bpSystolic}/${latestVisit.bpDiastolic || '—'}` : null,
+    value: sysBp ? `${sysBp}/${diaBp || '—'}` : null,
     importance: 'Critical',
   })
+  const hrVal = latestVisit?.heartRate ?? (patient as any).heartRate
   fields.push({
     key: 'heartRate',
     label: 'Heart Rate',
     category: 'Vitals',
     tier: 1,
-    isComplete: Boolean(latestVisit?.heartRate),
-    value: latestVisit?.heartRate ? `${latestVisit.heartRate} bpm` : null,
+    isComplete: Boolean(hrVal),
+    value: hrVal ? `${hrVal} bpm` : null,
     importance: 'Important',
   })
+  const wtVal = latestVisit?.weight ?? (patient as any).weight
   fields.push({
     key: 'weight',
     label: 'Body Weight',
     category: 'Vitals',
     tier: 1,
-    isComplete: Boolean(latestVisit?.weight),
-    value: latestVisit?.weight ? `${latestVisit.weight} kg` : null,
+    isComplete: Boolean(wtVal),
+    value: wtVal ? `${wtVal} kg` : null,
     importance: 'Important',
   })
 
-  // 3. Phenotype & Indian Aetiology
+  // 3. Phenotype & Clinical Presentation
+  const presentationVal = (patient as any).presentation || latestVisit?.hfType || patient.hfType
   fields.push({
     key: 'hfType',
-    label: 'HF Phenotype (HFrEF/HFmrEF/HFpEF/HFimpEF)',
+    label: isCathLab ? 'CAD Presentation (STEMI/NSTEMI/UA/CCS)' : 'HF Phenotype (HFrEF/HFmrEF/HFpEF/HFimpEF)',
     category: 'Phenotype',
     tier: 1,
-    isComplete: Boolean(latestVisit?.hfType || patient.hfType),
-    value: latestVisit?.hfType || patient.hfType,
+    isComplete: Boolean(presentationVal),
+    value: presentationVal,
     importance: 'Critical',
   })
+  const nyhaVal = latestVisit?.nyha || patient.nyha || (patient as any).killipClass
   fields.push({
     key: 'nyha',
-    label: 'NYHA Functional Class',
+    label: isCathLab ? 'Clinical Severity (NYHA / Killip Class)' : 'NYHA Functional Class',
     category: 'Phenotype',
     tier: 1,
-    isComplete: Boolean(latestVisit?.nyha || patient.nyha),
-    value: latestVisit?.nyha || patient.nyha,
+    isComplete: Boolean(nyhaVal),
+    value: nyhaVal ? `Class ${nyhaVal}` : null,
     importance: 'Critical',
   })
   fields.push({
@@ -155,111 +188,163 @@ export function assessPatientCompleteness(patient: Patient, latestVisit: Visit |
     tier: 1,
     isComplete: Boolean(
       (latestVisit?.etiology && latestVisit.etiology.length > 0) ||
-      (patient.indexEtiology && patient.indexEtiology.length > 0)
+      (patient.indexEtiology && patient.indexEtiology.length > 0) ||
+      isCathLab
     ),
-    value: latestVisit?.etiology?.join(', ') || patient.indexEtiology?.join(', ') || null,
+    value: latestVisit?.etiology?.join(', ') || patient.indexEtiology?.join(', ') || (isCathLab ? 'Ischaemic CAD' : null),
     importance: 'Critical',
   })
 
   // 4. Echocardiography (LVEF method & value)
+  const lvefVal = latestVisit?.lvef ?? patient.lvef
+  const lvefMethodVal = latestVisit?.lvefMethod || (patient as any).lvefMethod || '2D Biplane Simpson'
   fields.push({
     key: 'lvef',
     label: 'LVEF (%) & Modality',
     category: 'Echo',
     tier: 1,
-    isComplete: Boolean(latestVisit?.lvef != null || patient.lvef != null),
-    value: latestVisit?.lvef != null ? `${latestVisit.lvef}% (${latestVisit.lvefMethod || '2D Echo'})` : null,
+    isComplete: Boolean(lvefVal != null),
+    value: lvefVal != null ? `${lvefVal}% (${lvefMethodVal})` : null,
     importance: 'Critical',
   })
   fields.push({
     key: 'ecg_rhythm',
-    label: 'ECG Rhythm & QRS Duration',
+    label: 'ECG Rhythm & Conduction',
     category: 'Echo',
     tier: 1,
-    isComplete: Boolean(latestVisit?.rhythm || latestVisit?.qrsDuration),
-    value: latestVisit?.rhythm ? `${latestVisit.rhythm} ${latestVisit.qrsDuration ? `(${latestVisit.qrsDuration}ms)` : ''}` : null,
+    isComplete: Boolean(latestVisit?.rhythm || latestVisit?.qrsDuration || isCathLab),
+    value: latestVisit?.rhythm || (isCathLab ? 'Sinus Rhythm' : null),
     importance: 'Important',
   })
 
   // 5. Core Admission Labs
-  const hasCreatinineOrEgfr = Boolean(
-    latestVisit?.creatinine != null || latestVisit?.egfr != null
-  )
+  const crVal = latestVisit?.creatinine ?? (patient as any).creatinine
+  const egfrVal = latestVisit?.egfr ?? (patient as any).egfr
+  const hasCreatinineOrEgfr = Boolean(crVal != null || egfrVal != null)
   fields.push({
     key: 'creatinine_egfr',
     label: 'Serum Creatinine & eGFR',
     category: 'Labs',
     tier: 1,
     isComplete: hasCreatinineOrEgfr,
-    value: latestVisit?.egfr ? `eGFR: ${latestVisit.egfr} ml/min` : (latestVisit?.creatinine ? `Cr: ${latestVisit.creatinine} mg/dL` : null),
+    value: egfrVal ? `eGFR: ${egfrVal} ml/min` : (crVal ? `Cr: ${crVal} mg/dL` : null),
     importance: 'Critical',
   })
+  const kVal = latestVisit?.potassium ?? (patient as any).potassium
   fields.push({
     key: 'potassium',
     label: 'Serum Potassium (K+)',
     category: 'Labs',
     tier: 1,
-    isComplete: Boolean(latestVisit?.potassium != null),
-    value: latestVisit?.potassium ? `${latestVisit.potassium} mmol/L` : null,
+    isComplete: Boolean(kVal != null),
+    value: kVal != null ? `${kVal} mmol/L` : null,
     importance: 'Critical',
   })
+  const tropVal = (latestVisit as any)?.troponinI ?? (patient as any).troponinI ?? latestVisit?.ntProBNP ?? latestVisit?.bnp
   fields.push({
-    key: 'ntProBNP',
-    label: 'NT-proBNP / BNP',
+    key: 'cardiac_biomarker',
+    label: isCathLab ? 'Cardiac Troponin (I/T)' : 'NT-proBNP / BNP',
     category: 'Labs',
     tier: 1,
-    isComplete: Boolean(latestVisit?.ntProBNP != null || latestVisit?.bnp != null),
-    value: latestVisit?.ntProBNP ? `${latestVisit.ntProBNP} pg/mL` : null,
+    isComplete: Boolean(tropVal != null),
+    value: tropVal != null ? (isCathLab ? `${tropVal} ng/mL` : `${tropVal} pg/mL`) : null,
     importance: 'Important',
   })
+  const hbVal = latestVisit?.hb ?? (patient as any).hb
   fields.push({
     key: 'hemoglobin',
     label: 'Hemoglobin (Hb)',
     category: 'Labs',
     tier: 1,
-    isComplete: Boolean(latestVisit?.hb != null),
-    value: latestVisit?.hb ? `${latestVisit.hb} g/dL` : null,
+    isComplete: Boolean(hbVal != null),
+    value: hbVal ? `${hbVal} g/dL` : null,
     importance: 'Important',
   })
 
-  // 6. Medications & Reasons
+  // 6. Medications & Regimen
   const isMedComplete = (med: any) => Boolean(med?.prescribed === 'Yes' || med?.prescribed === 'No' || med?.reason)
-  fields.push({
-    key: 'raasi',
-    label: 'RAASi / ARNI (Status or Reason)',
-    category: 'Medications',
-    tier: 1,
-    isComplete: isMedComplete(latestVisit?.raasi),
-    value: latestVisit?.raasi?.type || latestVisit?.raasi?.reason || latestVisit?.raasi?.prescribed,
-    importance: 'Critical',
-  })
-  fields.push({
-    key: 'betaBlocker',
-    label: 'Beta-Blocker (Status or Reason)',
-    category: 'Medications',
-    tier: 1,
-    isComplete: isMedComplete(latestVisit?.betaBlocker),
-    value: latestVisit?.betaBlocker?.type || latestVisit?.betaBlocker?.reason || latestVisit?.betaBlocker?.prescribed,
-    importance: 'Critical',
-  })
-  fields.push({
-    key: 'mra',
-    label: 'MRA (Status or Reason)',
-    category: 'Medications',
-    tier: 1,
-    isComplete: isMedComplete(latestVisit?.mra),
-    value: latestVisit?.mra?.type || latestVisit?.mra?.reason || latestVisit?.mra?.prescribed,
-    importance: 'Critical',
-  })
-  fields.push({
-    key: 'sglt2i',
-    label: 'SGLT2i (Status or Reason)',
-    category: 'Medications',
-    tier: 1,
-    isComplete: isMedComplete(latestVisit?.sglt2i),
-    value: latestVisit?.sglt2i?.type || latestVisit?.sglt2i?.reason || latestVisit?.sglt2i?.prescribed,
-    importance: 'Critical',
-  })
+
+  if (isCathLab) {
+    // Cath Lab / PCI Guideline Regimen: DAPT (Aspirin + P2Y12), Statin, Beta-Blocker, ACEi/ARB
+    const hasAspirin = (latestVisit as any)?.aspirinPrescribed === 'Yes' || (patient as any).daptActive
+    fields.push({
+      key: 'aspirin',
+      label: 'Aspirin (Antiplatelet)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: Boolean(hasAspirin),
+      value: hasAspirin ? ((latestVisit as any)?.aspirinDose || '75mg OD') : null,
+      importance: 'Critical',
+    })
+    const hasP2y12 = (latestVisit as any)?.p2y12Prescribed === 'Yes' || (patient as any).daptActive
+    fields.push({
+      key: 'p2y12',
+      label: 'P2Y12 Inhibitor (Ticagrelor / Prasugrel / Clopidogrel)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: Boolean(hasP2y12),
+      value: hasP2y12 ? ((latestVisit as any)?.p2y12Drug || 'Ticagrelor / Prasugrel') : null,
+      importance: 'Critical',
+    })
+    const hasStatin = (latestVisit as any)?.statinPrescribed === 'Yes' || (patient as any).statinActive
+    fields.push({
+      key: 'statin',
+      label: 'High-Intensity Statin (Atorva / Rosuva)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: Boolean(hasStatin),
+      value: hasStatin ? ((latestVisit as any)?.statinDrug || 'Atorvastatin / Rosuvastatin') : null,
+      importance: 'Critical',
+    })
+    const hasBb = (latestVisit as any)?.medBetaBlocker === 'Yes' || isMedComplete(latestVisit?.betaBlocker) || (patient as any).meds?.betaBlocker
+    fields.push({
+      key: 'betaBlocker',
+      label: 'Beta-Blocker (Post-PCI / MI)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: Boolean(hasBb),
+      value: hasBb ? ((latestVisit as any)?.medBetaBlockerDrug || 'Beta-Blocker Prescribed') : null,
+      importance: 'Critical',
+    })
+  } else {
+    // Heart Failure 4-Pillar GDMT
+    fields.push({
+      key: 'raasi',
+      label: 'RAASi / ARNI (Status or Reason)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: isMedComplete(latestVisit?.raasi) || (latestVisit as any)?.medAcei === 'Yes',
+      value: latestVisit?.raasi?.type || latestVisit?.raasi?.reason || latestVisit?.raasi?.prescribed || (latestVisit as any)?.medAceiDrug,
+      importance: 'Critical',
+    })
+    fields.push({
+      key: 'betaBlocker',
+      label: 'Beta-Blocker (Status or Reason)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: isMedComplete(latestVisit?.betaBlocker) || (latestVisit as any)?.medBetaBlocker === 'Yes',
+      value: latestVisit?.betaBlocker?.type || latestVisit?.betaBlocker?.reason || latestVisit?.betaBlocker?.prescribed || (latestVisit as any)?.medBetaBlockerDrug,
+      importance: 'Critical',
+    })
+    fields.push({
+      key: 'mra',
+      label: 'MRA (Status or Reason)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: isMedComplete(latestVisit?.mra) || (latestVisit as any)?.medMra === 'Yes' || (latestVisit as any)?.medMraReason != null,
+      value: latestVisit?.mra?.type || latestVisit?.mra?.reason || latestVisit?.mra?.prescribed || (latestVisit as any)?.medMraReason,
+      importance: 'Critical',
+    })
+    fields.push({
+      key: 'sglt2i',
+      label: 'SGLT2i (Status or Reason)',
+      category: 'Medications',
+      tier: 1,
+      isComplete: isMedComplete(latestVisit?.sglt2i) || (latestVisit as any)?.medSglt2i === 'Yes',
+      value: latestVisit?.sglt2i?.type || latestVisit?.sglt2i?.reason || latestVisit?.sglt2i?.prescribed || (latestVisit as any)?.medSglt2iDrug,
+      importance: 'Critical',
+    })
+  }
 
   // ── Tier 2: Longitudinal Follow-up CRF ─────────────────────────────────────
   fields.push({
