@@ -7,12 +7,15 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import Link from 'next/link'
-import { ArrowLeft, Users, CheckCircle, TrendingUp, Clock, Activity, PlusCircle, FlaskConical, Microscope, Layers, Info, TrendingDown, ArrowRight, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Users, CheckCircle, TrendingUp, Clock, Activity, PlusCircle, FlaskConical, Microscope, Layers, Info, TrendingDown, ArrowRight, AlertTriangle, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getPatients, getAllVisits, subscribePatients, subscribeVisits, subscribeCathProcedures } from '@/lib/firestore'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import CathProcedureModal from '@/components/procedures/CathProcedureModal'
 import CathStatisticalBenchmarking from '@/components/analytics/CathStatisticalBenchmarking'
+import { useAppUser } from '@/context/AppUserContext'
+import { canAccessRegistry, registryAccessDeniedReason } from '@/lib/accessControl'
+import { REGISTRY_CONFIG, SITES } from '@/lib/appConfig'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ChartItem { name: string; value: number }
@@ -808,6 +811,7 @@ function ResearchBoardSection({ data }: { data: NonNullable<RegistryData['resear
 export default function RegistryDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
+  const { user, currentUser } = useAppUser()
   const [patients, setPatients] = useState<Patient[]>([])
   const [visits, setVisits] = useState<Visit[]>([])
   const [procedures, setProcedures] = useState<CathProcedure[]>([])
@@ -816,6 +820,10 @@ export default function RegistryDetailPage() {
   const [selectedProcPatient, setSelectedProcPatient] = useState<Patient | null>(null)
   const [selectedProc, setSelectedProc] = useState<CathProcedure | null>(null)
 
+  // ── Access control gate ───────────────────────────────────────────────────
+  // User context is hydrated client-side; wait until user is loaded.
+  const accessGranted = user === null ? null : canAccessRegistry(user, id)
+  const registryMeta  = REGISTRY_CONFIG[id]
   // ── Helper: build cumulative enrollment trend using real DOA dates ─────────
   function getEnrollmentTrend(hfPts: Patient[]) {
     const sorted = [...hfPts].sort((a, b) => {
@@ -1037,12 +1045,13 @@ export default function RegistryDetailPage() {
           gradient: 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
           accentColor: '#f59e0b',
           ringColor: '#fbbf24',
+          registryOwner: 'Dr. Rajeev Chauhan',
           patients: uniquePatientIds.size,
           newThisMonth: newThisMonth,
           completion: avgCompletion,
           fieldsTotal: cathFieldsCount,
           fieldsCaptured: actualCathFieldsCaptured,
-          status: 'Suspended' as const,
+          status: (uniquePatientIds.size > 0 ? 'Active' : 'Suspended') as 'Active' | 'Suspended',
           kpis: [
             { label: 'PCI Success Rate', value: '—', sub: 'not yet captured' },
             { label: 'Transradial Access', value: radialRate !== null ? `${radialRate}%` : '—', sub: procedures.length ? `${radialCount}/${procedures.length} radial first` : 'no procedures' },
@@ -1176,7 +1185,7 @@ export default function RegistryDetailPage() {
         // Presentation phenotype (Mutually exclusive)
         const presCounts: Record<string, number> = { STEMI: 0, NSTEMI: 0, 'Unstable Angina': 0, 'Stable CAD': 0 }
         acsProcedures.forEach(p => {
-          if (p.clinicalIndication in presCounts) presCounts[p.clinicalIndication]++
+          if (p.clinicalIndication && p.clinicalIndication in presCounts) presCounts[p.clinicalIndication]++
         })
         const presData = Object.entries(presCounts).map(([name, value]) => ({ name, value })).filter(d => d.value > 0)
 
@@ -1223,7 +1232,7 @@ export default function RegistryDetailPage() {
           completion: acsCompletion,
           fieldsTotal: acsFieldsTotal,
           fieldsCaptured: acsAvgCaptured,
-          status: (acsPatients.length > 0 ? 'Active' : 'Enrolling') as 'Active' | 'Enrolling',
+          status: (acsPatients.length > 0 ? 'Active' : 'Suspended') as 'Active' | 'Suspended',
           kpis: [
             { label: 'DTB ≤ 90 min', value: dtbRate !== null ? `${dtbRate}%` : '—', sub: stemiCases.length ? `${dtbMet}/${stemiCases.length} STEMIs` : 'no STEMI cases' },
             { label: 'TIMI 3 Flow', value: timi3Rate !== null ? `${timi3Rate}%` : '—', sub: treatedLesions.length ? `${timi3Lesions.length}/${treatedLesions.length} treated lesions` : 'no lesions treated' },
@@ -2032,10 +2041,55 @@ export default function RegistryDetailPage() {
               <span>Truth in Reporting Protocol</span>
             </div>
             <p className="text-xs text-gray-300 leading-relaxed">
-              No live Case Report Form (CRF) or active data feed is currently configured for this registry. In accordance with clinical data integrity standards, CardioPlus does not display fabricated benchmarks or placeholder statistics. Data collection will activate upon release of this dedicated module.
+              No live Case Report Form (CRF) or active data feed is currently configured for this registry. In accordance with clinical data integrity standards, CardioKonnect does not display fabricated benchmarks or placeholder statistics. Data collection will activate upon release of this dedicated module.
             </p>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  // ── Access denied gate ────────────────────────────────────────────────────
+  if (accessGranted === false) {
+    const piName = registryMeta?.piName ?? 'the Registry PI'
+    const siteName = registryMeta ? SITES[registryMeta.siteId]?.name : undefined
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-5 text-center px-6">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+          <Lock className="w-7 h-7 text-rose-400" />
+        </div>
+        <div className="max-w-md space-y-2">
+          <h2 className="text-lg font-bold text-white">Access Restricted</h2>
+          <p className="text-sm text-gray-400">
+            You do not have permission to view this registry&apos;s analytics.
+          </p>
+          {registryMeta && (
+            <div className="mt-3 p-3 rounded-xl border text-left space-y-1.5"
+              style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
+              <p className="text-xs text-gray-300">
+                <span className="text-gray-500">Registry: </span>{registryMeta.name}
+              </p>
+              <p className="text-xs text-gray-300">
+                <span className="text-gray-500">PI: </span>{piName}
+              </p>
+              {siteName && (
+                <p className="text-xs text-gray-300">
+                  <span className="text-gray-500">Site: </span>{siteName}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                Contact {piName} or the system administrator to request access.
+              </p>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => router.push('/registry-home')}
+          className="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
+          style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.25)' }}
+        >
+          <ArrowLeft size={13} /> Back to Registry Home
+        </button>
       </div>
     )
   }
@@ -2074,6 +2128,10 @@ export default function RegistryDetailPage() {
     Suspended: 'bg-red-500/15 text-red-400 border-red-500/25',
   }
 
+  const currentRegConfig = id && REGISTRY_CONFIG[id] ? REGISTRY_CONFIG[id] : null
+  const regSite = currentRegConfig?.siteId ? SITES[currentRegConfig.siteId] : null
+  const isCurrentPI = currentUser?.id === currentRegConfig?.piId
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -2082,16 +2140,25 @@ export default function RegistryDetailPage() {
         <div className="px-6 py-5 flex flex-col md:flex-row md:items-center gap-4" style={{ background: reg.gradient }}>
           <button
             onClick={() => router.push('/registry-home')}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg self-start md:self-auto"
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg self-start md:self-auto transition-colors hover:bg-white/20"
             style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.9)' }}
           >
             <ArrowLeft size={13} /> Registry Home
           </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-white">{reg.name}</h1>
-            <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>{reg.shortDesc}</p>
+            <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.85)' }}>{reg.shortDesc}</p>
           </div>
-          <div className="flex items-center gap-3 self-start md:self-auto">
+          <div className="flex items-center gap-3 self-start md:self-auto flex-wrap">
+            {/* Registry Owner (PI) badge */}
+            {currentRegConfig && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{ background: 'rgba(255,255,255,0.18)', color: '#ffffff' }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span className="opacity-80 font-normal">{currentRegConfig.piRoleTitle || 'PI'}</span>
+                <span>{currentRegConfig.piName}</span>
+              </div>
+            )}
             <Link
               href={`/patients/new?registry=${id}`}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg text-white transition-colors hover:bg-white/30"
@@ -2103,6 +2170,39 @@ export default function RegistryDetailPage() {
               {reg.status}
             </span>
           </div>
+        </div>
+
+        {/* Doctor / PI Registry Welcome Message Banner */}
+        <div className="px-6 py-3.5 bg-gray-950/70 border-b border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white shadow-sm flex-shrink-0"
+              style={{ background: currentRegConfig?.gradient || reg.gradient }}>
+              {currentRegConfig?.piName ? currentRegConfig.piName.split(' ').map(n => n[0]).join('').slice(0, 2) : 'DR'}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white text-sm">
+                  {isCurrentPI ? `Welcome, ${currentRegConfig?.piName}` : `Welcome to ${reg.name}`}
+                </span>
+                <span className="badge badge-amber text-[10px] font-bold">
+                  {currentRegConfig?.piRoleTitle || 'PI'}: {currentRegConfig?.piName}
+                </span>
+                <span className="badge badge-gray text-[10px]">
+                  {regSite?.shortName || 'AICTS Pune'}
+                </span>
+              </div>
+              <p className="text-gray-300 mt-0.5 text-[11px] leading-relaxed">
+                {currentRegConfig?.welcomeMessage || reg.shortDesc}
+              </p>
+            </div>
+          </div>
+          {currentUser && (
+            <div className="flex items-center gap-1.5 text-gray-400 self-end sm:self-auto flex-shrink-0 text-[11px]">
+              <span>Active session:</span>
+              <span className="text-gray-200 font-semibold">{currentUser.name}</span>
+              <span className="text-blue-400 font-mono">({currentUser.role})</span>
+            </div>
+          )}
         </div>
 
         {/* KPI row */}

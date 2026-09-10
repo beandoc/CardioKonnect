@@ -135,11 +135,15 @@ function docToVisit(id: string, patientId: string, data: any): Visit {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function docToProcedure(id: string, data: any): CathProcedure {
+function docToProcedure(id: string, data: any, fallbackPatientId = ''): CathProcedure {
   return {
     ...data,
     id,
-    procedureDate: toDate(data.procedureDate) || toDate(data.createdAt),
+    patientId: data.patientId || fallbackPatientId,
+    siteId: data.siteId || 'DEFAULT_SITE',
+    operatorId: data.operatorId || 'DEFAULT_OPERATOR',
+    procedureDateTime: data.procedureDateTime || toDate(data.procedureDate) || toDate(data.createdAt),
+    procedureDate: toDate(data.procedureDate) || data.procedureDateTime || toDate(data.createdAt),
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
   } as CathProcedure
@@ -197,6 +201,8 @@ export async function deletePatient(id: string): Promise<void> {
     saveLocalPatients(pts)
     const vts = getLocalVisits().filter(v => v.patientId !== id)
     saveLocalVisits(vts)
+    const procs = getLocalProcedures().filter(p => p.patientId !== id)
+    saveLocalProcedures(procs)
     return
   }
 
@@ -206,15 +212,19 @@ export async function deletePatient(id: string): Promise<void> {
   const visitsSnap = await getDocs(collection(db, 'patients', id, 'visits'))
   visitsSnap.docs.forEach(d => batch.delete(d.ref))
 
-  // 2. Delete events subcollection
+  // 2. Delete procedures subcollection (Phase 2/3 subcollection architecture)
+  const proceduresSnap = await getDocs(collection(db, 'patients', id, 'procedures'))
+  proceduresSnap.docs.forEach(d => batch.delete(d.ref))
+
+  // 3. Delete events subcollection
   const eventsSubSnap = await getDocs(collection(db, 'patients', id, 'events'))
   eventsSubSnap.docs.forEach(d => batch.delete(d.ref))
 
-  // 3. Delete outcomes subcollection
+  // 4. Delete outcomes subcollection
   const outcomesSubSnap = await getDocs(collection(db, 'patients', id, 'outcomes'))
   outcomesSubSnap.docs.forEach(d => batch.delete(d.ref))
 
-  // 4. Delete top-level events by patientId
+  // 5. Delete top-level events by patientId
   try {
     const topEventsSnap = await getDocs(query(collection(db, 'events'), where('patientId', '==', id)))
     topEventsSnap.docs.forEach(d => batch.delete(d.ref))
@@ -222,7 +232,7 @@ export async function deletePatient(id: string): Promise<void> {
     console.warn('Could not delete top-level events:', e)
   }
 
-  // 5. Delete top-level outcomes by patientId
+  // 6. Delete top-level outcomes by patientId
   try {
     const topOutcomesSnap = await getDocs(query(collection(db, 'outcomes'), where('patientId', '==', id)))
     topOutcomesSnap.docs.forEach(d => batch.delete(d.ref))
@@ -230,7 +240,7 @@ export async function deletePatient(id: string): Promise<void> {
     console.warn('Could not delete top-level outcomes:', e)
   }
 
-  // 6. Delete patient document
+  // 7. Delete patient document
   batch.delete(doc(db, 'patients', id))
   await batch.commit()
 }
@@ -253,6 +263,60 @@ export async function getPatients(): Promise<Patient[]> {
   const snap = await getDocs(query(collection(db, 'patients'), orderBy('createdAt', 'desc'), limit(1000)))
   return snap.docs.map(d => docToPatient(d.id, d.data()))
 }
+
+/**
+ * Returns patients explicitly enrolled in a specific registry.
+ *
+ * Membership is determined ONLY by explicit enrollment fields:
+ *   1. registryIds[].includes(registryId)   — new multi-enrollment model
+ *   2. registryId === registryId            — legacy single-registry field
+ *
+ * Clinical field inference (hfType, comorbidCAD, studyConsented, etc.) is
+ * intentionally NOT used — that caused cross-registry contamination.
+ *
+ * For Firestore array-contains queries to work on registryIds, no composite
+ * index is needed (single-field array-contains is free). The legacy registryId
+ * fallback fetches with a separate equality query and merges client-side.
+ */
+export async function getPatientsByRegistry(registryId: string): Promise<Patient[]> {
+  if (isDemoMode) {
+    return getLocalPatients().filter(p =>
+      p.registryIds?.includes(registryId) || p.registryId === registryId
+    )
+  }
+
+  // Query 1: new model — patient explicitly enrolled via registryIds array
+  const q1 = query(
+    collection(db, 'patients'),
+    where('registryIds', 'array-contains', registryId),
+    orderBy('createdAt', 'desc'),
+    limit(1000)
+  )
+
+  // Query 2: legacy model — patient has single registryId string
+  const q2 = query(
+    collection(db, 'patients'),
+    where('registryId', '==', registryId),
+    orderBy('createdAt', 'desc'),
+    limit(1000)
+  )
+
+  const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)])
+
+  // Merge and deduplicate by Firestore document ID
+  const seen = new Set<string>()
+  const patients: Patient[] = []
+  for (const snap of [snap1, snap2]) {
+    for (const d of snap.docs) {
+      if (!seen.has(d.id)) {
+        seen.add(d.id)
+        patients.push(docToPatient(d.id, d.data()))
+      }
+    }
+  }
+  return patients.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
 
 async function updatePatientCachedFields(patientId: string): Promise<void> {
   if (isDemoMode) {
@@ -313,12 +377,28 @@ async function updatePatientCachedFields(patientId: string): Promise<void> {
   })
 
   if (latestVisitData) {
+    let vessels = 0
+    let hasAngio = false
+    let syntax: number | undefined = undefined
+    if (latestVisitData.coronaryAnatomy) {
+      const ca = latestVisitData.coronaryAnatomy
+      hasAngio = true
+      syntax = ca.syntaxScore
+      if ((ca.lmStenosis ?? 0) >= 50) vessels++
+      if ((ca.ladStenosis ?? 0) >= 70) vessels++
+      if ((ca.lcxStenosis ?? 0) >= 70) vessels++
+      if ((ca.rcaStenosis ?? 0) >= 70) vessels++
+    }
+
     await updateDoc(doc(db, 'patients', patientId), {
       visitCount: visitsSnap.size,
       lastVisitDate: latestDate,
       hfType: latestVisitData.hfType || '',
       nyha: latestVisitData.nyha || '',
       lvef: latestVisitData.lvef ?? '',
+      latestSyntaxScore: syntax ?? '',
+      coronaryVesselsDiseased: vessels,
+      hasCoronaryAngiogram: hasAngio,
       updatedAt: serverTimestamp(),
     })
   }
@@ -509,6 +589,9 @@ export async function getPopulationStats(): Promise<PopulationStats> {
   const latestVisitsMap = await getAllLatestVisits()
   const visitsByPatient: Record<string, Visit[]> = {}
 
+  let crtCandidatesCount = 0
+  let ironDeficiencyCount = 0
+
   latestVisitsMap.forEach((visit, patientId) => {
     visitsByPatient[patientId] = [visit]  // Only latest visit per patient
   })
@@ -572,6 +655,23 @@ export async function getPopulationStats(): Promise<PopulationStats> {
 
     // Device
     ;(latest.device || []).forEach(d => { if (d in deviceCounts) deviceCounts[d]++ })
+
+    // Dynamic CRT Candidate / Implanted counter
+    const hasLBBB = latest.bbb === 'LBBB'
+    const qrsWide = (latest.qrsDuration ?? 0) >= 130
+    const severeLV = (latest.lvef ?? 100) < 35
+    const hasCRTDevice = p.crtPresence || (latest.device || []).some(d => d.includes('CRT'))
+    if (hasCRTDevice || (severeLV && (hasLBBB || qrsWide))) {
+      crtCandidatesCount++
+    }
+
+    // Dynamic Iron Deficiency counter (Ferritin < 100 or TSAT < 20% or IV Iron prescribed)
+    const lowFerritin = latest.ferritin != null && latest.ferritin < 100
+    const lowTsats = latest.transferrinSat != null && latest.transferrinSat < 20
+    const onIvIron = latest.ivIron?.prescribed === 'Yes'
+    if (p.comorbidIronDeficiency || lowFerritin || lowTsats || onIvIron) {
+      ironDeficiencyCount++
+    }
   })
 
   const mean = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null
@@ -589,6 +689,8 @@ export async function getPopulationStats(): Promise<PopulationStats> {
     medPrescribingRates,
     deviceCounts,
     lvefBins,
+    crtCandidatesCount,
+    ironDeficiencyCount,
   }
 }
 
@@ -820,94 +922,188 @@ export function subscribeVisits(onUpdate: (visits: Visit[]) => void): () => void
   })
 }
 
+// ─── Governance & Audit Trail Seam ──────────────────────────────────────────
+
+/**
+ * writeAudit
+ * Seam for Phase 6 multi-center data governance, DPDP / HIPAA compliance audit trail.
+ * Currently a structured no-op stub that provides a unified entry point for all mutations.
+ */
+export async function writeAudit(
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT',
+  entityType: 'procedure' | 'patient' | 'visit' | 'outcome',
+  entityId: string,
+  patientId: string,
+  payload?: any
+): Promise<void> {
+  // Structured audit seam ready for Phase 6 immutable logging
+  if (process.env.NODE_ENV !== 'production') {
+    // Audit trace in development
+  }
+}
+
 // ─── Cath Lab & Interventional Procedures ────────────────────────────────────
 
 function safeTime(d?: string): number {
   return d ? new Date(d).getTime() || 0 : 0
 }
 
-export async function addCathProcedure(input: CathProcedureInput): Promise<string> {
+/**
+ * Adds an interventional procedure to the patient's subcollection:
+ * patients/{patientId}/procedures/{procedureId}
+ */
+export async function addProcedure(patientId: string, input: CathProcedureInput): Promise<string> {
   if (isDemoMode) {
     const procs = getLocalProcedures()
     const id = 'proc-' + Math.random().toString(36).substr(2, 9)
     const newProc: CathProcedure = {
       ...input,
       id,
+      patientId,
+      siteId: input.siteId || 'DEFAULT_SITE',
+      operatorId: input.operatorId || 'DEFAULT_OPERATOR',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
     procs.unshift(newProc)
     saveLocalProcedures(procs)
+    await writeAudit('CREATE', 'procedure', id, patientId, input)
     return id
   }
 
   // Deep clone to strip undefined values which Firestore rejects
   const cleanInput = JSON.parse(JSON.stringify(input))
-  const ref = await addDoc(collection(db, 'procedures'), {
+  const ref = await addDoc(collection(db, 'patients', patientId, 'procedures'), {
     ...cleanInput,
+    patientId,
+    siteId: input.siteId || 'DEFAULT_SITE',
+    operatorId: input.operatorId || 'DEFAULT_OPERATOR',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
+
+  await writeAudit('CREATE', 'procedure', ref.id, patientId, input)
   return ref.id
 }
 
-export async function updateCathProcedure(id: string, data: Partial<CathProcedureInput>): Promise<void> {
+/**
+ * Updates a procedure in the subcollection:
+ * patients/{patientId}/procedures/{procedureId}
+ */
+export async function updateProcedure(
+  patientId: string,
+  procedureId: string,
+  data: Partial<CathProcedureInput>
+): Promise<void> {
   if (isDemoMode) {
     const procs = getLocalProcedures()
-    const idx = procs.findIndex(p => p.id === id)
+    const idx = procs.findIndex(p => p.id === procedureId)
     if (idx !== -1) {
       procs[idx] = { ...procs[idx], ...data, updatedAt: new Date().toISOString() }
       saveLocalProcedures(procs)
     }
+    await writeAudit('UPDATE', 'procedure', procedureId, patientId, data)
     return
   }
 
   const clean = JSON.parse(JSON.stringify(data))
-  await updateDoc(doc(db, 'procedures', id), {
+  await updateDoc(doc(db, 'patients', patientId, 'procedures', procedureId), {
     ...clean,
     updatedAt: serverTimestamp(),
   })
+  await writeAudit('UPDATE', 'procedure', procedureId, patientId, data)
 }
 
-export async function deleteCathProcedure(id: string): Promise<void> {
+/**
+ * Deletes a procedure from the subcollection.
+ */
+export async function deleteProcedure(patientId: string, procedureId: string): Promise<void> {
   if (isDemoMode) {
-    const procs = getLocalProcedures().filter(p => p.id !== id)
+    const procs = getLocalProcedures().filter(p => p.id !== procedureId)
     saveLocalProcedures(procs)
+    await writeAudit('DELETE', 'procedure', procedureId, patientId)
     return
   }
-  await deleteDoc(doc(db, 'procedures', id))
+
+  await deleteDoc(doc(db, 'patients', patientId, 'procedures', procedureId))
+  await writeAudit('DELETE', 'procedure', procedureId, patientId)
 }
 
-export async function getAllCathProcedures(): Promise<CathProcedure[]> {
+/**
+ * Gets all procedures for a single patient.
+ */
+export async function getProcedures(patientId: string): Promise<CathProcedure[]> {
+  if (isDemoMode) {
+    return getLocalProcedures().filter(p => p.patientId === patientId)
+  }
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'patients', patientId, 'procedures'), orderBy('procedureDateTime', 'desc'), limit(100))
+    )
+    return snap.docs.map(d => docToProcedure(d.id, d.data(), patientId))
+  } catch {
+    // Fallback in case procedureDateTime index is not built yet
+    const snap = await getDocs(collection(db, 'patients', patientId, 'procedures'))
+    return snap.docs
+      .map(d => docToProcedure(d.id, d.data(), patientId))
+      .sort((a, b) => safeTime(b.procedureDateTime || b.procedureDate) - safeTime(a.procedureDateTime || a.procedureDate))
+  }
+}
+
+/**
+ * Gets all procedures across all patients via collectionGroup('procedures').
+ * CRITICAL DESIGN RULE:
+ * Throws on failure rather than returning [] so callers render an explicit error
+ * state instead of a false audited zero.
+ */
+export async function getAllProcedures(): Promise<CathProcedure[]> {
   if (isDemoMode) {
     return getLocalProcedures()
   }
+
   try {
-    const snap = await getDocs(query(collection(db, 'procedures'), orderBy('procedureDate', 'desc'), limit(1000)))
-    return snap.docs.map(d => docToProcedure(d.id, d.data()))
-  } catch {
-    try {
-      const snap = await getDocs(collection(db, 'procedures'))
-      return snap.docs.map(d => docToProcedure(d.id, d.data())).sort((a, b) => safeTime(b.procedureDate) - safeTime(a.procedureDate))
-    } catch (e) {
-      console.error('getAllCathProcedures error:', e)
-      return []
-    }
+    const snap = await getDocs(query(collectionGroup(db, 'procedures'), limit(10000)))
+    return snap.docs
+      .map(d => {
+        const patientId = d.ref.parent.parent?.id || ''
+        return docToProcedure(d.id, d.data(), patientId)
+      })
+      .sort((a, b) => safeTime(b.procedureDateTime || b.procedureDate) - safeTime(a.procedureDateTime || a.procedureDate))
+  } catch (err) {
+    console.error('CRITICAL: getAllProcedures failed on Firestore collectionGroup:', err)
+    // Throw error so caller renders an error state instead of a false zero
+    throw err
+  }
+}
+
+// ─── Backward Compatibility Aliases ──────────────────────────────────────────
+
+export async function addCathProcedure(input: CathProcedureInput): Promise<string> {
+  return addProcedure(input.patientId, input)
+}
+
+export async function updateCathProcedure(id: string, data: Partial<CathProcedureInput>): Promise<void> {
+  const patientId = data.patientId || ''
+  return updateProcedure(patientId, id, data)
+}
+
+export async function deleteCathProcedure(id: string): Promise<void> {
+  return deleteProcedure('', id)
+}
+
+export async function getAllCathProcedures(): Promise<CathProcedure[]> {
+  try {
+    return await getAllProcedures()
+  } catch (err) {
+    // Preserved for legacy callers that might not catch
+    console.error('getAllCathProcedures legacy bridge caught error:', err)
+    throw err
   }
 }
 
 export async function getCathProceduresByPatient(patientId: string): Promise<CathProcedure[]> {
-  if (isDemoMode) {
-    return getLocalProcedures().filter(p => p.patientId === patientId)
-  }
-  try {
-    const q = query(collection(db, 'procedures'), where('patientId', '==', patientId))
-    const snap = await getDocs(q)
-    return snap.docs.map(d => docToProcedure(d.id, d.data())).sort((a, b) => safeTime(b.procedureDate) - safeTime(a.procedureDate))
-  } catch (err) {
-    console.error('getCathProceduresByPatient error:', err)
-    return []
-  }
+  return getProcedures(patientId)
 }
 
 export function subscribeCathProcedures(onUpdate: (procedures: CathProcedure[]) => void): () => void {
@@ -929,14 +1125,18 @@ export function subscribeCathProcedures(onUpdate: (procedures: CathProcedure[]) 
     }
   }
 
-  const q = collection(db, 'procedures')
+  const q = collectionGroup(db, 'procedures')
   return onSnapshot(q, (snap) => {
-    const procs = snap.docs.map(d => docToProcedure(d.id, d.data()))
-    procs.sort((a, b) => safeTime(b.procedureDate) - safeTime(a.procedureDate))
+    const procs = snap.docs.map(d => {
+      const patientId = d.ref.parent.parent?.id || ''
+      return docToProcedure(d.id, d.data(), patientId)
+    })
+    procs.sort((a, b) => safeTime(b.procedureDateTime || b.procedureDate) - safeTime(a.procedureDateTime || a.procedureDate))
     onUpdate(procs)
   }, (err) => {
     console.error('subscribeCathProcedures error:', err)
   })
 }
+
 
 

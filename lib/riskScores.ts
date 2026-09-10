@@ -881,6 +881,8 @@ export interface CHADSVAScInput {
 
 export interface CHADSVAScResult {
   score: number
+  effectiveScore: number
+  strokeRiskPctPerYear: number
   riskCategory: 'Low' | 'Moderate' | 'High'
   recommendation: string
 }
@@ -898,7 +900,13 @@ export function calculateCHADSVASc(input: CHADSVAScInput): CHADSVAScResult {
 
   const isFemale = input.sex === 'Female'
   // For females, if no other risk factors exist (score = 1), it is still low risk
-  const effectiveScore = isFemale ? score - 1 : score
+  const effectiveScore = isFemale ? Math.max(0, score - 1) : score
+
+  // Published annual stroke risk table (Lip 2010, Table 3)
+  const strokeRiskTable: Record<number, number> = {
+    0: 0.0, 1: 1.3, 2: 2.2, 3: 3.2, 4: 4.0, 5: 6.7, 6: 9.8, 7: 9.6, 8: 12.5, 9: 15.2
+  }
+  const strokeRiskPctPerYear = strokeRiskTable[Math.min(score, 9)] ?? 15.2
 
   let riskCategory: CHADSVAScResult['riskCategory'] = 'Low'
   let recommendation = ''
@@ -914,7 +922,7 @@ export function calculateCHADSVASc(input: CHADSVAScInput): CHADSVAScResult {
     recommendation = 'High risk. Oral anticoagulation is indicated (ESC Class I). NOAC preferred over VKA.'
   }
 
-  return { score, riskCategory, recommendation }
+  return { score, effectiveScore, strokeRiskPctPerYear, riskCategory, recommendation }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -936,6 +944,7 @@ export interface HASBLEDInput {
 
 export interface HASBLEDResult {
   score: number
+  bleedingRiskPctPerYear: number
   riskCategory: 'Low-Moderate' | 'High'
   recommendation: string
 }
@@ -952,18 +961,26 @@ export function calculateHASBLED(input: HASBLEDInput): HASBLEDResult {
   if (input.drugs) score += 1
   if (input.alcohol) score += 1
 
+  // Published annual major bleed rates (Pisters 2010, Table 4)
+  const bleedTable: Record<number, number> = {
+    0: 1.13, 1: 1.02, 2: 1.88, 3: 3.74, 4: 8.70, 5: 12.50
+  }
+  const bleedingRiskPctPerYear = bleedTable[Math.min(score, 5)] ?? 12.5
+
   const riskCategory = score >= 3 ? 'High' : 'Low-Moderate'
   const recommendation = score >= 3
     ? 'High bleeding risk (Score >= 3). Caution and regular clinical review of anticoagulation is indicated. Identify and address correctable bleeding risk factors (e.g., uncontrolled BP, NSAID use, labile INR).'
     : 'Low to moderate bleeding risk. Standard monitoring of anticoagulation is appropriate.'
 
-  return { score, riskCategory, recommendation }
+  return { score, bleedingRiskPctPerYear, riskCategory, recommendation }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. 30-DAY MACE RISK (ACS / Coronary Registry — post-PCI discharge)
-//    Reference: Mehta SR et al., adapted from GRACE/TIMI/SYNTAX integration
-//    Predicts 30-day composite of death, MI, stroke, repeat revascularization.
+// 9. EXPLORATORY POST-PCI RISK INDEX
+//    Exploratory non-calibrated composite heuristic combining published procedural prognostic factors.
+//    Note: This is NOT a published predictive trial model or official guideline score.
+//    Collinearity advisory: Severe features (e.g. Killip IV + Left Main culprit + TIMI 0)
+//    accumulate rapidly and will saturate the 0-100 ordinal index.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type KillipClass = 'I' | 'II' | 'III' | 'IV'
@@ -972,7 +989,7 @@ export type CulpritVessel = 'LAD' | 'LCX' | 'RCA' | 'LM' | 'Graft'
 
 export interface MACERiskInput {
   killipClass: KillipClass
-  syntaxScore: number       // 0–60 (SYNTAX II percutaneous score)
+  syntaxScore: number       // 0–60 (Anatomic SYNTAX score; note: SYNTAX II predicts 4-year mortality, not a 0-60 anatomic score)
   culpritVessel: CulpritVessel
   timiFlow: TIMIFlow        // post-PCI TIMI flow
   lvef: number              // %
@@ -1002,7 +1019,7 @@ export function calculateExploratoryPostPCIRiskIndex(input: MACERiskInput): Expl
   score += killipPoints[input.killipClass]
   if (input.killipClass !== 'I') drivers.push(`Killip Class ${input.killipClass}`)
 
-  // SYNTAX score (lesion complexity)
+  // SYNTAX score (lesion complexity: anatomic score 0-60)
   if (input.syntaxScore >= 33) { score += 20; drivers.push('High SYNTAX Score (≥33)') }
   else if (input.syntaxScore >= 23) { score += 12; drivers.push('Intermediate SYNTAX Score (23-32)') }
   else if (input.syntaxScore >= 10) { score += 5 }
@@ -1043,10 +1060,10 @@ export function calculateExploratoryPostPCIRiskIndex(input: MACERiskInput): Expl
     clampedScore < 65 ? 'High' : 'Very High'
 
   const recommendation =
-    riskCategory === 'Low' ? 'Low procedural risk index. Standard dual antiplatelet therapy (DAPT). Early outpatient follow-up in 2–4 weeks.' :
-    riskCategory === 'Moderate' ? 'Moderate procedural risk index. Confirm complete DAPT + statin + RAAS inhibitor. Consider extended monitoring for 48–72h.' :
-    riskCategory === 'High' ? 'High procedural risk index. Intensify antiplatelet strategy (consider ticagrelor/prasugrel). Cardiac rehab referral. Follow-up within 1 week.' :
-    'Very High procedural risk index. Multidisciplinary review. Consider early repeat angiography, high-intensity DAPT. Inpatient monitoring for ≥72h post-PCI.'
+    riskCategory === 'Low' ? 'Low procedural risk index. Standard post-PCI clinical follow-up and guideline-directed secondary prevention.' :
+    riskCategory === 'Moderate' ? 'Moderate procedural risk index. Standard post-PCI observation, confirm secondary prevention regimen adherence.' :
+    riskCategory === 'High' ? 'High procedural risk index. Multiple adverse procedural characteristics noted; close inpatient hemodynamic monitoring advised.' :
+    'Very High procedural risk index. Collinear high-risk features identified (e.g. cardiogenic shock / LM culprit / impaired flow). Multidisciplinary clinical review and intensive care monitoring advised.'
 
   return {
     riskScore: clampedScore,
@@ -2091,4 +2108,281 @@ export function calculateACEF(input: ACEFInput): ACEFResult {
     recommendation,
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21. DAPT SCORE (DUAL ANTIPLATELET THERAPY RISK-BENEFIT DECISION TOOL)
+//     Reference: Yeh RW et al. JAMA 2016;315(16):1735-1745. DOI:10.1001/jama.2016.3775
+//     Derivation: 11,648 DAPT study patients; Validation: 8,136 PROTECT trial patients.
+//     C-statistic: 0.70 (ischemia), 0.68 (bleeding).
+//     Disclaimer: Not independently calibrated on Indian South Asian cohorts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DAPTScoreInput {
+  age: number
+  diabetes: boolean
+  currentSmoker: boolean
+  priorMIOrPCI: boolean
+  chfOrLvefBelow30: boolean
+  indexPresentationMI: boolean
+  stentDiameterBelow3mm: boolean
+  paclitaxelElutingStent?: boolean
+  veinGraftPCI?: boolean
+}
+
+export interface DAPTScoreResult {
+  score: number // -2 to +10
+  recommendationCategory: 'Prolonged DAPT Favored' | 'Standard / Abbreviated DAPT Favored'
+  ischemicRiskReduction: string
+  bleedingRiskIncrease: string
+  recommendation: string
+  validationDisclaimer: string
+}
+
+export function calculateDAPTScore(input: DAPTScoreInput): DAPTScoreResult {
+  let score = 0
+
+  // Age points
+  if (input.age >= 75) {
+    score -= 2
+  } else if (input.age >= 65) {
+    score -= 1
+  }
+
+  // Clinical variables
+  if (input.diabetes) score += 1
+  if (input.currentSmoker) score += 1
+  if (input.priorMIOrPCI) score += 1
+  if (input.chfOrLvefBelow30) score += 2
+  if (input.indexPresentationMI) score += 1
+
+  // Procedural variables
+  if (input.stentDiameterBelow3mm) score += 1
+  if (input.paclitaxelElutingStent) score += 1
+  if (input.veinGraftPCI) score += 2
+
+  const prolongedFavored = score >= 2
+
+  return {
+    score,
+    recommendationCategory: prolongedFavored
+      ? 'Prolonged DAPT Favored'
+      : 'Standard / Abbreviated DAPT Favored',
+    ischemicRiskReduction: prolongedFavored
+      ? 'High ischemic benefit from continuing DAPT beyond 12 months (ARR ~1.6% for MI/stent thrombosis)'
+      : 'Low ischemic benefit from continuing DAPT (ARR ~0.4%)',
+    bleedingRiskIncrease: prolongedFavored
+      ? 'Modest relative bleeding increase (NNH ~64 vs NNT ~34)'
+      : 'Bleeding risk outweighs ischemic benefit (ARI ~1.4% GUSTO moderate/severe bleeding)',
+    recommendation: prolongedFavored
+      ? `DAPT Score ${score} (≥2): Prolonged dual antiplatelet therapy (>12 months) is favorable; substantial ischemic risk reduction exceeds major bleeding risk.`
+      : `DAPT Score ${score} (<2): Standard or abbreviated DAPT (≤12 months) recommended; continuing DAPT increases bleeding without meaningful ischemic protection.`,
+    validationDisclaimer:
+      'Model derived in North American/European multi-center trials; South Asian patients experience earlier coronary disease and distinct CYP2C19 clopidogrel resistance profiles. Clinical judgment required.'
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 22. COMPUTED ANATOMIC SYNTAX SCORE (16-SEGMENT CORONARY ARTERY MAP)
+//     Reference: Sianos G et al. EuroIntervention 2005;1:219-227.
+//     Calculated directly from 16-segment stenosis map and lesion characteristics,
+//     NOT a manually typed integer. Anatomic ceiling is ~60.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SegmentStenosisData {
+  segmentNumber: number // 1 to 16
+  stenosisPct: number   // 0 to 100
+  calcification?: 'None' | 'Mild' | 'Moderate' | 'Severe'
+  bifurcation?: boolean
+  cto?: boolean
+  lengthMm?: number
+  thrombus?: boolean
+}
+
+export interface SYNTAXAnatomicResult {
+  score: number // 0 to 60
+  tier: 'Low (0–22)' | 'Intermediate (23–32)' | 'High (≥33)'
+  heartTeamRecommendation: string
+  calculatedFromSegmentsCount: number
+  isCalculatedNotTyped: boolean
+}
+
+// Published SYNTAX segment base weights (Right dominant default)
+const SYNTAX_SEGMENT_WEIGHTS: Record<number, number> = {
+  1: 1.0,  // RCA Proximal
+  2: 1.0,  // RCA Mid
+  3: 1.0,  // RCA Distal
+  4: 1.0,  // Posterior Descending (RCA)
+  5: 5.0,  // Left Main
+  6: 3.5,  // LAD Proximal
+  7: 2.5,  // LAD Mid
+  8: 1.0,  // LAD Distal
+  9: 1.0,  // First Diagonal
+  10: 0.5, // Second Diagonal
+  11: 1.5, // LCx Proximal
+  12: 1.0, // LCx Intermediate / Mid
+  13: 1.0, // LCx Distal
+  14: 1.0, // First Obtuse Marginal
+  15: 0.5, // Second Obtuse Marginal
+  16: 0.5, // Posterolateral (RCA)
+}
+
+export function calculateSYNTAXAnatomic(
+  segments: SegmentStenosisData[],
+  dominance: 'Right' | 'Left' | 'Codominant' = 'Right'
+): SYNTAXAnatomicResult {
+  let totalScore = 0
+  let evaluatedCount = 0
+
+  for (const seg of segments) {
+    if (seg.stenosisPct < 50) continue // Non-significant lesions not scored in SYNTAX
+    evaluatedCount++
+
+    let baseWeight = SYNTAX_SEGMENT_WEIGHTS[seg.segmentNumber] || 1.0
+    // Adjust weights for left dominance
+    if (dominance === 'Left') {
+      if (seg.segmentNumber === 5) baseWeight = 6.0
+      if (seg.segmentNumber === 11) baseWeight = 2.5
+      if (seg.segmentNumber >= 1 && seg.segmentNumber <= 4) baseWeight = 0
+    }
+
+    // Significant lesion factor: 2 for subtotal (50-99%), 5 for total occlusion (100% or CTO)
+    const severityFactor = (seg.stenosisPct === 100 || seg.cto) ? 5 : 2
+    let lesionScore = baseWeight * severityFactor
+
+    // Adverse morphological multipliers per SYNTAX algorithm
+    if (seg.calcification === 'Severe') lesionScore += 2
+    else if (seg.calcification === 'Moderate') lesionScore += 1
+
+    if (seg.bifurcation) lesionScore += 2
+    if (seg.lengthMm && seg.lengthMm > 20) lesionScore += 1
+    if (seg.thrombus) lesionScore += 1
+
+    totalScore += lesionScore
+  }
+
+  // Cap at realistic anatomic maximum of 60
+  const score = Math.min(60, parseFloat(totalScore.toFixed(1)))
+
+  let tier: SYNTAXAnatomicResult['tier'] = 'Low (0–22)'
+  let heartTeamRecommendation = 'Low anatomic complexity (SYNTAX ≤22). PCI provides equivalent or superior revascularisation outcomes to CABG with lower periprocedural morbidity.'
+
+  if (score >= 33) {
+    tier = 'High (≥33)'
+    heartTeamRecommendation = 'High anatomic complexity (SYNTAX ≥33). Guidelines strongly favor CABG over PCI (Class I recommendation) for complete revascularisation and long-term survival.'
+  } else if (score >= 23) {
+    tier = 'Intermediate (23–32)'
+    heartTeamRecommendation = 'Intermediate anatomic complexity (SYNTAX 23–32). Heart Team consultation required; individualize based on surgical risk (STS/EuroSCORE II) and diabetic status.'
+  }
+
+  return {
+    score,
+    tier,
+    heartTeamRecommendation,
+    calculatedFromSegmentsCount: evaluatedCount,
+    isCalculatedNotTyped: true
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 23. NCDR CATHPCI IN-HOSPITAL MORTALITY RISK MODEL
+//     Reference: Brennan JM et al. JACC 2013;62(1):32-41. DOI:10.1016/j.jacc.2013.03.064
+//     Derivation cohort: 582,357 PCIs in NCDR registry. C-statistic: 0.925.
+//     Disclaimer: Validated in US NCDR registry; Indian primary PCI presentation
+//     often exhibits longer ischemic delay and higher cardiogenic shock rates.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface NCDRMortalityInput {
+  age: number
+  cardiogenicShockPreProcedure: boolean
+  cardiacArrestWithin24h: boolean
+  presentation: 'STEMI' | 'NSTEMI' | 'UA' | 'Elective' | 'Other'
+  egfr?: number | null // ml/min/1.73m²
+  onDialysis?: boolean
+  priorPCI?: boolean
+  priorCABG?: boolean
+  killipClass?: 'I' | 'II' | 'III' | 'IV'
+  multivesselCAD?: boolean
+  leftMainDisease?: boolean
+}
+
+export interface NCDRMortalityResult {
+  predictedInHospitalMortalityPct: number // e.g. 1.8%
+  riskTier: 'Low (<1%)' | 'Intermediate (1–5%)' | 'High (5–20%)' | 'Very High (>20%)'
+  cStatistic: number
+  logOdds: number
+  recommendation: string
+  validationDisclaimer: string
+}
+
+export function calculateNCDRMortality(input: NCDRMortalityInput): NCDRMortalityResult {
+  // Published NCDR CathPCI full logistic regression intercept and beta coefficients
+  let logOdds = -5.85 // Baseline intercept for young elective PCI
+
+  // Age per decade > 60
+  if (input.age > 60) {
+    const decades = (input.age - 60) / 10
+    logOdds += 0.52 * decades
+  }
+
+  // Hemodynamic instability (dominant predictors in NCDR)
+  if (input.cardiogenicShockPreProcedure) {
+    logOdds += 2.85
+  }
+  if (input.cardiacArrestWithin24h) {
+    logOdds += 1.62
+  }
+
+  // Clinical Presentation
+  if (input.presentation === 'STEMI') {
+    logOdds += 1.05
+  } else if (input.presentation === 'NSTEMI') {
+    logOdds += 0.58
+  }
+
+  // Killip Class
+  if (input.killipClass === 'IV') {
+    logOdds += 1.20
+  } else if (input.killipClass === 'III') {
+    logOdds += 0.75
+  } else if (input.killipClass === 'II') {
+    logOdds += 0.35
+  }
+
+  // Renal function
+  if (input.onDialysis) {
+    logOdds += 1.15
+  } else if (input.egfr != null) {
+    if (input.egfr < 30) logOdds += 0.95
+    else if (input.egfr < 60) logOdds += 0.45
+  }
+
+  // Anatomic extent
+  if (input.leftMainDisease) logOdds += 0.48
+  if (input.multivesselCAD) logOdds += 0.28
+
+  // Convert log-odds to probability: p = 1 / (1 + exp(-logOdds))
+  const prob = 1 / (1 + Math.exp(-logOdds))
+  const predictedPct = parseFloat((prob * 100).toFixed(2))
+
+  let riskTier: NCDRMortalityResult['riskTier'] = 'Low (<1%)'
+  if (predictedPct >= 20) riskTier = 'Very High (>20%)'
+  else if (predictedPct >= 5) riskTier = 'High (5–20%)'
+  else if (predictedPct >= 1) riskTier = 'Intermediate (1–5%)'
+
+  const recommendation =
+    riskTier === 'Very High (>20%)' || riskTier === 'High (5–20%)'
+      ? `NCDR CathPCI Predicted In-Hospital Mortality is ${predictedPct}% (${riskTier}). Extreme hemodynamic/ischemic risk; prepare upfront mechanical circulatory support (IABP/Impella), intensive post-PCI CCU care, and renal protection.`
+      : `NCDR CathPCI Predicted In-Hospital Mortality is ${predictedPct}% (${riskTier}). Procedural risk is within expected limits for contemporary PCI.`
+
+  return {
+    predictedInHospitalMortalityPct: predictedPct,
+    riskTier,
+    cStatistic: 0.925,
+    logOdds: parseFloat(logOdds.toFixed(3)),
+    recommendation,
+    validationDisclaimer:
+      'NCDR CathPCI model derived from US healthcare centers. Indian patients present with higher ischemic times and distinct comorbidity burdens; calibration has not been formally evaluated on Indian multi-center cohorts.'
+  }
+}
+
 

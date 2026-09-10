@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   getPatient, getVisits, deleteVisit, updatePatient, getPatientTrends,
   getOutcomeEvents, addOutcomeEvent, deleteOutcomeEvent, deletePatient,
-  getCathProceduresByPatient
+  getCathProceduresByPatient, deleteProcedure
 } from '@/lib/firestore'
 import type { Patient, Visit, OutcomeEvent, OutcomeEventInput, EventType, CathProcedure } from '@/lib/types'
 import { getAge, formatDate, nyhaBadgeColor, hfTypeBadgeColor, lvefColor, initials, cn } from '@/lib/utils'
@@ -24,6 +24,9 @@ import DataCompletenessCard from '@/components/patients/DataCompletenessCard'
 import QuickDataEntryModal from '@/components/patients/QuickDataEntryModal'
 import ComorbiditiesMatrix from '@/components/patients/ComorbiditiesMatrix'
 import CathProcedureModal from '@/components/procedures/CathProcedureModal'
+import { useAppUser } from '@/context/AppUserContext'
+import { canViewPatient, patientAccessDeniedReason } from '@/lib/accessControl'
+import { SITES } from '@/lib/appConfig'
 
 const EVENT_TYPES: EventType[] = [
   'All-cause death', 'CV death', 'HF hospitalisation', 'Urgent HF visit', 'LVAD implant',
@@ -95,6 +98,12 @@ export default function PatientDetailPage() {
     setTrends(t)
     setOutcomeEvents(o)
     setPatientProcedures(procs)
+    if (p) {
+      const siteHospital = p.hospitalName || (p.siteId === 'KANPUR_APEX' ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune')
+      const siteDoctor = p.siteId === 'KANPUR_APEX' ? 'Dr. Rajeev Chauhan' : 'Dr. A. Jayachandra'
+      setEventHosp(siteHospital)
+      setEventAdjudicator(siteDoctor)
+    }
     setLoading(false)
   }, [id])
 
@@ -105,6 +114,17 @@ export default function PatientDetailPage() {
     await deleteVisit(id, visitId)
     toast.success('Visit deleted')
     load()
+  }
+
+  const handleDeleteProcedure = async (procedureId: string) => {
+    if (!confirm('Are you sure you want to delete this interventional procedure record? This action cannot be undone.')) return
+    try {
+      await deleteProcedure(id, procedureId)
+      toast.success('Procedure deleted')
+      load()
+    } catch (err: any) {
+      toast.error('Failed to delete procedure: ' + (err?.message || 'Unknown error'))
+    }
   }
 
   const handleUpdatePatient = async (data: Partial<Patient>) => {
@@ -270,6 +290,8 @@ export default function PatientDetailPage() {
     return null
   }, [visits])
 
+  const { currentUser } = useAppUser()
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <Activity className="w-6 h-6 text-blue-400 animate-pulse" />
@@ -281,12 +303,67 @@ export default function PatientDetailPage() {
     return null
   }
 
+  // Access Control Check: Ensure active user can view this patient's registry data
+  const accessGranted = canViewPatient(currentUser, patient)
+  if (!accessGranted) {
+    const patientSiteName = patient.siteId ? (SITES[patient.siteId]?.name || patient.siteId) : 'AICTS Pune'
+    const enrolledRegistries = (patient.registryIds && patient.registryIds.length > 0)
+      ? patient.registryIds.map(id => REGISTRY_MAP[id] || id).join(', ')
+      : (patient.registryId ? REGISTRY_MAP[patient.registryId] || patient.registryId : 'Unassigned')
+
+    return (
+      <div className="max-w-xl mx-auto mt-16 p-8 bg-gray-900/90 border border-rose-500/30 rounded-2xl shadow-2xl backdrop-blur-sm text-center">
+        <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto mb-5 text-rose-400">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
+        <p className="text-sm text-gray-300 mb-6">
+          {patientAccessDeniedReason(currentUser)}
+        </p>
+
+        <div className="p-4 bg-gray-950/60 border border-gray-800 rounded-xl text-left text-xs space-y-2 mb-6">
+          <div className="flex justify-between">
+            <span className="text-gray-400">Patient Hospital / Site:</span>
+            <span className="font-semibold text-gray-200">{patientSiteName}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Enrolled Registry:</span>
+            <span className="font-semibold text-amber-300">{enrolledRegistries}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Logged in as:</span>
+            <span className="font-semibold text-gray-200">{currentUser?.name} ({currentUser?.role})</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Your Registry Access:</span>
+            <span className="font-semibold text-blue-300">
+              {currentUser?.registryAccess.map((r: string) => REGISTRY_MAP[r] || r).join(', ') || 'None'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex gap-3 justify-center">
+          <Link href="/patients">
+            <Button variant="outline" size="sm">Back to Patient List</Button>
+          </Link>
+          <Link href="/registry-home">
+            <Button size="sm">Registry Home</Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   const latest = visits[0] ?? null
   const age = getAge(patient.dob)
 
   // Consent Status Check for Visit Gating
   const consentStatus = patient.consentStatus || 'Pending'
   const isConsentGated = consentStatus === 'Pending' || consentStatus === 'Declined'
+
+  const regionDisplay = patient.addressDistrict
+    ? `${patient.addressDistrict}, ${patient.addressState || 'India'}`
+    : (patient.addressState ? `${patient.addressState}, India` : (patient.siteId === 'KANPUR_APEX' ? 'Kanpur, Uttar Pradesh, India' : 'Maharashtra, India'))
 
   return (
     <div className="space-y-6 text-gray-300">
@@ -304,7 +381,7 @@ export default function PatientDetailPage() {
               {(patient.mrn && patient.mrn !== '—') ? `HID: ${patient.mrn}` : (patient.srNo ? `Sr. No. ${patient.srNo}` : 'HID: —')} &bull; {age ? `${age} years` : '—'} &bull; {patient.sex} &bull; DOB: {formatDate(patient.dob)}
             </p>
             <p className="text-[11px] text-gray-400 mt-1 uppercase tracking-wider font-bold">
-              Region: Maharashtra, India
+              Region: {regionDisplay}
             </p>
             <div className="flex gap-2 mt-3 flex-wrap justify-center md:justify-start">
               {/* Consent Badge */}
@@ -365,6 +442,26 @@ export default function PatientDetailPage() {
                 <PlusCircle className="w-4 h-4" /> Record Visit
               </Button>
             </Link>
+          )}
+          {isConsentGated ? (
+            <button
+              disabled
+              title={`Cannot log procedure while consent is ${consentStatus}`}
+              className="btn-outline btn-sm opacity-40 cursor-not-allowed flex items-center gap-1.5 text-amber-500/50"
+            >
+              <Activity className="w-4 h-4" /> Add Cath / PCI
+            </button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingProcedure(null)
+                setIsCathModalOpen(true)
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold flex items-center gap-1.5"
+            >
+              <Activity className="w-4 h-4" /> Add Cath / PCI
+            </Button>
           )}
           <Button
             size="sm"
@@ -947,7 +1044,22 @@ export default function PatientDetailPage() {
 
       {/* Timeline tab */}
       {activeTab === 'timeline' && (
-        <VisitTimeline visits={visits} patientId={id} onDelete={handleDeleteVisit} />
+        <VisitTimeline
+          visits={visits}
+          procedures={patientProcedures}
+          patientId={id}
+          onDelete={handleDeleteVisit}
+          onDeleteProcedure={handleDeleteProcedure}
+          onEditProcedure={(proc) => {
+            setEditingProcedure(proc)
+            setIsCathModalOpen(true)
+          }}
+          onAddProcedure={() => {
+            setEditingProcedure(null)
+            setIsCathModalOpen(true)
+          }}
+          isConsentGated={isConsentGated}
+        />
       )}
 
       {/* Trends tab */}

@@ -261,16 +261,24 @@ function RiskCalculatorContent() {
     setHasbledBleeding(ptComorbidities.includes('bleeding') || (vt?.hb != null && vt.hb < 11))
     setHasbledDrugs(vt?.aspirin?.prescribed === 'Yes' || ptComorbidities.includes('aspirin') || ptComorbidities.includes('nsaid'))
 
-    // 7. MACE Risk (ACS)
+    // 7. MACE Risk (ACS / PCI)
     setMaceAge(age)
     if (vt?.lvef != null) setMaceLvef(vt.lvef)
     setMaceDiabetes(hasDiabetes)
     setMacePriorMI(hasVascular)
+    if (vt?.coronaryAnatomy?.syntaxScore != null && typeof vt.coronaryAnatomy.syntaxScore === 'number') {
+      setMaceSyntax(Math.min(60, vt.coronaryAnatomy.syntaxScore))
+    }
+    if (vt?.killipClass) setMaceKillip(vt.killipClass)
+    if (vt?.postPciTimiFlow) setMaceTimi(vt.postPciTimiFlow)
+    if (vt?.culpritVessel) setMaceCulprit(vt.culpritVessel)
+    if (vt?.stentLengthMm) setMaceStentLength(vt.stentLengthMm)
 
     // 8. Contrast Nephropathy
     setCinAge(age)
     if (vt?.egfr != null) setCinEGFR(vt.egfr)
     if (vt?.creatinine != null) setCinCreatinine(vt.creatinine)
+    if (vt?.contrastVolumeMl) setCinContrast(vt.contrastVolumeMl)
     setCinDiabetes(hasDiabetes)
     setCinHF(true)
     setCinHypotension(vt?.bpSystolic != null && vt.bpSystolic < 90)
@@ -551,6 +559,17 @@ function RiskCalculatorContent() {
         charmScore: charmResult.score,
         chadsvascScore: chadsResult.score,
         hasbledScore: hasbledResult.score,
+        // Interventional / Cath Lab Risk Scores
+        mehranScore: cinResult.mehranScore,
+        mehranAkiRisk: cinResult.akiRisk,
+        mehranDialysisRisk: cinResult.dialysisRisk,
+        suggestedContrastCap: cinResult.suggestedContrastCap,
+        contrastVolumeMl: cinContrast,
+        exploratoryPostPciScore: maceResult.riskScore,
+        killipClass: maceKillip,
+        postPciTimiFlow: maceTimi,
+        culpritVessel: maceCulprit,
+        stentLengthMm: maceStentLength,
       })
       toast.success('Successfully saved prognoses to visit record')
       router.push(`/patients/${patientId}?tab=overview`)
@@ -1424,7 +1443,7 @@ function RiskCalculatorContent() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-xs font-semibold text-white">Estimated Survival Curve Projection (Parametric Model)</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">Parametric projection based on MAGGIC trial derivation cohort — not an empirical Kaplan-Meier follow-up curve</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Parametric projection based on MAGGIC trial derivation cohort — not an empirical Kaplan-Meier follow-up curve. Note: The &quot;Optimized GDMT Regimen&quot; represents an in silico covariate adjustment (hypothetical model extrapolation), not a prospective randomized causal treatment effect.</p>
                   </div>
 
                   <div className="h-56 w-full bg-slate-950/20 p-2 rounded-lg border border-blue-500/5">

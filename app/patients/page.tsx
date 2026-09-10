@@ -8,8 +8,11 @@ import { cn, formatDate, initials, nyhaBadgeColor, hfTypeBadgeColor, lvefColor }
 import { getPatients, updatePatient } from '@/lib/firestore'
 import type { Patient } from '@/lib/types'
 import { toast } from 'sonner'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
 
 function PatientList() {
+  const { currentUser } = useAppUser()
   const searchParams = useSearchParams()
   const searchQuery = searchParams.get('search') || ''
 
@@ -41,15 +44,19 @@ function PatientList() {
     loadPatientsData()
   }, [])
 
+  const accessiblePatients = useMemo(() => {
+    return filterPatientsByAccess(currentUser, patients)
+  }, [currentUser, patients])
+
   const filtered = useMemo(() => {
-    return patients.filter(p => {
+    return accessiblePatients.filter(p => {
       const name = `${p.firstName} ${p.lastName}`.toLowerCase()
       const email = (p.email || '').toLowerCase()
       const matchSearch = name.includes(search.toLowerCase()) || email.includes(search.toLowerCase())
       const matchStatus = statusFilter === 'All' || (p.status || 'Active') === statusFilter
       return matchSearch && matchStatus
     })
-  }, [patients, search, statusFilter])
+  }, [accessiblePatients, search, statusFilter])
 
   const toggleStatus = async (id: string, currentStatus?: 'Active' | 'Inactive' | 'Pending') => {
     const nextStatus = currentStatus === 'Inactive' ? 'Active' : 'Inactive'

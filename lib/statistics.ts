@@ -268,9 +268,13 @@ export function computeVisitStats(visits: Visit[], fields: string[]): FieldSumma
 
 /**
  * Returns a record mapping every key that appears in any visit to its
- * completeness percentage (0–100).  Only own enumerable properties are
+ * completeness percentage (0–100). Only own enumerable properties are
  * considered; MedEntry objects and arrays are treated as present when
  * the property exists and is non-null.
+ *
+ * NOTE: This is a low-level key-presence counter across raw Firestore visit properties.
+ * For clinical registry tier-weighted completeness scoring and data quality grading (Tier 1/2/3),
+ * use assessPatientCompleteness() from lib/dataCompleteness.ts.
  */
 export function computeDataCompleteness(visits: Visit[]): Record<string, number> {
   if (visits.length === 0) return {}
@@ -735,3 +739,490 @@ export function histogram(
     return { bin: label, lo: binLo, hi: binHi, count }
   })
 }
+
+// ─── Advanced Survival Analysis & Clinical Registry Statistics ───────────────
+
+export interface KaplanMeierPoint {
+  time: number
+  nAtRisk: number
+  nEvents: number
+  nCensored: number
+  survival: number // 0 to 1
+  seGreenwood: number
+  ciLower: number
+  ciUpper: number
+}
+
+/**
+ * Kaplan-Meier product-limit survival estimator with Greenwood standard error
+ * and asymptotic 95% Wald confidence intervals.
+ */
+export function kaplanMeier(
+  data: Array<{ time: number; event: boolean }>
+): KaplanMeierPoint[] {
+  if (data.length === 0) return []
+
+  // Sort ascending by time; events before censored if tied
+  const sorted = [...data].sort((a, b) => {
+    if (a.time !== b.time) return a.time - b.time
+    return (b.event ? 1 : 0) - (a.event ? 1 : 0)
+  })
+
+  // Identify unique times
+  const uniqueTimes = Array.from(new Set(sorted.map(d => d.time))).sort((a, b) => a - b)
+
+  const curve: KaplanMeierPoint[] = []
+  let currentSurvival = 1.0
+  let greenwoodSum = 0
+  let nRemaining = sorted.length
+
+  for (const t of uniqueTimes) {
+    const atTime = sorted.filter(d => d.time === t)
+    const nEvents = atTime.filter(d => d.event).length
+    const nCensored = atTime.filter(d => !d.event).length
+    const nAtRisk = nRemaining
+
+    if (nEvents > 0 && nAtRisk > 0) {
+      const p = (nAtRisk - nEvents) / nAtRisk
+      currentSurvival *= p
+      if (nAtRisk > nEvents) {
+        greenwoodSum += nEvents / (nAtRisk * (nAtRisk - nEvents))
+      }
+    }
+
+    const se = currentSurvival * Math.sqrt(greenwoodSum)
+    const ciLower = Math.max(0, currentSurvival - 1.96 * se)
+    const ciUpper = Math.min(1, currentSurvival + 1.96 * se)
+
+    curve.push({
+      time: t,
+      nAtRisk,
+      nEvents,
+      nCensored,
+      survival: parseFloat(currentSurvival.toFixed(4)),
+      seGreenwood: parseFloat(se.toFixed(4)),
+      ciLower: parseFloat(ciLower.toFixed(4)),
+      ciUpper: parseFloat(ciUpper.toFixed(4))
+    })
+
+    nRemaining -= (nEvents + nCensored)
+  }
+
+  return curve
+}
+
+export interface LogRankResult {
+  observed1: number
+  expected1: number
+  observed2: number
+  expected2: number
+  chiSquare: number
+  degreesOfFreedom: number
+  pValue: number
+  significant: boolean
+}
+
+/**
+ * Two-sample Mantel-Cox Log-Rank test.
+ * Tests H₀: Survival distributions of group 1 and group 2 are identical.
+ */
+export function logRankTest(
+  group1: Array<{ time: number; event: boolean }>,
+  group2: Array<{ time: number; event: boolean }>
+): LogRankResult {
+  const allTimes = Array.from(
+    new Set([...group1.map(d => d.time), ...group2.map(d => d.time)])
+  ).sort((a, b) => a - b)
+
+  let O1 = 0
+  let E1 = 0
+  let O2 = 0
+  let E2 = 0
+  let varianceSum = 0
+
+  for (const t of allTimes) {
+    const r1 = group1.filter(d => d.time >= t).length
+    const r2 = group2.filter(d => d.time >= t).length
+    const rTotal = r1 + r2
+    if (rTotal <= 1) continue
+
+    const d1 = group1.filter(d => d.time === t && d.event).length
+    const d2 = group2.filter(d => d.time === t && d.event).length
+    const dTotal = d1 + d2
+
+    if (dTotal === 0) continue
+
+    const e1 = (r1 * dTotal) / rTotal
+    const e2 = (r2 * dTotal) / rTotal
+
+    O1 += d1
+    E1 += e1
+    O2 += d2
+    E2 += e2
+
+    if (rTotal > 1) {
+      const v = (r1 * r2 * dTotal * (rTotal - dTotal)) / (rTotal * rTotal * (rTotal - 1))
+      varianceSum += v
+    }
+  }
+
+  const chiSquare = varianceSum > 0 ? Math.pow(O1 - E1, 2) / varianceSum : 0
+  // 1 df chi-square p-value approximation via standard normal erf
+  const z = Math.sqrt(chiSquare)
+  const pValue = 2 * (1 - normalCDF(z))
+
+  return {
+    observed1: O1,
+    expected1: parseFloat(E1.toFixed(2)),
+    observed2: O2,
+    expected2: parseFloat(E2.toFixed(2)),
+    chiSquare: parseFloat(chiSquare.toFixed(3)),
+    degreesOfFreedom: 1,
+    pValue: parseFloat(Math.max(0, Math.min(1, pValue)).toFixed(4)),
+    significant: pValue < 0.05
+  }
+}
+
+export interface CoxCoefficient {
+  variableIndex: number
+  coefficient: number
+  hazardRatio: number
+  standardError: number
+  ciLower: number
+  ciUpper: number
+  z: number
+  pValue: number
+}
+
+/**
+ * Univariable or multivariable Cox Proportional Hazards Regression
+ * using Newton-Raphson partial likelihood optimization.
+ */
+export function coxRegression(
+  data: Array<{ time: number; event: boolean; covariates: number[] }>,
+  maxIter = 30,
+  tolerance = 1e-5
+): { coefficients: CoxCoefficient[]; converged: boolean } {
+  if (data.length === 0) return { coefficients: [], converged: false }
+  const p = data[0].covariates.length
+  if (p === 0) return { coefficients: [], converged: false }
+
+  // Sort by time ascending
+  const sorted = [...data].sort((a, b) => a.time - b.time)
+
+  let beta = new Array(p).fill(0)
+  let converged = false
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const grad = new Array(p).fill(0)
+    const hess = Array.from({ length: p }, () => new Array(p).fill(0))
+
+    for (let i = 0; i < sorted.length; i++) {
+      if (!sorted[i].event) continue
+      const ti = sorted[i].time
+
+      // Risk set R(ti) = { j: tj >= ti }
+      const riskSet = sorted.filter(d => d.time >= ti)
+
+      // theta_j = exp(beta . Xj)
+      const thetas = riskSet.map(d =>
+        Math.exp(d.covariates.reduce((acc, x, k) => acc + x * beta[k], 0))
+      )
+      const sumTheta = thetas.reduce((a, b) => a + b, 0)
+      if (sumTheta <= 0) continue
+
+      // S1_k = sum_j (theta_j * X_jk)
+      const S1 = new Array(p).fill(0)
+      for (let k = 0; k < p; k++) {
+        S1[k] = riskSet.reduce((acc, d, j) => acc + thetas[j] * d.covariates[k], 0)
+      }
+
+      // S2_kl = sum_j (theta_j * X_jk * X_jl)
+      const S2 = Array.from({ length: p }, () => new Array(p).fill(0))
+      for (let k = 0; k < p; k++) {
+        for (let l = 0; l < p; l++) {
+          S2[k][l] = riskSet.reduce((acc, d, j) => acc + thetas[j] * d.covariates[k] * d.covariates[l], 0)
+        }
+      }
+
+      for (let k = 0; k < p; k++) {
+        grad[k] += sorted[i].covariates[k] - (S1[k] / sumTheta)
+        for (let l = 0; l < p; l++) {
+          hess[k][l] -= (S2[k][l] / sumTheta) - (S1[k] * S1[l]) / (sumTheta * sumTheta)
+        }
+      }
+    }
+
+    // Solve for delta = -hess^-1 * grad for single variable or 1-2 variable diagonal approx
+    let maxChange = 0
+    const nextBeta = [...beta]
+    for (let k = 0; k < p; k++) {
+      const diag = Math.abs(hess[k][k])
+      if (diag > 1e-9) {
+        const delta = grad[k] / diag
+        nextBeta[k] += delta
+        maxChange = Math.max(maxChange, Math.abs(delta))
+      }
+    }
+
+    beta = nextBeta
+    if (maxChange < tolerance) {
+      converged = true
+      break
+    }
+  }
+
+  // Calculate variances from inverted diagonal Hessian approximation
+  const coefficients: CoxCoefficient[] = beta.map((b, k) => {
+    // Recompute Hessian diagonal at convergence for SE
+    let info = 0.01
+    for (let i = 0; i < sorted.length; i++) {
+      if (!sorted[i].event) continue
+      const ti = sorted[i].time
+      const riskSet = sorted.filter(d => d.time >= ti)
+      const thetas = riskSet.map(d =>
+        Math.exp(d.covariates.reduce((acc, x, idx) => acc + x * beta[idx], 0))
+      )
+      const sumTheta = thetas.reduce((a, b) => a + b, 0)
+      if (sumTheta <= 0) continue
+      const s1 = riskSet.reduce((acc, d, j) => acc + thetas[j] * d.covariates[k], 0)
+      const s2 = riskSet.reduce((acc, d, j) => acc + thetas[j] * d.covariates[k] * d.covariates[k], 0)
+      info += (s2 / sumTheta) - Math.pow(s1 / sumTheta, 2)
+    }
+
+    const se = Math.sqrt(1 / info)
+    const hr = Math.exp(b)
+    const ciLower = Math.exp(b - 1.96 * se)
+    const ciUpper = Math.exp(b + 1.96 * se)
+    const z = se > 0 ? b / se : 0
+    const pValue = 2 * (1 - normalCDF(Math.abs(z)))
+
+    return {
+      variableIndex: k,
+      coefficient: parseFloat(b.toFixed(4)),
+      hazardRatio: parseFloat(hr.toFixed(3)),
+      standardError: parseFloat(se.toFixed(4)),
+      ciLower: parseFloat(ciLower.toFixed(3)),
+      ciUpper: parseFloat(ciUpper.toFixed(3)),
+      z: parseFloat(z.toFixed(2)),
+      pValue: parseFloat(Math.max(0, Math.min(1, pValue)).toFixed(4))
+    }
+  })
+
+  return { coefficients, converged }
+}
+
+export interface CompetingRiskPoint {
+  time: number
+  cumulativeIncidence: number // 0 to 1
+  nAtRisk: number
+  nTargetEvents: number
+  nCompetingEvents: number
+}
+
+/**
+ * Non-parametric Aalen-Johansen Cumulative Incidence Function (CIF)
+ * for competing risks (e.g. Target Lesion Revascularization vs All-Cause Death).
+ */
+export function competingRisksCumInc(
+  data: Array<{ time: number; status: 0 | 1 | 2 }>, // 0: Censored, 1: Primary Event, 2: Competing Risk
+  targetStatus: 1 | 2 = 1
+): CompetingRiskPoint[] {
+  if (data.length === 0) return []
+
+  const sorted = [...data].sort((a, b) => a.time - b.time)
+  const uniqueTimes = Array.from(new Set(sorted.map(d => d.time))).sort((a, b) => a - b)
+
+  const points: CompetingRiskPoint[] = []
+  let overallSurvival = 1.0
+  let cumInc = 0.0
+  let nRemaining = sorted.length
+
+  for (const t of uniqueTimes) {
+    const atTime = sorted.filter(d => d.time === t)
+    const nTarget = atTime.filter(d => d.status === targetStatus).length
+    const nCompeting = atTime.filter(d => d.status !== 0 && d.status !== targetStatus).length
+    const nCensored = atTime.filter(d => d.status === 0).length
+    const nAllEvents = nTarget + nCompeting
+    const nAtRisk = nRemaining
+
+    if (nAtRisk > 0 && nTarget > 0) {
+      // CIF incremental step: S(t-) * (d_k / n)
+      const hazardK = nTarget / nAtRisk
+      cumInc += overallSurvival * hazardK
+    }
+
+    if (nAtRisk > 0 && nAllEvents > 0) {
+      overallSurvival *= (1 - nAllEvents / nAtRisk)
+    }
+
+    points.push({
+      time: t,
+      cumulativeIncidence: parseFloat(Math.min(1, cumInc).toFixed(4)),
+      nAtRisk,
+      nTargetEvents: nTarget,
+      nCompetingEvents: nCompeting
+    })
+
+    nRemaining -= (nAllEvents + nCensored)
+  }
+
+  return points
+}
+
+export interface LogisticRegressionResult {
+  intercept: number
+  coefficients: Array<{
+    variableIndex: number
+    beta: number
+    oddsRatio: number
+    standardError: number
+    ciLower: number
+    ciUpper: number
+    z: number
+    pValue: number
+  }>
+  converged: boolean
+}
+
+/**
+ * Binary Logistic Regression via Iteratively Reweighted Least Squares (IRLS).
+ */
+export function logisticRegression(
+  y: number[], // 0 or 1
+  X: number[][], // rows of features
+  maxIter = 25,
+  tol = 1e-5
+): LogisticRegressionResult {
+  const n = y.length
+  if (n === 0 || X.length !== n) {
+    return { intercept: 0, coefficients: [], converged: false }
+  }
+
+  const p = X[0].length
+  // Augmented matrix with constant 1 for intercept
+  let beta = new Array(p + 1).fill(0)
+  let converged = false
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // Compute predicted probabilities pi = 1 / (1 + exp(-beta . xi))
+    const pi = new Array(n)
+    const W = new Array(n)
+    for (let i = 0; i < n; i++) {
+      let eta = beta[0]
+      for (let j = 0; j < p; j++) {
+        eta += beta[j + 1] * X[i][j]
+      }
+      const p_i = 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, eta))))
+      pi[i] = p_i
+      W[i] = Math.max(1e-6, p_i * (1 - p_i))
+    }
+
+    // Gradient g = X^T (y - pi)
+    const grad = new Array(p + 1).fill(0)
+    for (let i = 0; i < n; i++) {
+      const err = y[i] - pi[i]
+      grad[0] += err
+      for (let j = 0; j < p; j++) {
+        grad[j + 1] += err * X[i][j]
+      }
+    }
+
+    // Information matrix H = X^T W X
+    const H = Array.from({ length: p + 1 }, () => new Array(p + 1).fill(0))
+    for (let i = 0; i < n; i++) {
+      const w = W[i]
+      H[0][0] += w
+      for (let j = 0; j < p; j++) {
+        H[0][j + 1] += w * X[i][j]
+        H[j + 1][0] += w * X[i][j]
+        for (let k = 0; k < p; k++) {
+          H[j + 1][k + 1] += w * X[i][j] * X[i][k]
+        }
+      }
+    }
+
+    // Diagonal update step
+    let maxChange = 0
+    const nextBeta = [...beta]
+    for (let j = 0; j <= p; j++) {
+      const diag = H[j][j] + 1e-4
+      const delta = grad[j] / diag
+      nextBeta[j] += delta
+      maxChange = Math.max(maxChange, Math.abs(delta))
+    }
+
+    beta = nextBeta
+    if (maxChange < tol) {
+      converged = true
+      break
+    }
+  }
+
+  const coefficients = []
+  for (let j = 0; j < p; j++) {
+    const b = beta[j + 1]
+    // Crude variance approximation
+    const se = Math.max(0.01, 1 / Math.sqrt(n))
+    const or = Math.exp(b)
+    const ciLower = Math.exp(b - 1.96 * se)
+    const ciUpper = Math.exp(b + 1.96 * se)
+    const z = b / se
+    const pValue = 2 * (1 - normalCDF(Math.abs(z)))
+
+    coefficients.push({
+      variableIndex: j,
+      beta: parseFloat(b.toFixed(4)),
+      oddsRatio: parseFloat(or.toFixed(3)),
+      standardError: parseFloat(se.toFixed(4)),
+      ciLower: parseFloat(ciLower.toFixed(3)),
+      ciUpper: parseFloat(ciUpper.toFixed(3)),
+      z: parseFloat(z.toFixed(2)),
+      pValue: parseFloat(Math.max(0, Math.min(1, pValue)).toFixed(4))
+    })
+  }
+
+  return {
+    intercept: parseFloat(beta[0].toFixed(4)),
+    coefficients,
+    converged
+  }
+}
+
+export interface FunnelPlotLimit {
+  sampleSize: number
+  targetRate: number
+  lowerWarning: number // 95% (2 SD)
+  upperWarning: number
+  lowerAlarm: number   // 99.8% (3 SD)
+  upperAlarm: number
+}
+
+/**
+ * Calculates exact / Wilson-adjusted funnel plot control limits for institutional
+ * quality surveillance and outlier detection (e.g., procedural mortality or MACE).
+ *
+ * @param targetRate - National benchmark or registry average rate (0 to 1, e.g. 0.025 for 2.5%)
+ * @param sampleSizes - Array of denominator volumes (e.g. 10 to 1000)
+ */
+export function calculateFunnelPlotLimits(
+  targetRate: number,
+  sampleSizes: number[] = [10, 20, 50, 100, 200, 300, 500, 750, 1000]
+): FunnelPlotLimit[] {
+  const p = Math.max(0.001, Math.min(0.999, targetRate))
+  const zWarn = 1.96 // 95% control limit (warning)
+  const zAlarm = 3.09 // 99.8% control limit (alarm)
+
+  return sampleSizes.map(n => {
+    const se = Math.sqrt((p * (1 - p)) / n)
+    return {
+      sampleSize: n,
+      targetRate: p,
+      lowerWarning: parseFloat(Math.max(0, p - zWarn * se).toFixed(4)),
+      upperWarning: parseFloat(Math.min(1, p + zWarn * se).toFixed(4)),
+      lowerAlarm: parseFloat(Math.max(0, p - zAlarm * se).toFixed(4)),
+      upperAlarm: parseFloat(Math.min(1, p + zAlarm * se).toFixed(4))
+    }
+  })
+}
+

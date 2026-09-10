@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sanitizePatientForEgress, sanitizeVisitForEgress } from '@/lib/anonymization'
 
-const SYSTEM_PROMPT = `You are a clinical decision support system embedded in a Heart Failure Registry (CardioPlus) at AICTS, Pune, India.
+const SYSTEM_PROMPT = `You are a clinical decision support system embedded in the CardioKonnect Cardiovascular Registry Network.
 
 You follow ESC 2023 Heart Failure Guidelines and AHA/ACC 2022 HF Guidelines.
 

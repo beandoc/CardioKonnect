@@ -203,7 +203,7 @@ export default function ComplicationAuditPage() {
                 </div>
                 <h3 className="text-base font-bold text-white">Not Captured — No Procedural Complication Fields in Current CRF</h3>
                 <p className="text-xs text-gray-400 max-w-lg mx-auto leading-relaxed">
-                  CardioPlus does not report structural absence of documentation as an audited zero or clean safety record.
+                  CardioKonnect does not report structural absence of documentation as an audited zero or clean safety record.
                   Procedural complications (Ellis perforations, NHLBI dissections, no-reflow, acute stent thrombosis, BARC access bleeding, emergent CABG, and CIN) will be audited here upon entry of procedure records into the Cath Lab Registry.
                 </p>
                 <div className="pt-2">

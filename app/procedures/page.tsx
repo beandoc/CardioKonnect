@@ -269,7 +269,7 @@ export default function ProceduralAuditPage() {
             <Database className="w-10 h-10 text-gray-500 mx-auto" />
             <p className="text-sm font-bold text-white">No procedural records logged for this category</p>
             <p className="text-xs text-gray-400 max-w-sm mx-auto">
-              CardioPlus reports authentic procedural data. Click &quot;Log Cath Procedure&quot; above to record catheterization and PCI cases.
+              CardioKonnect reports authentic procedural data. Click &quot;Log Cath Procedure&quot; above to record catheterization and PCI cases.
             </p>
           </div>
         ) : (

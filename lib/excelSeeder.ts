@@ -93,11 +93,18 @@ function cleanMilitaryRanks(rawName: string): string {
   return str.replace(/[.\-_]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function clampOrUndefined(val: number | undefined, min: number, max: number): number | undefined {
+  if (val === undefined || isNaN(val)) return undefined;
+  if (val < min || val > max) return undefined;
+  return val;
+}
+
 export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCount: number; patients: Patient[]; visits: Visit[] } {
   let patientsCount = 0;
   let visitsCount = 0;
   const patients: Patient[] = [];
   const visits: Visit[] = [];
+  const patientRegistryMap = new Map<string, Patient>();
 
   for (const row of rows) {
     const srNo = row['SR. NO.'];
@@ -115,40 +122,54 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     const doa = parseExcelDate(row['DOA']);
     const dod = parseExcelDate(row['DOD']);
 
-    const age = parseInt(row['AGE'], 10);
+    const rawAge = parseInt(row['AGE'], 10);
+    const age = clampOrUndefined(rawAge, 0, 120);
     let dob = '';
-    if (doa && !isNaN(age)) {
+    if (doa && age !== undefined) {
       const doaYear = new Date(doa).getFullYear();
-      dob = `${doaYear - age}-01-01`;
-    } else if (!isNaN(age)) {
+      if (!isNaN(doaYear)) {
+        dob = `${doaYear - age}-01-01`;
+      }
+    } else if (age !== undefined) {
       dob = `${new Date().getFullYear() - age}-01-01`;
-    } else {
-      dob = '1970-01-01';
     }
+    // Do NOT invent '1970-01-01' when age or DOA is absent
 
     const gender = String(row['GENDER'] || '').trim().toUpperCase();
-    const sex: 'Male' | 'Female' = gender === 'M' || gender === 'MALE' ? 'Male' : 'Female';
+    let sex: 'Male' | 'Female' | 'Other' | 'Unknown' = 'Unknown';
+    if (gender === 'M' || gender === 'MALE') {
+      sex = 'Male';
+    } else if (gender === 'F' || gender === 'FEMALE') {
+      sex = 'Female';
+    } else if (gender === 'O' || gender === 'OTHER') {
+      sex = 'Other';
+    }
 
     const contact = String(row['PHONE'] || '').trim();
     const address = String(row['ADDRESS'] || '').trim();
 
-    // Map comorbidities & histories
+    // Map comorbidities & histories using strict word-boundary matching
     const dmVal = String(row['IF DM IS DIAGNOSED'] || '').trim().toUpperCase();
     const hospVal = String(row['H/O OF HOSPITALIZATION'] || '').trim().toUpperCase();
     const etVal = String(row['ETIOLOGY'] || '').trim().toUpperCase();
     const mraVal = String(row['MRAs'] || '').trim().toUpperCase();
     const lipidVal = String(row['IN CASE DYSLIPIDEMIA'] || '').trim().toUpperCase();
 
-    const comorbidDiabetes = (dmVal !== 'NO' && dmVal !== '') || hospVal.includes('DM') || hospVal.includes('DIABETES');
-    const comorbidCAD = hospVal.includes('CAD') || hospVal.includes('CAG') || hospVal.includes('PCI') || hospVal.includes('CABG') || hospVal.includes('AWMI') || hospVal.includes('IWMI') || hospVal.includes('MI');
-    const comorbidPriorPCI = hospVal.includes('PCI');
-    const comorbidPriorCABG = hospVal.includes('CABG');
-    const comorbidPriorMI = hospVal.includes('MI') || hospVal.includes('AWMI') || hospVal.includes('IWMI');
-    const comorbidHypertension = hospVal.includes('HYPERTENSION') || hospVal.includes('HTN') || etVal.includes('HYPERTENSION') || etVal.includes('HTN');
-    const comorbidCKD = hospVal.includes('CKD') || hospVal.includes('KIDNEY') || mraVal.includes('CKD');
-    const comorbidCOPD = hospVal.includes('COPD') || hospVal.includes('COAD') || hospVal.includes('ASTHMA');
-    const comorbidAF = hospVal.includes('AF') || hospVal.includes('ATRIAL FIBRILLATION');
-    const comorbidDyslipidemia = lipidVal !== 'NO' && lipidVal !== '';
+    const hasWord = (text: string, words: string[]) => {
+      const pattern = new RegExp(`\\b(${words.join('|')})\\b`, 'i');
+      return pattern.test(text);
+    };
+
+    const comorbidDiabetes = (dmVal !== 'NO' && dmVal !== '' && !dmVal.includes('NIL')) || hasWord(hospVal, ['DM', 'DM2', 'T2DM', 'T1DM', 'DIABETES', 'DIABETIC']);
+    const comorbidPriorPCI = hasWord(hospVal, ['PCI', 'PTCA', 'STENT', 'STENTING']);
+    const comorbidPriorCABG = hasWord(hospVal, ['CABG', 'BYPASS']);
+    const comorbidPriorMI = hasWord(hospVal, ['MI', 'AWMI', 'IWMI', 'ASWMI', 'STEMI', 'NSTEMI', 'INFARCTION']);
+    const comorbidCAD = comorbidPriorPCI || comorbidPriorCABG || comorbidPriorMI || hasWord(hospVal, ['CAD', 'IHD', 'CORONARY', 'ISCHEMIC', 'ISCHAEMIC', 'ANGINA', 'CAG']);
+    const comorbidHypertension = hasWord(hospVal, ['HYPERTENSION', 'HTN', 'HYPERTENSIVE']) || hasWord(etVal, ['HYPERTENSION', 'HTN']);
+    const comorbidCKD = hasWord(hospVal, ['CKD', 'ESRD', 'RENAL', 'KIDNEY']) || hasWord(mraVal, ['CKD']);
+    const comorbidCOPD = hasWord(hospVal, ['COPD', 'COAD', 'ASTHMA']);
+    const comorbidAF = hasWord(hospVal, ['AF', 'AFIB', 'ATRIAL FIBRILLATION']);
+    const comorbidDyslipidemia = (lipidVal !== 'NO' && lipidVal !== '' && !lipidVal.includes('NIL')) || hasWord(hospVal, ['DYSLIPIDEMIA', 'HYPERLIPIDEMIA', 'LIPID']);
 
     const comorbidities: string[] = [];
     if (comorbidHypertension) comorbidities.push('HTN');
@@ -368,27 +389,29 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
     const vaccPneumo = vaccVal.includes('PNEUMOCOCCAL') ? 'Yes' : 'No';
 
     // Phenotype
+    const rawLvef = parseFloat(row['LVEF']);
+    const lvef = clampOrUndefined(rawLvef, 5, 90);
+
     const typeOfHF = String(row['TYPE OF HF'] || '').trim().toUpperCase();
-    const hfType = typeOfHF.includes('REDUCED') ? 'HFrEF' : (typeOfHF.includes('MID') ? 'HFmrEF' : (typeOfHF.includes('PRESERVED') ? 'HFpEF' : 'HFrEF'));
+    const hfType = typeOfHF.includes('REDUCED') ? 'HFrEF' : (typeOfHF.includes('MID') ? 'HFmrEF' : (typeOfHF.includes('PRESERVED') ? 'HFpEF' : (lvef != null ? (lvef <= 40 ? 'HFrEF' : (lvef <= 49 ? 'HFmrEF' : 'HFpEF')) : undefined)));
 
     // NYHA
     const nyhaStr = String(row['NYHA CLASS'] || '').trim();
-    const nyha = (nyhaStr === 'II' || nyhaStr === 'III' || nyhaStr === 'IV') ? nyhaStr : 'II';
+    const nyha = (nyhaStr === 'I' || nyhaStr === 'II' || nyhaStr === 'III' || nyhaStr === 'IV') ? nyhaStr : undefined;
 
-    // Heart rate & weight & walk test
-    const heartRate = parseInt(row['HR'], 10) || undefined;
-    const weight = parseFloat(row['WEIGHT']) || undefined;
-    const sixMWT = parseInt(row['6MWT'], 10) || undefined;
-    const lvef = parseFloat(row['LVEF']) || undefined;
+    // Heart rate & weight & walk test with range checks
+    const heartRate = clampOrUndefined(parseInt(row['HR'], 10), 20, 300);
+    const weight = clampOrUndefined(parseFloat(row['WEIGHT']), 10, 350);
+    const sixMWT = clampOrUndefined(parseInt(row['6MWT'], 10), 0, 1500);
 
-    // Blood pressure
+    // Blood pressure with range checks
     let bpSystolic: number | undefined = undefined;
     let bpDiastolic: number | undefined = undefined;
     const bpVal = String(row['BP'] || '').trim();
     const bpParts = bpVal.split('/');
     if (bpParts.length === 2) {
-      bpSystolic = parseInt(bpParts[0], 10) || undefined;
-      bpDiastolic = parseInt(bpParts[1], 10) || undefined;
+      bpSystolic = clampOrUndefined(parseInt(bpParts[0], 10), 40, 300);
+      bpDiastolic = clampOrUndefined(parseInt(bpParts[1], 10), 20, 200);
     }
 
     // Grip tests
@@ -397,62 +420,100 @@ export function parseExcelRows(rows: any[]): { patientsCount: number; visitsCoun
 
     const etiologies = String(row['ETIOLOGY'] || '').trim().split(/[,\n]/).map(s => s.trim()).filter(Boolean);
 
-    // Generate a local unique patient ID (no Firestore needed)
-    const patientId = 'p-' + Math.random().toString(36).substr(2, 9) + '-' + (patientsCount + 1);
-
     // Extract Column D (HID NO.) strictly - do NOT substitute Serial Number
     const rawHid = String(row['HID NO.'] || row['HID NO'] || row['HID'] || row['MRN'] || '').trim();
     const mrn = (rawHid && rawHid !== 'undefined' && rawHid !== 'null' && rawHid !== '-') ? rawHid : '—';
 
-    // Build Patient document data
-    const patientInput: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'> = {
-      firstName,
-      lastName,
-      dob,
-      sex,
-      mrn,
-      srNo: typeof srNo === 'number' ? srNo : parseInt(srNo, 10) || undefined,
-      contact,
-      address,
-      comorbidities,
-      status: 'Active',
-      consentStatus: 'Granted',
-      studyConsented: true,
-      indianCitizen: true,
-      ethnicity: 'Indian',
-      registryId: 'hf',
-      hfConfirmationDate: doa,
-      hfType,
-      nyha,
-      lvef,
-      visitCount: 1,
-      lastVisitDate: dod || doa,
-      age: !isNaN(age) ? age : undefined,
-      comorbidHypertension,
-      comorbidDiabetes,
-      comorbidDyslipidemia,
-      comorbidCAD,
-      comorbidPriorMI,
-      comorbidPriorPCI,
-      comorbidPriorCABG,
-      comorbidAF,
-      comorbidCKD,
-      comorbidCOPD,
-      icdPresence,
-      crtPresence,
-      anticoagulation,
-      antiarrhythmic
-    };
-
-    patientsCount++;
-
     const nowISO = new Date().toISOString();
-    patients.push(cleanUndefined({
-      ...patientInput,
-      id: patientId,
-      createdAt: nowISO,
-      updatedAt: nowISO
-    }) as Patient);
+
+    // Deduplication key: MRN if valid, else unique demographic fingerprint
+    const dedupKey = (mrn && mrn !== '—')
+      ? `mrn:${mrn}`
+      : `demog:${firstName.toLowerCase()}_${lastName.toLowerCase()}_${dob || age || ''}`;
+
+    let patientId: string;
+    const existingPt = patientRegistryMap.get(dedupKey);
+
+    if (existingPt) {
+      patientId = existingPt.id;
+      existingPt.visitCount = (existingPt.visitCount || 1) + 1;
+      if (dod || doa) {
+        const candidateDate = dod || doa;
+        if (!existingPt.lastVisitDate || candidateDate > existingPt.lastVisitDate) {
+          existingPt.lastVisitDate = candidateDate;
+        }
+      }
+      comorbidities.forEach(c => {
+        if (!existingPt.comorbidities?.includes(c)) {
+          existingPt.comorbidities?.push(c);
+        }
+      });
+      if (comorbidHypertension) existingPt.comorbidHypertension = true;
+      if (comorbidDiabetes) existingPt.comorbidDiabetes = true;
+      if (comorbidCAD) existingPt.comorbidCAD = true;
+      if (comorbidPriorPCI) existingPt.comorbidPriorPCI = true;
+      if (comorbidPriorCABG) existingPt.comorbidPriorCABG = true;
+      if (comorbidPriorMI) existingPt.comorbidPriorMI = true;
+      if (comorbidAF) existingPt.comorbidAF = true;
+      if (comorbidCKD) existingPt.comorbidCKD = true;
+      if (comorbidCOPD) existingPt.comorbidCOPD = true;
+      if (comorbidDyslipidemia) existingPt.comorbidDyslipidemia = true;
+    } else {
+      patientId = 'p-' + Math.random().toString(36).substr(2, 9) + '-' + (patientsCount + 1);
+
+      // Build Patient document data
+      const patientInput: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'> = {
+        firstName,
+        lastName,
+        dob,
+        sex,
+        mrn,
+        srNo: typeof srNo === 'number' ? srNo : parseInt(srNo, 10) || undefined,
+        contact,
+        address,
+        comorbidities,
+        status: 'Active',
+        consentStatus: 'Granted',
+        studyConsented: true,
+        indianCitizen: true,
+        ethnicity: 'Indian',
+        registryId: 'hf',
+        hfConfirmationDate: doa,
+        hfType,
+        nyha,
+        lvef,
+        visitCount: 1,
+        lastVisitDate: dod || doa,
+        age: age !== undefined ? age : undefined,
+        comorbidHypertension,
+        comorbidDiabetes,
+        comorbidDyslipidemia,
+        comorbidCAD,
+        comorbidPriorMI,
+        comorbidPriorPCI,
+        comorbidPriorCABG,
+        comorbidAF,
+        comorbidCKD,
+        comorbidCOPD,
+        icdPresence,
+        crtPresence,
+        anticoagulation,
+        antiarrhythmic
+      };
+
+      patientsCount++;
+
+      const nowISO = new Date().toISOString();
+      const newPt = cleanUndefined({
+        ...patientInput,
+        id: patientId,
+        createdAt: nowISO,
+        updatedAt: nowISO
+      }) as Patient;
+
+      patients.push(newPt);
+      patientRegistryMap.set(dedupKey, newPt);
+    }
 
     // Create Visit 1 (Inpatient encounter)
     const visit1Id = 'v-' + Math.random().toString(36).substr(2, 9) + '-1';

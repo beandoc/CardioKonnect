@@ -154,7 +154,7 @@ export default function AnalyticsPage() {
             </p>
             <div className="pt-2 flex items-center justify-between">
               <span className="text-xs text-gray-500">Active cohort size:</span>
-              <span className="badge badge-violet font-bold">1 pts</span>
+              <span className="badge badge-violet font-bold">{stats.crtCandidatesCount ?? 0} pts</span>
             </div>
           </div>
 
@@ -165,7 +165,7 @@ export default function AnalyticsPage() {
             </p>
             <div className="pt-2 flex items-center justify-between">
               <span className="text-xs text-gray-500">Active cohort size:</span>
-              <span className="badge badge-green font-bold">2 pts</span>
+              <span className="badge badge-green font-bold">{stats.ironDeficiencyCount ?? 0} pts</span>
             </div>
           </div>
 

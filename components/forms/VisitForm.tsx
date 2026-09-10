@@ -347,7 +347,7 @@ const schema = z.object({
     ladStenosis: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
     lcxStenosis: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
     rcaStenosis: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
-    syntaxScore: z.coerce.number().min(0).max(150).optional().or(z.literal('')),
+    syntaxScore: z.coerce.number().min(0).max(60, 'Anatomic SYNTAX score maximum is 60').optional().or(z.literal('')),
     priorPciDate: z.string().optional(),
     priorCabgDate: z.string().optional(),
     revascularizationType: z.enum(['None', 'PCI', 'CABG', 'Both', '']).default(''),
@@ -1880,8 +1880,8 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <FieldWrap label="SYNTAX Score" error={errors.coronaryAnatomy?.syntaxScore?.message} hint="Lesion complexity score">
-                  <Input type="number" {...register('coronaryAnatomy.syntaxScore')} placeholder="e.g. 22" error={!!errors.coronaryAnatomy?.syntaxScore} />
+                <FieldWrap label="SYNTAX Score" error={errors.coronaryAnatomy?.syntaxScore?.message} hint="Anatomic score (0–60)">
+                  <Input type="number" {...register('coronaryAnatomy.syntaxScore')} placeholder="e.g. 22" min={0} max={60} error={!!errors.coronaryAnatomy?.syntaxScore} />
                 </FieldWrap>
                 <FieldWrap label="Prior Revascularization">
                   <Select {...register('coronaryAnatomy.revascularizationType')}>

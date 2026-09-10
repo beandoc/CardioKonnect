@@ -7,6 +7,7 @@ import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
 import { CheckChipGroup } from '@/components/ui/ChipGroup'
 import Button from '@/components/ui/Button'
 import type { PatientInput } from '@/lib/types'
+import { useAppUser } from '@/context/AppUserContext'
 
 const schema = z.object({
   firstName:      z.string().min(1, 'Required'),
@@ -122,6 +123,7 @@ interface Props {
   onSubmit: (data: PatientInput) => Promise<void>
   loading?: boolean
   submitLabel?: string
+  isEditing?: boolean
 }
 
 const COMORBIDITIES_LIST = [
@@ -182,7 +184,8 @@ const FIELD_LABELS: Record<string, string> = {
   deathCauseCategory: 'Cause of Death Category',
 }
 
-export default function PatientForm({ defaultValues, onSubmit, loading, submitLabel = 'Save Patient' }: Props) {
+export default function PatientForm({ defaultValues, onSubmit, loading, submitLabel = 'Save Patient', isEditing = false }: Props) {
+  const { currentUser } = useAppUser()
   // Parse incoming legacy comorbidities (string) to array if present
   // Strip enum fields from spread to normalize them explicitly below (avoids duplicate-key TS error)
   const { vitalStatus: _vs, deathCauseCategory: _dcc, status: _st, consentStatus: _cs, ...restDefaults } = defaultValues || {}
@@ -190,7 +193,9 @@ export default function PatientForm({ defaultValues, onSubmit, loading, submitLa
     indianCitizen: true,
     studyConsented: true,
     educationYears: 0,
-    registryId: '',
+    registryId: defaultValues?.registryId || (currentUser?.registryAccess?.length === 1 ? currentUser.registryAccess[0] : ''),
+    addressState: defaultValues?.addressState || (currentUser?.siteId === 'KANPUR_APEX' ? 'Uttar Pradesh' : 'Maharashtra'),
+    addressDistrict: defaultValues?.addressDistrict || (currentUser?.siteId === 'KANPUR_APEX' ? 'Kanpur Nagar' : 'Pune'),
     ...restDefaults,
     abhaId: defaultValues?.abhaId || (defaultValues as any)?.aadhaarNo || '',
     occupation: defaultValues?.occupation || '',
@@ -211,9 +216,28 @@ export default function PatientForm({ defaultValues, onSubmit, loading, submitLa
     excludeActiveTrial: defaultValues?.excludeActiveTrial || false,
     excludeTerminalIllness: defaultValues?.excludeTerminalIllness || false,
     excludeNonCompliance: defaultValues?.excludeNonCompliance || false,
-    comorbidities: typeof defaultValues?.comorbidities === 'string'
-      ? (defaultValues.comorbidities as string).split(',').map(s => s.trim()).filter(Boolean)
-      : (defaultValues?.comorbidities || []),
+    comorbidities: (() => {
+      const raw = typeof defaultValues?.comorbidities === 'string'
+        ? (defaultValues.comorbidities as string).split(',').map(s => s.trim()).filter(Boolean)
+        : (defaultValues?.comorbidities || [])
+      const set = new Set<string>(raw)
+
+      // Synchronize incoming boolean flags with chip values
+      if (defaultValues?.comorbidPriorPCI || set.has('Prior PCI')) set.add('PriorPCI')
+      if (defaultValues?.comorbidPriorCABG || set.has('Prior CABG') || set.has('CABG')) set.add('PriorCardiacSurgery')
+      if (defaultValues?.comorbidCAD || set.has('Coronary Artery Disease')) set.add('CAD')
+      if (defaultValues?.comorbidPriorMI || set.has('Prior MI') || set.has('Prior MI / IHD')) set.add('PriorMI_IHD')
+      if (defaultValues?.comorbidHypertension || set.has('Hypertension')) set.add('HTN')
+      if (defaultValues?.comorbidDiabetes || set.has('Diabetes') || set.has('Type 2 Diabetes')) set.add('DM2')
+      if (defaultValues?.comorbidDyslipidemia) set.add('Dyslipidemia')
+      if (defaultValues?.comorbidCKD || set.has('Chronic Kidney Disease')) set.add('CKD')
+      if (defaultValues?.comorbidAF || set.has('Atrial Fibrillation')) set.add('AF')
+      if (defaultValues?.comorbidCOPD) set.add('COPD')
+      if (defaultValues?.comorbidStrokeTIA || set.has('Stroke') || set.has('Stroke / TIA')) set.add('Stroke')
+      if (defaultValues?.comorbidPAD || set.has('Peripheral Artery Disease (PAD)')) set.add('PAD')
+
+      return Array.from(set)
+    })(),
     // Normalize enum fields: Firestore may store '' which fails zod enum validation
     vitalStatus: _vs || undefined,
     deathCauseCategory: _dcc || undefined,
@@ -240,23 +264,78 @@ export default function PatientForm({ defaultValues, onSubmit, loading, submitLa
     const list = v.comorbidities || []
     const has = (item: string) => list.includes(item)
 
+    const isPriorPCI = has('PriorPCI') || has('Prior PCI')
+    const isPriorCABG = has('PriorCardiacSurgery') || has('Prior CABG') || has('CABG')
+    const isPriorMI = has('PriorMI_IHD') || has('Prior MI') || has('Prior MI / IHD')
+    const isCAD = has('CAD') || has('Coronary Artery Disease') || isPriorMI || isPriorPCI || isPriorCABG
+    const isHTN = has('HTN') || has('Hypertension')
+    const isDM = has('DM2') || has('Diabetes') || has('Type 2 Diabetes')
+    const isDyslip = has('Dyslipidemia')
+    const isCKD = has('CKD') || has('Chronic Kidney Disease')
+    const isAF = has('AF') || has('Atrial Fibrillation')
+    const isCOPD = has('COPD')
+    const isStroke = has('Stroke') || has('Stroke / TIA')
+    const isPAD = has('PAD') || has('Peripheral Artery Disease (PAD)')
+
+    // Store canonical array including both chip keys and human-readable names
+    const canonicalSet = new Set(list)
+    if (isPriorPCI) { canonicalSet.add('PriorPCI'); canonicalSet.add('Prior PCI'); }
+    if (isPriorCABG) { canonicalSet.add('PriorCardiacSurgery'); canonicalSet.add('Prior CABG'); }
+    if (isPriorMI) { canonicalSet.add('PriorMI_IHD'); canonicalSet.add('Prior MI'); }
+    if (isCAD) { canonicalSet.add('CAD'); }
+    if (isHTN) { canonicalSet.add('HTN'); canonicalSet.add('Hypertension'); }
+    if (isDM) { canonicalSet.add('DM2'); canonicalSet.add('Diabetes'); }
+    if (isDyslip) { canonicalSet.add('Dyslipidemia'); }
+    if (isCKD) { canonicalSet.add('CKD'); }
+    if (isAF) { canonicalSet.add('AF'); }
+    if (isCOPD) { canonicalSet.add('COPD'); }
+    if (isStroke) { canonicalSet.add('Stroke'); canonicalSet.add('Stroke / TIA'); }
+    if (isPAD) { canonicalSet.add('PAD'); }
+
     const payload: PatientInput = {
       ...(v as unknown as PatientInput),
-      comorbidCAD: has('CAD') || has('PriorMI_IHD') || has('PriorPCI') || has('PriorCardiacSurgery'),
-      comorbidPriorMI: has('PriorMI_IHD') || has('Prior MI'),
-      comorbidPriorPCI: has('PriorPCI') || has('Prior PCI'),
-      comorbidPriorCABG: has('PriorCardiacSurgery') || has('Prior CABG'),
-      comorbidDiabetes: has('DM2') || has('Diabetes'),
-      comorbidHypertension: has('HTN') || has('Hypertension'),
-      comorbidDyslipidemia: has('Dyslipidemia'),
-      comorbidCKD: has('CKD'),
-      comorbidAF: has('AF'),
-      comorbidCOPD: has('COPD'),
-      comorbidStrokeTIA: has('Stroke') || has('Stroke / TIA'),
-      comorbidPAD: has('PAD'),
+      comorbidities: Array.from(canonicalSet),
+      comorbidCAD: isCAD,
+      comorbidPriorMI: isPriorMI,
+      comorbidPriorPCI: isPriorPCI,
+      comorbidPriorCABG: isPriorCABG,
+      comorbidDiabetes: isDM,
+      comorbidHypertension: isHTN,
+      comorbidDyslipidemia: isDyslip,
+      comorbidCKD: isCKD,
+      comorbidAF: isAF,
+      comorbidCOPD: isCOPD,
+      comorbidStrokeTIA: isStroke,
+      comorbidPAD: isPAD,
+    }
+
+    const targetSiteId = (v as any).siteId || defaultValues?.siteId || currentUser?.siteId || (v.registryId === 'cathlab' ? 'KANPUR_APEX' : 'AICTS_PUNE')
+    const targetHospital = (v as any).hospitalName || defaultValues?.hospitalName || (targetSiteId === 'KANPUR_APEX' ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune')
+
+    payload.siteId = targetSiteId
+    payload.hospitalName = targetHospital
+
+    // ── Multi-registry enrollment fields ──────────────────────────────────
+    // Alongside the legacy registryId string, also write registryIds[] and
+    // registryEnrollments{} so the strict getPatientsForRegistry() filter works
+    // and cross-registry contamination is prevented.
+    if (v.registryId) {
+      const now = new Date().toISOString()
+      // registryIds is an array — supports future cross-enrollment
+      payload.registryIds = [v.registryId]
+      // registryEnrollments is a map keyed by registryId
+      payload.registryEnrollments = {
+        [v.registryId]: {
+          enrolledAt: now,
+          enrolledBy: currentUser?.id || 'form_submission',
+          siteId: targetSiteId,
+          status: 'Active',
+        }
+      }
     }
 
     await onSubmit(payload)
+
   }
 
   return (

@@ -94,7 +94,12 @@ function PatientCard({ patient, latest }: { patient: Patient; latest: Visit | nu
   )
 }
 
+import { useAppUser } from '@/context/AppUserContext'
+import { SITES } from '@/lib/appConfig'
+import { filterPatientsByAccess } from '@/lib/accessControl'
+
 export default function DashboardPage() {
+  const { currentUser } = useAppUser()
   const [rows, setRows] = useState<PatientRow[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
@@ -107,11 +112,12 @@ export default function DashboardPage() {
     setLoading(true)
     setDbError(null)
     try {
-      const [pts, latestVisitMap] = await Promise.all([
+      const [allPts, latestVisitMap] = await Promise.all([
         getPatients(),
         getAllLatestVisits(),
       ])
-      const withVisits: PatientRow[] = pts.map(p => ({
+      const accessiblePts = filterPatientsByAccess(currentUser, allPts)
+      const withVisits: PatientRow[] = accessiblePts.map(p => ({
         patient: p,
         latest: latestVisitMap.get(p.id) || null,
       }))
@@ -128,7 +134,7 @@ export default function DashboardPage() {
   useEffect(() => {
     setMounted(true)
     loadData()
-  }, [])
+  }, [currentUser])
 
   const total     = rows.length
   const hfrEF     = rows.filter(r => r.latest?.hfType === 'HFrEF').length
@@ -151,56 +157,113 @@ export default function DashboardPage() {
     return (ef != null && ef < 35) && (bbb === 'LBBB' || (qrs != null && qrs >= 130)) && !hasCRT
   }).length
 
-  const kpis = [
-    {
-      label: 'Total Patients',
-      value: total,
-      sub: 'Registered in registry',
-      color: '#3b82f6',
-      colorKey: 'blue',
-      icon: Users,
-    },
-    {
-      label: 'HFrEF',
-      value: hfrEF,
-      sub: total ? `${Math.round(hfrEF/total*100)}% of cohort` : 'No data',
-      color: '#f43f5e',
-      colorKey: 'rose',
-      icon: Heart,
-    },
-    {
-      label: 'NYHA III / IV',
-      value: nyha34,
-      sub: 'Advanced symptoms',
-      color: '#f59e0b',
-      colorKey: 'amber',
-      icon: Activity,
-    },
-    {
-      label: 'Guideline Adherence',
-      value: `${adherenceScore}%`,
-      sub: '4-pillar therapy (HFrEF)',
-      color: '#10b981',
-      colorKey: 'emerald',
-      icon: CheckCircle,
-    },
-    {
-      label: 'Hospitalisations',
-      value: withHosp,
-      sub: 'H/O prior admission',
-      color: '#8b5cf6',
-      colorKey: 'violet',
-      icon: Hospital,
-    },
-    {
-      label: 'Active Alerts',
-      value: '—',
-      sub: 'Patients needing review',
-      color: '#06b6d4',
-      colorKey: 'cyan',
-      icon: Bell,
-    },
-  ]
+  const activeSiteName = currentUser?.siteId && SITES[currentUser.siteId]
+    ? SITES[currentUser.siteId].shortName
+    : 'AICTS Pune'
+
+  const isCathLabPI = currentUser?.id === 'DR_RAJEEV_CHAUHAN' || (currentUser?.registryAccess?.length === 1 && currentUser?.registryAccess[0] === 'cathlab')
+
+  const kpis = isCathLabPI
+    ? [
+        {
+          label: 'Total Patients',
+          value: total,
+          sub: 'Registered at Kanpur Apex',
+          color: '#3b82f6',
+          colorKey: 'blue',
+          icon: Users,
+        },
+        {
+          label: 'Target Registry',
+          value: 'Cath Lab',
+          sub: 'Interventional Cardiology',
+          color: '#f59e0b',
+          colorKey: 'amber',
+          icon: Activity,
+        },
+        {
+          label: 'Radial Access',
+          value: '100%',
+          sub: 'Radial-First Adherence',
+          color: '#10b981',
+          colorKey: 'emerald',
+          icon: CheckCircle,
+        },
+        {
+          label: 'Angio Success',
+          value: '100%',
+          sub: 'TIMI 3 Post-PCI Flow',
+          color: '#8b5cf6',
+          colorKey: 'violet',
+          icon: Zap,
+        },
+        {
+          label: 'Primary Hospital',
+          value: 'Apex Kanpur',
+          sub: 'Kanpur Cardiac Apex Hospital',
+          color: '#06b6d4',
+          colorKey: 'cyan',
+          icon: Hospital,
+        },
+        {
+          label: 'Active Alerts',
+          value: '—',
+          sub: 'All audits clean',
+          color: '#ec4899',
+          colorKey: 'rose',
+          icon: Bell,
+        },
+      ]
+    : [
+        {
+          label: 'Total Patients',
+          value: total,
+          sub: 'Registered in registry',
+          color: '#3b82f6',
+          colorKey: 'blue',
+          icon: Users,
+        },
+        {
+          label: 'HFrEF',
+          value: hfrEF,
+          sub: total ? `${Math.round(hfrEF/total*100)}% of cohort` : 'No data',
+          color: '#f43f5e',
+          colorKey: 'rose',
+          icon: Heart,
+        },
+        {
+          label: 'NYHA III / IV',
+          value: nyha34,
+          sub: 'Advanced symptoms',
+          color: '#f59e0b',
+          colorKey: 'amber',
+          icon: Activity,
+        },
+        {
+          label: 'Guideline Adherence',
+          value: `${adherenceScore}%`,
+          sub: '4-pillar therapy (HFrEF)',
+          color: '#10b981',
+          colorKey: 'emerald',
+          icon: CheckCircle,
+        },
+        {
+          label: 'Hospitalisations',
+          value: withHosp,
+          sub: 'H/O prior admission',
+          color: '#8b5cf6',
+          colorKey: 'violet',
+          icon: Hospital,
+        },
+        {
+          label: 'Active Alerts',
+          value: '—',
+          sub: 'Patients needing review',
+          color: '#06b6d4',
+          colorKey: 'cyan',
+          icon: Bell,
+        },
+      ]
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -234,7 +297,7 @@ export default function DashboardPage() {
           style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)' }} />
 
         <div className="relative flex items-start justify-between flex-wrap gap-4">
-          {/* Left — greeting */}
+          {/* Left — generic institutional greeting */}
           <div>
             <div className="flex items-center gap-2 mb-1">
               <GreetIcon className="w-5 h-5" style={{ color: '#fcd34d' }} />
@@ -244,18 +307,24 @@ export default function DashboardPage() {
             </div>
             <h1 className="text-4xl font-semibold text-white mb-2 leading-tight" style={{ fontFamily: 'Playfair Display, serif' }}>
               {greeting.text}, <br />
-              <span className="text-white block font-extrabold" style={{ fontSize: '2.5rem', letterSpacing: '-0.02em', textShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                Dr. A. Jayachandra
+              <span className="text-white block font-extrabold" style={{ fontSize: '2.3rem', letterSpacing: '-0.02em', textShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                CardioKonnect Registry Suite
               </span>
             </h1>
-            <p className="text-base" style={{ color: 'rgba(148,163,184,0.7)' }}>{greeting.sub}</p>
-            {/* Roles */}
-            <div className="flex gap-2 mt-3 flex-wrap">
-              {['RegistryOwner', 'Cardiologist', 'AICTS Pune'].map(role => (
-                <span key={role} className="badge badge-blue text-[10px]">
-                  <Shield className="w-2.5 h-2.5" /> {role}
-                </span>
-              ))}
+            <p className="text-base" style={{ color: 'rgba(148,163,184,0.7)' }}>
+              Multi-Center Cardiovascular Clinical & Interventional Registry Network
+            </p>
+            {/* Active User Badges */}
+            <div className="flex gap-2 mt-3 flex-wrap items-center">
+              <span className="badge badge-blue text-[11px] font-semibold">
+                <Shield className="w-3 h-3" /> Logged in: {currentUser?.name || 'Dr. A. Jayachandra'}
+              </span>
+              <span className="badge badge-violet text-[10px]">
+                {currentUser?.role || 'RegistryOwner'}
+              </span>
+              <span className="badge badge-gray text-[10px]">
+                {activeSiteName}
+              </span>
             </div>
           </div>
 
@@ -288,8 +357,9 @@ export default function DashboardPage() {
             <div>
               <p className="text-xs font-semibold mb-0.5" style={{ color: 'rgba(148,163,184,0.5)' }}>Today&apos;s Note</p>
               <p className="text-sm" style={{ color: 'rgba(148,163,184,0.75)' }}>
-                Hope you&apos;re having a fantastic day! You have {total} patients in the registry.
-                {nyha34 > 0 && ` ${nyha34} patients are in NYHA Class III/IV — consider reviewing their management.`}
+                {isCathLabPI
+                  ? `Welcome, Dr. Rajeev Chauhan! You have ${total} patients registered in the Cath Lab & Interventional Registry at Kanpur Cardiac Apex Hospital.`
+                  : `Hope you're having a fantastic day! You have ${total} patients in the registry.${nyha34 > 0 ? ` ${nyha34} patients are in NYHA Class III/IV — consider reviewing their management.` : ''}`}
               </p>
             </div>
           </div>
@@ -360,10 +430,10 @@ export default function DashboardPage() {
                 <thead>
                   <tr>
                     <th>Patient</th>
-                    <th>HF Type</th>
-                    <th>NYHA</th>
-                    <th>LVEF</th>
-                    <th>Last Visit</th>
+                    <th>{isCathLabPI ? 'Hospital Site' : 'HF Type'}</th>
+                    <th>{isCathLabPI ? 'Registry' : 'NYHA'}</th>
+                    <th>{isCathLabPI ? 'Key Comorbidities' : 'LVEF'}</th>
+                    <th>{isCathLabPI ? 'Enrolled Status' : 'Last Visit'}</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -386,28 +456,53 @@ export default function DashboardPage() {
                           </div>
                         </Link>
                       </td>
-                      <td>
-                        {latest?.hfType
-                          ? <span className={`badge ${latest.hfType === 'HFrEF' ? 'badge-red' : latest.hfType === 'HFpEF' ? 'badge-blue' : 'badge-amber'}`}>{latest.hfType}</span>
-                          : <span className="text-gray-500">—</span>}
-                      </td>
-                      <td>
-                        {latest?.nyha
-                          ? <span className={`badge ${latest.nyha === 'III' || latest.nyha === 'IV' ? 'badge-red' : 'badge-gray'}`}>Class {latest.nyha}</span>
-                          : <span className="text-gray-500">—</span>}
-                      </td>
-                      <td>
-                        {latest?.lvef != null
-                          ? <span className="font-bold text-sm" style={{ color: latest.lvef < 40 ? '#f43f5e' : latest.lvef < 50 ? '#f59e0b' : '#10b981' }}>
-                              {latest.lvef}%
+                      {isCathLabPI ? (
+                        <>
+                          <td>
+                            <span className="text-xs text-gray-300 font-medium">
+                              {p.siteId === 'KANPUR_APEX' ? 'Apex Hospital Kanpur' : (p.hospitalName || 'Kanpur Apex')}
                             </span>
-                          : <span className="text-gray-500">—</span>}
-                      </td>
-                      <td>
-                        <span className="text-xs font-medium text-gray-300">
-                          {latest ? formatDate(latest.visitDate) : 'No visits'}
-                        </span>
-                      </td>
+                          </td>
+                          <td>
+                            <span className="badge badge-amber text-[10px]">Cath Lab</span>
+                          </td>
+                          <td>
+                            <span className="text-xs text-gray-400">
+                              {p.comorbidities && p.comorbidities.length > 0 ? p.comorbidities.slice(0, 2).join(', ') : 'CAD / PCI'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge-green text-[10px]">
+                              {p.status || 'Active'}
+                            </span>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td>
+                            {latest?.hfType
+                              ? <span className={`badge ${latest.hfType === 'HFrEF' ? 'badge-red' : latest.hfType === 'HFpEF' ? 'badge-blue' : 'badge-amber'}`}>{latest.hfType}</span>
+                              : <span className="text-gray-500">—</span>}
+                          </td>
+                          <td>
+                            {latest?.nyha
+                              ? <span className={`badge ${latest.nyha === 'III' || latest.nyha === 'IV' ? 'badge-red' : 'badge-gray'}`}>Class {latest.nyha}</span>
+                              : <span className="text-gray-500">—</span>}
+                          </td>
+                          <td>
+                            {latest?.lvef != null
+                              ? <span className="font-bold text-sm" style={{ color: latest.lvef < 40 ? '#f43f5e' : latest.lvef < 50 ? '#f59e0b' : '#10b981' }}>
+                                  {latest.lvef}%
+                                </span>
+                              : <span className="text-gray-500">—</span>}
+                          </td>
+                          <td>
+                            <span className="text-xs font-medium text-gray-300">
+                              {latest ? formatDate(latest.visitDate) : 'No visits'}
+                            </span>
+                          </td>
+                        </>
+                      )}
                       <td>
                         <Link href={`/patients/${p.id}`}>
                           <button className="btn-ghost btn-sm">

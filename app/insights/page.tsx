@@ -4,7 +4,7 @@ import { Brain, Zap, Users, ShieldAlert, Heart, TrendingUp, AlertTriangle,
          CheckCircle2, XCircle, Clock, BarChart2, Pill, Activity,
          ChevronRight, RefreshCw, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getPatients, getVisits } from '@/lib/firestore'
+import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import {
   summarisePopulationML, evaluateGDMT, generateClinicalAlerts,
@@ -27,10 +27,21 @@ export default function InsightsPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const patients = await getPatients()
+      const [patients, allVisits] = await Promise.all([
+        getPatients(),
+        getAllVisits(),
+      ])
+
+      const visitsByPatientMap = new Map<string, Visit[]>()
+      allVisits.forEach(v => {
+        const list = visitsByPatientMap.get(v.patientId) || []
+        list.push(v)
+        visitsByPatientMap.set(v.patientId, list)
+      })
+
       const result: PatientWithVisits[] = []
       for (const patient of patients) {
-        const visits = await getVisits(patient.id)
+        const visits = visitsByPatientMap.get(patient.id) || []
         if (visits.length === 0) continue
         const latestVisit = [...visits].sort((a, b) =>
           new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime()

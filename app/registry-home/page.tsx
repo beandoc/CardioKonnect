@@ -4,7 +4,7 @@ import { Users, TrendingUp, CheckCircle, ArrowRight, Clock, Activity } from 'luc
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
-import type { CathProcedure } from '@/lib/types'
+import type { CathProcedure, Patient } from '@/lib/types'
 
 
 
@@ -20,9 +20,11 @@ interface RegistryCard {
   lastEntryDaysAgo: number
   completion: number
   status: 'Active' | 'Enrolling' | 'Suspended'
+  registryOwner?: string   // Principal Investigator / Registry Owner
   categories: { name: string; pct: number }[]
   quickStats: { label: string; value: string; tooltip?: string }[]
 }
+
 
 const REGISTRIES: RegistryCard[] = [
   {
@@ -37,6 +39,7 @@ const REGISTRIES: RegistryCard[] = [
     lastEntryDaysAgo: 0,
     completion: 0,
     status: 'Active',
+    registryOwner: 'Dr. A. Jayachandra',
     categories: [
       { name: 'Demographics', pct: 0 },
       { name: 'Vitals & Exam', pct: 0 },
@@ -63,6 +66,7 @@ const REGISTRIES: RegistryCard[] = [
     lastEntryDaysAgo: 0,
     completion: 0,
     status: 'Suspended',  // Mark as suspended until real data integration
+    registryOwner: 'Dr. A. Jayachandra',
     categories: [
       { name: 'Demographics', pct: 0 },
       { name: 'Vitals & Exam', pct: 0 },
@@ -141,6 +145,7 @@ const REGISTRIES: RegistryCard[] = [
     lastEntryDaysAgo: 0,
     completion: 0,
     status: 'Suspended',
+    registryOwner: 'Dr. Rajeev Chauhan',
     categories: [
       { name: 'Indication & Urgency', pct: 0 },
       { name: 'Vascular Access', pct: 0 },
@@ -167,6 +172,7 @@ const REGISTRIES: RegistryCard[] = [
     lastEntryDaysAgo: 0,
     completion: 0,
     status: 'Suspended',
+    registryOwner: 'Dr. A. Jayachandra',
     categories: [
       { name: 'Demographics', pct: 0 },
       { name: 'Risk Factors', pct: 0 },
@@ -246,16 +252,20 @@ export default function RegistryHomePage() {
         startOfMonth.setDate(1)
         startOfMonth.setHours(0, 0, 0, 0)
         
-        const getPatientsForRegistry = (id: string) => {
-          if (id === 'hf') {
-            return allPatients.filter(p => p.registryId === 'hf' || p.hfType === 'HFrEF' || p.hfType === 'HFmrEF' || p.hfType === 'HFpEF' || p.studyConsented)
-          }
-          if (id === 'cathlab') {
-            const ptIds = new Set(allProcedures.map(p => p.patientId))
-            return allPatients.filter(p => ptIds.has(p.id) || p.registryId === 'cathlab')
-          }
-          return allPatients.filter(p => p.registryId === id)
-        }
+        /**
+         * Strict explicit-enrollment filter.
+         * A patient is a member of a registry ONLY if they were explicitly enrolled:
+         *   - registryIds[].includes(id)   (new multi-enrollment model)
+         *   - registryId === id            (legacy single-registry field)
+         *
+         * Clinical field inference has been intentionally removed to prevent
+         * cross-registry contamination (e.g., cath-lab patients with comorbidCAD
+         * showing up in ACS counts, or studyConsented patients leaking into HF).
+         */
+        const getPatientsForRegistry = (id: string): Patient[] =>
+          allPatients.filter(p =>
+            p.registryIds?.includes(id) || p.registryId === id
+          )
 
         const hfPatients = getPatientsForRegistry('hf')
         const hfPatientIds = new Set(hfPatients.map(p => p.id))
@@ -454,9 +464,11 @@ export default function RegistryHomePage() {
               }
             }
 
+            const cathPatientCount = uniqueCathPatientIds.size
             return {
               ...r,
-              patients: uniqueCathPatientIds.size,
+              patients: cathPatientCount,
+              status: cathPatientCount > 0 ? 'Active' : 'Suspended',
               newThisMonth: allProcedures.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length,
               lastEntryDaysAgo: cathLastDaysAgo,
               categories: updatedCategories,
@@ -487,7 +499,8 @@ export default function RegistryHomePage() {
 
             const acsPatientIds = new Set(acsProcedures.map(p => p.patientId))
             allPatients.forEach(p => {
-              if (p.registryId === 'acs' || p.comorbidPriorMI || p.comorbidCAD) {
+              // Strict: only explicit ACS enrollment, never inferred from comorbidities
+              if (p.registryIds?.includes('acs') || p.registryId === 'acs') {
                 acsPatientIds.add(p.id)
               }
             })
@@ -631,25 +644,38 @@ export default function RegistryHomePage() {
               </div>
 
               {/* Footer row */}
-              <div className="flex items-center justify-between pt-2 border-t border-white/[0.05] card-divider">
-                <div className="flex items-center gap-3 text-[10px] text-gray-400">
-                  <span className="flex items-center gap-1">
-                    <Users size={11} className="text-gray-400" /> {reg.patients.toLocaleString()} pts
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock size={11} className="text-gray-400" /> {lastEntryLabel(reg.lastEntryDaysAgo)}
-                  </span>
-                  <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-                    <TrendingUp size={11} /> +{reg.newThisMonth}
-                  </span>
+              <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.05] card-divider">
+                {/* PI badge — shown only when registryOwner is set */}
+                {reg.registryOwner && (
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full border font-semibold"
+                      style={{ background: `${reg.ringColor}18`, color: reg.ringColor, borderColor: `${reg.ringColor}40` }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      PI
+                    </span>
+                    <span className="text-gray-300 truncate font-medium">{reg.registryOwner}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                    <span className="flex items-center gap-1">
+                      <Users size={11} className="text-gray-400" /> {reg.patients.toLocaleString()} pts
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock size={11} className="text-gray-400" /> {lastEntryLabel(reg.lastEntryDaysAgo)}
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                      <TrendingUp size={11} /> +{reg.newThisMonth}
+                    </span>
+                  </div>
+                  <Link
+                    href={`/registry-home/${reg.id}`}
+                    className="flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                    style={{ background: `${reg.ringColor}20`, color: reg.ringColor, border: `1px solid ${reg.ringColor}40` }}
+                  >
+                    Analytics <ArrowRight size={11} />
+                  </Link>
                 </div>
-                <Link
-                  href={`/registry-home/${reg.id}`}
-                  className="flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm"
-                  style={{ background: `${reg.ringColor}20`, color: reg.ringColor, border: `1px solid ${reg.ringColor}40` }}
-                >
-                  Analytics <ArrowRight size={11} />
-                </Link>
               </div>
             </div>
           </div>

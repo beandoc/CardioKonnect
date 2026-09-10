@@ -90,19 +90,19 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       {/* ── Logo / Branding ── */}
       <div className="px-5 pt-6 pb-5">
         <div className="flex items-center justify-between gap-2 mb-1">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 animate-gradient"
+          <Link href="/registry-home" className="flex items-center gap-3 flex-1 min-w-0 group">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 animate-gradient shadow-md shadow-blue-500/20"
               style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
               <Heart className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-white truncate">Dr. A. Jayachandra</p>
-              <p className="text-[10px] truncate" style={{ color: 'rgba(148,163,184,0.6)' }}>AICTS, Pune</p>
+              <p className="text-sm font-bold text-white tracking-tight truncate group-hover:text-blue-300 transition-colors">CardioKonnect</p>
+              <p className="text-[10px] font-medium truncate text-blue-300/70">Clinical Registries</p>
             </div>
             <div className="flex-shrink-0">
               <div className="pulse-dot" />
             </div>
-          </div>
+          </Link>
           {onClose && (
             <button 
               onClick={onClose} 

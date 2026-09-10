@@ -11,7 +11,7 @@
  */
 
 import type { Patient, Visit } from './types'
-import { calculateMAGGIC } from './riskScores'
+import { calculateMAGGIC, calculateCHADSVASc, calculateHASBLED as calcHASBLEDCanonical } from './riskScores'
 import rfModel from '../scratch/heart_failure_rf.json'
 
 
@@ -102,8 +102,10 @@ export interface ExploratoryRiskSummary {
 export type MLRiskProfile = ExploratoryRiskSummary
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // CHA₂DS₂-VASc Score (AF patients only)
 // Reference: ESC 2023 AF Guidelines, Lip GY et al. Chest. 2010
+// Single source of truth delegated to lib/riskScores.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function calculateCHA2DS2VASc(
@@ -113,63 +115,35 @@ export function calculateCHA2DS2VASc(
   const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000))
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
 
-  let score = 0
-
-  // C — Congestive HF or LVEF < 40%  (1 pt)
-  if (visit.hfType === 'HFrEF' || visit.hfType === 'HFmrEF') score += 1
-
-  // H — Hypertension  (1 pt)
-  if (comorbStr.includes('htn') || comorbStr.includes('hypertension') ||
-      (visit.bpSystolic && visit.bpSystolic > 140)) score += 1
-
-  // A2 — Age ≥ 75  (2 pts)
-  if (age >= 75) score += 2
-  // A — Age 65–74  (1 pt)
-  else if (age >= 65) score += 1
-
-  // D — Diabetes  (1 pt)
-  if (comorbStr.includes('dm') || comorbStr.includes('diabetes')) score += 1
-
-  // S2 — Prior stroke/TIA/thromboembolism  (2 pts)
-  if (comorbStr.includes('stroke') || comorbStr.includes('tia')) score += 2
-
-  // V — Vascular disease (CAD, PAD, prior MI)  (1 pt)
-  if (comorbStr.includes('cad') || comorbStr.includes('pad') ||
-      comorbStr.includes('mi') || comorbStr.includes('cabg') ||
-      comorbStr.includes('pci')) score += 1
-
-  // S — Sex female  (1 pt — not counted if only risk factor)
-  const isFemale = patient.sex === 'Female'
-  if (isFemale) score += 1
-
-  // Published annual stroke risk table (Lip 2010, Table 3)
-  const strokeRiskTable: Record<number, number> = {
-    0: 0.0, 1: 1.3, 2: 2.2, 3: 3.2, 4: 4.0, 5: 6.7, 6: 9.8, 7: 9.6, 8: 12.5, 9: 15.2
-  }
-  const clampedScore = Math.min(score, 9)
-  const strokeRiskPctPerYear = strokeRiskTable[clampedScore] ?? 15.2
-
-  // Adjusted: females score of 1 = same as male 0 (ESC 2023 clarification)
-  const effectiveScore = isFemale ? Math.max(0, score - 1) : score
+  const result = calculateCHADSVASc({
+    congestiveHF: visit.hfType === 'HFrEF' || visit.hfType === 'HFmrEF',
+    hypertension: comorbStr.includes('htn') || comorbStr.includes('hypertension') || Boolean(visit.bpSystolic && visit.bpSystolic > 140),
+    age,
+    diabetes: comorbStr.includes('dm') || comorbStr.includes('diabetes'),
+    strokeHistory: comorbStr.includes('stroke') || comorbStr.includes('tia'),
+    vascularDisease: comorbStr.includes('cad') || comorbStr.includes('pad') || comorbStr.includes('mi') || comorbStr.includes('cabg') || comorbStr.includes('pci'),
+    sex: patient.sex === 'Female' ? 'Female' : 'Male'
+  })
 
   const recommendation: CHA2DS2VASCResult['recommendation'] =
-    effectiveScore >= 2 ? 'Anticoagulate' :
-    effectiveScore === 1 ? 'Consider anticoagulation' :
+    result.effectiveScore >= 2 ? 'Anticoagulate' :
+    result.effectiveScore === 1 ? 'Consider anticoagulation' :
     'No anticoagulation needed'
 
   const detail =
-    effectiveScore >= 2
-      ? `Score ${score} (net ${effectiveScore}) — Oral anticoagulation recommended (Class I-A, ESC 2023). Prefer NOAC over VKA.`
-      : effectiveScore === 1
-      ? `Score ${score} (net ${effectiveScore}) — Consider OAC, weigh stroke vs bleeding risk (Class IIa-B).`
-      : `Score ${score} (net ${effectiveScore}) — OAC not recommended (Class III-B). No net clinical benefit.`
+    result.effectiveScore >= 2
+      ? `Score ${result.score} (net ${result.effectiveScore}) — Oral anticoagulation recommended (Class I-A, ESC 2023). Prefer NOAC over VKA.`
+      : result.effectiveScore === 1
+      ? `Score ${result.score} (net ${result.effectiveScore}) — Consider OAC, weigh stroke vs bleeding risk (Class IIa-B).`
+      : `Score ${result.score} (net ${result.effectiveScore}) — OAC not recommended (Class III-B). No net clinical benefit.`
 
-  return { score, strokeRiskPctPerYear, recommendation, detail }
+  return { score: result.score, strokeRiskPctPerYear: result.strokeRiskPctPerYear, recommendation, detail }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HAS-BLED Bleeding Risk Score
 // Reference: Pisters R et al. Chest. 2010;138(5):1093-100
+// Single source of truth delegated to lib/riskScores.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function calculateHASBLED(
@@ -179,67 +153,55 @@ export function calculateHASBLED(
   const age = Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 86400000))
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
 
-  let score = 0
-  const modifiableFactors: string[] = []
-
-  // H — Hypertension (uncontrolled SBP > 160)  (1 pt)
-  if (visit.bpSystolic && visit.bpSystolic > 160) {
-    score += 1
-    modifiableFactors.push('Uncontrolled hypertension (SBP > 160 mmHg) — treat to target')
-  }
-
-  // A — Abnormal renal or liver function  (1 pt each, max 2)
   const hasRenalImpairment = visit.egfr ? visit.egfr < 30 :
     visit.creatinine ? visit.creatinine > 2.26 : false
-  const hasLiverDisease = comorbStr.includes('liver') || comorbStr.includes('cirrhosis') ||
-    comorbStr.includes('hepatic')
+  const hasLiverDisease = comorbStr.includes('liver') || comorbStr.includes('cirrhosis') || comorbStr.includes('hepatic')
+  const hasStroke = comorbStr.includes('stroke') || comorbStr.includes('tia')
+  const hasBleed = comorbStr.includes('bleed') || comorbStr.includes('gi bleed') || comorbStr.includes('haemorrhage') || comorbStr.includes('anaemia')
+  const hasDrugs = comorbStr.includes('aspirin') || comorbStr.includes('nsaid')
+  const hasAlcohol = comorbStr.includes('alcohol') || comorbStr.includes('etoh')
+
+  const result = calcHASBLEDCanonical({
+    hypertension: Boolean(visit.bpSystolic && visit.bpSystolic > 160),
+    abnormalRenal: hasRenalImpairment,
+    abnormalLiver: hasLiverDisease,
+    strokeHistory: hasStroke,
+    bleedingHistory: hasBleed,
+    labileINR: false,
+    age,
+    drugs: hasDrugs,
+    alcohol: hasAlcohol,
+  })
+
+  const modifiableFactors: string[] = []
+  if (visit.bpSystolic && visit.bpSystolic > 160) {
+    modifiableFactors.push('Uncontrolled hypertension (SBP > 160 mmHg) — treat to target')
+  }
   if (hasRenalImpairment) {
-    score += 1
     modifiableFactors.push('Renal impairment (eGFR < 30) — monitor anticoagulant dose')
   }
-  if (hasLiverDisease) score += 1
-
-  // S — Stroke history  (1 pt)
-  if (comorbStr.includes('stroke') || comorbStr.includes('tia')) score += 1
-
-  // B — Bleeding history or predisposition  (1 pt)
-  if (comorbStr.includes('bleed') || comorbStr.includes('gi bleed') ||
-      comorbStr.includes('haemorrhage') || comorbStr.includes('anaemia')) {
-    score += 1
-  }
-
-  // L — Labile INR (not captured — assign 0 unless VKA noted)
-  // (In future: check VKI field + INR data)
-
-  // E — Elderly (age > 65)  (1 pt)
-  if (age > 65) score += 1
-
-  // D — Drugs (antiplatelets/NSAIDs) or alcohol  (1 pt each)
-  if (comorbStr.includes('alcohol') || comorbStr.includes('etoh')) {
-    score += 1
+  if (hasAlcohol) {
     modifiableFactors.push('Alcohol use — counsel on alcohol cessation')
   }
 
-  const clampedScore = Math.min(score, 9)
-
-  // Published annual major bleed rates (Pisters 2010, Table 4)
-  const bleedTable: Record<number, number> = {
-    0: 1.13, 1: 1.02, 2: 1.88, 3: 3.74, 4: 8.70, 5: 12.50
-  }
-  const bleedingRiskPctPerYear = bleedTable[Math.min(clampedScore, 5)] ?? 12.5
+  const detail =
+    result.riskCategory === 'High'
+      ? `HAS-BLED ${result.score} — High bleed risk. Do NOT withhold anticoagulation, but address modifiable factors. More frequent review.`
+      : result.score >= 2
+      ? `HAS-BLED ${result.score} — Moderate risk. Anticoagulate if CHA₂DS₂-VASc ≥ 2. Monitor closely.`
+      : `HAS-BLED ${result.score} — Low bleed risk. Anticoagulation is safe if clinically indicated.`
 
   const riskCategory: HASBLEDResult['riskCategory'] =
-    clampedScore <= 1 ? 'Low' :
-    clampedScore <= 2 ? 'Moderate' : 'High'
+    result.score >= 3 ? 'High' :
+    result.score >= 2 ? 'Moderate' : 'Low'
 
-  const detail =
-    riskCategory === 'High'
-      ? `HAS-BLED ${score} — High bleed risk. Do NOT withhold anticoagulation, but address modifiable factors. More frequent review.`
-      : riskCategory === 'Moderate'
-      ? `HAS-BLED ${score} — Moderate risk. Anticoagulate if CHA₂DS₂-VASc ≥ 2. Monitor closely.`
-      : `HAS-BLED ${score} — Low bleed risk. Anticoagulation is safe if clinically indicated.`
-
-  return { score: clampedScore, bleedingRiskPctPerYear, riskCategory, modifiableFactors, detail }
+  return {
+    score: result.score,
+    bleedingRiskPctPerYear: result.bleedingRiskPctPerYear,
+    riskCategory,
+    modifiableFactors,
+    detail
+  }
 }
 
 // Helper to compute dose achievement percentage
@@ -1022,7 +984,8 @@ export function scoreDataCompleteness(visit: Visit): CompletenessReport {
     let filled = 0
     for (const f of domain.fields) {
       const val = getValue(visit as any, f.key)
-      if (val === undefined || val === null || val === '' || val === false) {
+      // Note: boolean false is valid documentation (e.g. oedema: false); only null/undefined/empty string is missing
+      if (val === undefined || val === null || val === '') {
         missing.push(f.label)
       } else {
         filled++

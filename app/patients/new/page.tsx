@@ -8,12 +8,19 @@ import PatientForm from '@/components/forms/PatientForm'
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card'
 import { toast } from 'sonner'
 import { Activity } from 'lucide-react'
+import { useAppUser } from '@/context/AppUserContext'
+import { SITES } from '@/lib/appConfig'
 
 function NewPatientFormContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const registryId = searchParams.get('registry') || ''
+  const { currentUser } = useAppUser()
+  const registryParam = searchParams.get('registry') || ''
   const [loading, setLoading] = useState(false)
+
+  const effectiveRegistry = registryParam || (currentUser?.registryAccess?.length === 1 ? currentUser.registryAccess[0] : '')
+  const effectiveSiteId = currentUser?.siteId || (effectiveRegistry === 'cathlab' ? 'KANPUR_APEX' : 'AICTS_PUNE')
+  const effectiveHospital = (currentUser?.siteId && SITES[currentUser.siteId]?.name) || (effectiveSiteId === 'KANPUR_APEX' ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune')
 
   const handleSubmit = async (data: PatientInput) => {
     setLoading(true)
@@ -27,7 +34,16 @@ function NewPatientFormContent() {
     }, 5000)
 
     try {
-      const id = await addPatient({ ...data, mrn: data.mrn || generateMRN() })
+      const siteId = data.siteId || effectiveSiteId
+      const targetReg = data.registryId || effectiveRegistry
+      const mrn = data.mrn?.trim() || generateMRN(siteId, targetReg)
+
+      const id = await addPatient({
+        ...data,
+        mrn,
+        siteId,
+        hospitalName: data.hospitalName || effectiveHospital,
+      })
       clearTimeout(timeoutId)
       toast.success('Patient added successfully', { id: toastId })
       router.push(`/patients/${id}`)
@@ -41,7 +57,18 @@ function NewPatientFormContent() {
   }
 
   return (
-    <PatientForm defaultValues={{ registryId }} onSubmit={handleSubmit} loading={loading} submitLabel="Register Patient" />
+    <PatientForm
+      defaultValues={{
+        registryId: effectiveRegistry,
+        siteId: effectiveSiteId,
+        hospitalName: effectiveHospital,
+        addressState: effectiveSiteId === 'KANPUR_APEX' ? 'Uttar Pradesh' : 'Maharashtra',
+        addressDistrict: effectiveSiteId === 'KANPUR_APEX' ? 'Kanpur Nagar' : 'Pune',
+      }}
+      onSubmit={handleSubmit}
+      loading={loading}
+      submitLabel="Register Patient"
+    />
   )
 }
 

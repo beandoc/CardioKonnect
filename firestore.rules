@@ -1,10 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Open access — no Firebase Auth is configured for this deployment.
-    // Restrict this once authentication is added.
+    // Top-level patients and subcollections
+    match /patients/{patientId} {
+      allow read, write: if true;
+
+      match /visits/{visitId} {
+        allow read, write: if true;
+      }
+
+      match /procedures/{procedureId} {
+        allow read, write: if true;
+      }
+
+      match /outcomes/{outcomeId} {
+        allow read, write: if true;
+      }
+
+      match /events/{eventId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Collection group query access for national/multi-center reporting
+    match /{path=**}/procedures/{procedureId} {
+      allow read, write: if true;
+    }
+
+    match /{path=**}/visits/{visitId} {
+      allow read, write: if true;
+    }
+
+    // Default fallback
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+

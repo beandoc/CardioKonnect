@@ -97,6 +97,11 @@ export function initials(firstName: string, lastName: string): string {
   return ((firstName?.[0] ?? '') + (lastName?.[0] ?? '')).toUpperCase()
 }
 
-export function generateMRN(): string {
-  return 'CP-' + String(Date.now()).slice(-6)
+export function generateMRN(siteId?: string, registryId?: string): string {
+  const year = new Date().getFullYear()
+  const rand = String(Math.floor(1000 + Math.random() * 9000))
+  if (siteId === 'KANPUR_APEX' || registryId === 'cathlab') {
+    return `7AFH-${year}-${rand}`
+  }
+  return `AICTS-${year}-${rand}`
 }

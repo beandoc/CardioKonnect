@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Calendar, Search, PlusCircle, CheckCircle, Clock, Check, RefreshCw, ShieldAlert } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
+import { useAppUser } from '@/context/AppUserContext'
 
 interface Appointment {
   id: string
@@ -31,6 +32,7 @@ interface Consent {
 const INITIAL_CONSENTS: Consent[] = []
 
 function AppointmentsAndConsentsContent() {
+  const { currentUser } = useAppUser()
   const searchParams = useSearchParams()
   const router = useRouter()
   const initialTab = searchParams.get('tab') === 'consents' ? 'consents' : 'appointments'
@@ -118,7 +120,7 @@ function AppointmentsAndConsentsContent() {
               <div>
                 <h2 className="text-xl font-bold text-white leading-tight">Appointment Management</h2>
                 <p className="text-xs text-gray-500 mt-1">Manage your patients and appointments efficiently</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">Welcome, Dr. A. Jayachandra</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">Welcome, {currentUser?.name || 'Doctor'}</p>
               </div>
             </div>
             <Button><PlusCircle className="w-4 h-4" /> Schedule Appointment</Button>

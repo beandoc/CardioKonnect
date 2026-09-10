@@ -68,6 +68,23 @@ export interface MedEntry {
   certainty?: DataCertainty
 }
 
+// ─── Registry Enrollment (multi-registry, multi-site) ───────────────────────
+/**
+ * Records the explicit act of enrolling a patient into a specific registry.
+ * A patient may be enrolled in multiple registries simultaneously (e.g., HF + CathLab).
+ * This is the authoritative membership record — clinical field inference is NOT used.
+ */
+export interface RegistryEnrollment {
+  enrolledAt: string          // ISO timestamp of enrollment
+  enrolledBy: string          // userId / operatorId who enrolled
+  siteId: string              // Hospital / site ID (e.g., 'AICTS_PUNE')
+  piId?: string               // Principal Investigator user ID
+  piName?: string             // Display name of PI
+  status: 'Active' | 'Withdrawn' | 'Lost to Follow-Up'
+  withdrawnAt?: string        // ISO timestamp, if withdrawn
+  withdrawalReason?: string
+}
+
 // ─── Patient (demographics & cohort definition) ──────────────────────────────
 export interface Patient {
   id: string
@@ -78,7 +95,7 @@ export interface Patient {
   firstName: string
   lastName: string
   dob: string          // ISO date: YYYY-MM-DD
-  sex: 'Male' | 'Female'
+  sex: 'Male' | 'Female' | 'Other' | 'Unknown'
   mrn?: string         // Medical record number / Hospital ID (Column D)
   srNo?: number        // Registry Serial Number (Column A)
   contact?: string
@@ -94,6 +111,9 @@ export interface Patient {
   hfType?: 'HFrEF' | 'HFmrEF' | 'HFpEF' | 'HFimpEF' | string
   nyha?: string
   lvef?: number
+  latestSyntaxScore?: number
+  coronaryVesselsDiseased?: number
+  hasCoronaryAngiogram?: boolean
   
   // Meta
   createdAt: string    // ISO timestamp
@@ -101,8 +121,14 @@ export interface Patient {
   visitCount?: number
   lastVisitDate?: string
 
-  // HF Registry demographics & Indian Hierarchy
+  // Registry Membership — explicit enrollment model
+  // registryId (singular) is kept for backward-compatibility with existing Firestore documents.
+  // New patients should use registryIds[] + registryEnrollments{} instead.
   registryId?: string
+  registryIds?: string[]                                   // ['cathlab', 'hf'] — Firestore array-contains queryable
+  registryEnrollments?: Record<string, RegistryEnrollment> // keyed by registryId
+  siteId?: string                                          // Primary hospital site (e.g. 'AICTS_PUNE' | 'KANPUR_APEX')
+  hospitalName?: string
   indianCitizen?: boolean
   ethnicity?: 'Indian' | string
   studyConsented?: boolean
@@ -763,6 +789,23 @@ export interface Visit {
   hasbledScore?: number
   shfmOneYearSurvival?: number
 
+  // Interventional / Cath Lab Risk Scores (stored from /risk or procedure)
+  mehranScore?: number
+  mehranAkiRisk?: number
+  mehranDialysisRisk?: number
+  suggestedContrastCap?: number
+  contrastVolumeMl?: number
+  exploratoryPostPciScore?: number
+  killipClass?: 'I' | 'II' | 'III' | 'IV'
+  postPciTimiFlow?: '0' | '1' | '2' | '3'
+  culpritVessel?: 'LAD' | 'LCX' | 'RCA' | 'LM' | 'Graft'
+  stentLengthMm?: number
+  graceScore?: number
+  crusadeScore?: number
+  arcHbrScore?: boolean
+  preciseDaptScore?: number
+  acefScore?: number
+
   // Quality of Life - EQ-5D-5L
   symptomTrajectory?: 'Improving' | 'Stable' | 'Worsening' | ''
   eq5d?: {
@@ -868,11 +911,16 @@ export type EventType =
   | 'Worsening HF (outpatient)'
   | 'Ventricular arrhythmia'
   | 'AF new-onset'
+  | 'Target lesion revascularisation'
+  | 'Target vessel revascularisation'
+  | 'Stent thrombosis (ARC definite/probable)'
+  | 'Unplanned revascularisation'
   | 'Other CV event'
 
 export interface OutcomeEvent {
   id: string
   patientId: string
+  linkedProcedureId?: string // Link back to index CathProcedure
   encounterType?: 'Inpatient Index' | 'Readmission' | 'Emergency Visit' | 'Out-of-Hospital Event'
   eventDate: string
   admissionDate?: string
@@ -937,6 +985,8 @@ export interface PopulationStats {
   medPrescribingRates: Record<string, number>
   deviceCounts: Record<string, number>
   lvefBins: Record<string, number>
+  crtCandidatesCount?: number
+  ironDeficiencyCount?: number
 }
 
 export interface TrendPoint {
@@ -1249,155 +1299,28 @@ export const CORONARY_SEGMENTS: { id: CoronarySegmentId; vessel: CoronaryVessel;
   { id: 18, vessel: 'LIMA',  label: '18. Arterial Graft (LIMA/RIMA)' },
 ]
 
-export interface CathDevice {
-  id?: string
-  deviceType: 'DES' | 'BMS' | 'DCB' | 'BVS' | 'NC Balloon' | 'Semi-Compliant Balloon' | 'Cutting / Scoring Balloon' | 'IVL Lithotripsy' | 'Aspiration Catheter' | 'Rotablation Burr' | 'Other'
-  brandName: string
-  diameterMm: number
-  lengthMm: number
-  maxPressureAtm?: number
-  serialOrBatchNumber?: string // DCGI compliance / Indian device registry tracking
-  deploymentOutcome?: 'Successfully Deployed' | 'Device Delivery Failure' | 'Stent Embolization'
-}
+// ── Re-export dedicated interventional types ─────────────────────────────────
+import type { DeviceRecord, LesionRecord } from './interventionalTypes'
+export * from './interventionalTypes'
 
-export interface CathLesion {
-  id: string
-  vessel: CoronaryVessel
-  segmentNumber?: CoronarySegmentId
-  segmentName?: string
-  isCulprit: boolean
-  ahaAccClass?: 'Type A' | 'Type B1' | 'Type B2' | 'Type C'
-  preStenosisPct: number
-  preTimiFlow: TimiFlow
-  calcification: 'None' | 'Mild' | 'Moderate' | 'Severe'
-  calciumArcDegrees?: '<90°' | '90–180°' | '180–270°' | '>270° (Circumferential)'
-  bifurcation: boolean
-  medinaClass?: string // e.g. "1,1,1"
-  bifurcationTechnique?: 'Provisional' | 'Culotte' | 'DK-Crush' | 'TAP' | 'T-Stenting' | 'Kissing Balloon Only'
-  chronicTotalOcclusion: boolean
-  jCtoScore?: number // 0-5 (blunt stump, calcification, bending >45°, length >=20mm, prior failed)
-  thrombusGrade?: 0 | 1 | 2 | 3 | 4 | 5
-  intravascularImaging?: 'None' | 'IVUS' | 'OCT' | 'NIRS-IVUS'
-  // Imaging Metrics
-  ivusPreMlaMm2?: number
-  ivusPostMlaMm2?: number
-  ivusPlaqueBurdenPct?: number
-  ivusStentExpansionPct?: number
-  ivusEdgeDissection?: boolean
-  ivusMalapposition?: boolean
-  octFibrousCapThicknessUm?: number
-  octLipidArcDegrees?: number
-  octTissueProtrusion?: boolean
-  // Physiology
-  physiology?: 'None' | 'FFR' | 'iFR' | 'RFR' | 'QFR'
-  physiologyPreValue?: number
-  physiologyPostValue?: number
-  // Advanced Interventional Techniques
-  atherectomy?: 'None' | 'Rotational (Rotablator)' | 'Orbital (Diamondback)'
-  atherectomyBurrSizeMm?: number
-  ivlLithotripsy?: boolean
-  ivlPulsesDelivered?: number
-  ivlCycles?: number
-  thrombectomy?: 'None' | 'Manual Aspiration' | 'Mechanical Thrombectomy'
-  // Strategy & Outcomes
-  treatmentStrategy: 'DES' | 'DCB' | 'BMS' | 'POBA Only' | 'Thrombectomy Only' | 'Atherectomy / IVL' | 'Medical Therapy'
-  devices: CathDevice[]
-  postStenosisPct: number
-  postTimiFlow: TimiFlow
-  myocardialBlushGrade?: 0 | 1 | 2 | 3
-  lesionSuccess: boolean // TIMI 3 + residual <20%
-}
-
+// Backward-compatible type aliases
+export type CathDevice = DeviceRecord
+export type CathLesion = LesionRecord
+export type CathComplication = any
 export interface StemiTimelines {
   presentationType: 'Direct Hub Presentation' | 'Spoke Transfer (Pharmaco-invasive)' | 'Spoke Transfer (Primary PCI)'
   symptomOnsetTime?: string
-  fmcTime?: string // First Medical Contact
+  fmcTime?: string
   ecgTime?: string
   cathLabActivationTime?: string
   arterialPunctureTime?: string
-  firstDeviceTime?: string // Wire cross / balloon
-  dtbMinutes?: number // Door-to-Balloon (calc)
+  firstDeviceTime?: string
+  dtbMinutes?: number
   fmcToDeviceMinutes?: number
   spokeTransferTransitMins?: number
   lysisTime?: string
   timi3RestorationTime?: string
 }
-
-export interface CathComplication {
-  hasComplication: boolean
-  // Intra-procedural Coronary Complications
-  coronaryPerforation: boolean
-  coronaryPerforationEllisClass?: 'I' | 'II' | 'III' | 'Cavity-spilling'
-  coronaryDissection: boolean
-  coronaryDissectionNhlbiType?: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
-  noReflowSlowReflow: boolean
-  acuteStentThrombosis: boolean
-  stentThrombosisTiming?: 'Acute (<24h)' | 'Subacute (1-30d)' | 'Late (30d-1yr)' | 'Very Late (>1yr)'
-  stentThrombosisCertainty?: 'Definite' | 'Probable' | 'Possible'
-  abruptClosure: boolean
-  emergencyCabg: boolean
-  periproceduralMi: boolean
-  periproceduralMiType?: 'SCAI Definition' | '4th Universal Definition (Type 4a)' | 'Type 4b (Stent Thrombosis)'
-  mechanicalSupportRequired?: boolean
-  mechanicalSupportType?: 'IABP' | 'Impella' | 'ECMO'
-  inLabCardiacArrest: boolean
-  inLabDeath: boolean
-  // In-Hospital & Bleeding Endpoints
-  accessSiteBleeding: boolean
-  barcBleedingType?: 'Type 1' | 'Type 2' | 'Type 3a' | 'Type 3b' | 'Type 3c' | 'Type 4' | 'Type 5a' | 'Type 5b'
-  timiBleeding?: 'None' | 'Minor' | 'Major'
-  gustoBleeding?: 'None' | 'Mild' | 'Moderate' | 'Severe / Life-Threatening'
-  retroperitonealHematoma: boolean
-  pseudoaneurysm: boolean
-  arteriovenousFistula: boolean
-  radialArteryOcclusion: boolean
-  contrastInducedAki: boolean
-  strokeOrTia: boolean
-  targetVesselRevascularization: boolean
-  targetLesionRevascularization: boolean
-  inHospitalDeath: boolean
-  complicationNotes?: string
-}
-
-export interface CathProcedure {
-  id: string
-  patientId: string
-  siteId?: string // Multi-center identifier
-  siteName?: string
-  operatorId?: string
-  operatorName: string
-  assistantOperatorName?: string
-  procedureDate: string // ISO string
-  procedureType: CathProcedureType
-  clinicalIndication: ClinicalIndication
-  stemiTimelines?: StemiTimelines
-  accessSite: AccessSite
-  sheathSize: '5F' | '6F' | '7F' | '8F'
-  radialCrossover: boolean
-  radialCrossoverReason?: string
-  closureDevice: 'Manual Compression' | 'TR Band' | 'Angio-Seal' | 'Perclose ProGlide' | 'Manta' | 'Pressure Bandage'
-  contrastVolumeMl: number
-  contrastType: 'Iso-osmolar' | 'Low-osmolar'
-  fluoroscopyTimeMinutes: number
-  radiationAirKermaGy?: number
-  doseAreaProductGyCm2?: number
-  lesions: CathLesion[]
-  complications: CathComplication
-  overallSuccess: boolean
-  syntaxScore?: number
-  postProcedureMedications?: {
-    aspirin?: boolean
-    p2y12Inhibitor?: 'Clopidogrel' | 'Ticagrelor' | 'Prasugrel' | 'Cangrelor' | 'None'
-    statin?: boolean
-    anticoagulant?: boolean
-  }
-  dischargeStatus?: 'Discharged Alive' | 'In-Hospital Mortality' | 'Transferred' | 'Active Inpatient'
-  notes?: string
-  createdAt?: string
-  updatedAt?: string
-}
-
-export type CathProcedureInput = Omit<CathProcedure, 'id' | 'createdAt' | 'updatedAt'>
 
 // ── Multi-Centre Governance & Audit Trail ──────────────────────────────────
 export interface CathAuditLog {
