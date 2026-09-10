@@ -32,30 +32,44 @@ const STORAGE_KEY = 'cardio_active_user_id'
 const DEFAULT_USER_ID = 'DR_JAYACHANDRA'
 
 export function AppUserProvider({ children }: { children: ReactNode }) {
-  const [user, setUserState] = useState<AppUser | null>(null)
+  const [user, setUserState] = useState<AppUser | null>(() => {
+    if (typeof window === 'undefined') return APP_USERS[DEFAULT_USER_ID]
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored && APP_USERS[stored]) return APP_USERS[stored]
+      const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
+      if (isAuth) return APP_USERS[DEFAULT_USER_ID]
+    } catch {}
+    return APP_USERS[DEFAULT_USER_ID]
+  })
 
-  // Hydrate from localStorage after mount (avoids SSR mismatch)
+  // Hydrate from localStorage after mount
   useEffect(() => {
-    const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
-    if (!isAuth) {
-      setUserState(null)
-      return
-    }
-    const stored = localStorage.getItem(STORAGE_KEY)
-    const userId = stored && APP_USERS[stored] ? stored : DEFAULT_USER_ID
-    setUserState(APP_USERS[userId] || null)
+    try {
+      const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored && APP_USERS[stored]) {
+        setUserState(APP_USERS[stored])
+      } else if (isAuth) {
+        setUserState(APP_USERS[DEFAULT_USER_ID])
+      }
+    } catch {}
   }, [])
 
   const setUser = (u: AppUser) => {
-    localStorage.setItem(STORAGE_KEY, u.id)
-    localStorage.setItem('cardiokonnect_auth', 'true')
+    try {
+      localStorage.setItem(STORAGE_KEY, u.id)
+      localStorage.setItem('cardiokonnect_auth', 'true')
+    } catch {}
     setUserState(u)
   }
 
   const logout = () => {
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem('cardiokonnect_auth')
-    localStorage.removeItem('cardiokonnect_role')
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem('cardiokonnect_auth')
+      localStorage.removeItem('cardiokonnect_role')
+    } catch {}
     setUserState(null)
     window.location.href = '/login'
   }

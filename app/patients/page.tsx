@@ -88,7 +88,10 @@ function PatientList() {
             <h2 className="text-xl font-bold text-white">Registry Patients</h2>
           </div>
           <p className="text-sm text-gray-400">
-            Showing <span className="text-white font-semibold">{filtered.length}</span> of <span className="text-white font-semibold">{patients.length}</span> patients
+            Showing <span className="text-white font-semibold">{filtered.length}</span> of <span className="text-white font-semibold">{accessiblePatients.length}</span> accessible patients
+            {currentUser?.siteId === 'KANPUR_APEX' && (
+              <span className="text-amber-400 font-medium ml-1.5">· Kanpur Cardiac Apex Hospital</span>
+            )}
           </p>
         </div>
         <Link href="/patients/new" className="w-full sm:w-auto">
@@ -96,19 +99,16 @@ function PatientList() {
         </Link>
       </div>
 
-      {patients.length === 0 ? (
+      {accessiblePatients.length === 0 ? (
         <div className="glass-card p-8 flex flex-col items-center justify-center text-center py-16">
-          <Database className="w-16 h-16 mb-4 text-blue-500/40 animate-pulse" />
-          <h3 className="text-lg font-bold text-white">No Patients in Registry Yet</h3>
+          <Database className="w-16 h-16 mb-4 text-amber-500/40 animate-pulse" />
+          <h3 className="text-lg font-bold text-white">No Patients Found in Your Registry Scope</h3>
           <p className="text-sm text-gray-400 mt-2 max-w-md mx-auto">
-            Upload your HF.xlsx spreadsheet in the Seeder page to import patient records, or add a patient manually.
+            You are viewing the registry for {currentUser?.name || 'Dr. Rajeev Chauhan'} ({currentUser?.siteId === 'KANPUR_APEX' ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune'}).
           </p>
           <div className="flex gap-4 mt-6">
-            <Link href="/seed">
-              <Button className="flex items-center gap-1.5"><Database className="w-4 h-4" /> Import from Excel</Button>
-            </Link>
             <Link href="/patients/new">
-              <Button variant="outline" className="flex items-center gap-1.5"><PlusCircle className="w-4 h-4" /> Add Patient</Button>
+              <Button className="flex items-center gap-1.5"><PlusCircle className="w-4 h-4" /> Add New Registry Patient</Button>
             </Link>
           </div>
         </div>
@@ -120,7 +120,7 @@ function PatientList() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 className="search-input w-full pl-9"
-                placeholder="Search by name or email"
+                placeholder="Search by name, MRN, or facility..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -145,11 +145,11 @@ function PatientList() {
                   <tr>
                     <th className="w-12">#</th>
                     <th>Patient</th>
-                    <th>HF Type</th>
-                    <th>NYHA</th>
-                    <th>LVEF</th>
+                    <th>Registry / Track</th>
+                    <th>Clinical Presentation</th>
+                    <th>LVEF / Echo</th>
                     <th>Status</th>
-                    <th>Last Visit</th>
+                    <th>Last Encounter</th>
                     <th className="text-right">Actions</th>
                   </tr>
                 </thead>
@@ -158,43 +158,71 @@ function PatientList() {
                     <tr>
                       <td colSpan={8} className="py-12 text-center">
                         <UserX className="w-10 h-10 text-gray-500 mx-auto mb-2" />
-                        <p className="text-gray-400 text-sm font-semibold">No patients found</p>
+                        <p className="text-gray-400 text-sm font-semibold">No matching patients found</p>
                       </td>
                     </tr>
                   ) : (
                     filtered.map((p, i) => {
                       const status = p.status || 'Active'
+                      const isCathLab = p.registryId === 'cathlab' || p.siteId === 'KANPUR_APEX' || p.mrn?.startsWith('7AFH')
                       return (
                         <tr key={p.id} className={cn(status === 'Inactive' && 'opacity-50')}>
                           <td className="font-mono text-xs text-gray-500">{i + 1}</td>
                           <td>
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-300 flex items-center justify-center text-xs font-semibold">
+                              <div
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm flex-shrink-0"
+                                style={{
+                                  background: isCathLab
+                                    ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                                    : 'linear-gradient(135deg, #3b82f6, #8b5cf6)'
+                                }}
+                              >
                                 {initials(p.firstName, p.lastName)}
                               </div>
                               <div>
-                                <Link href={`/patients/${p.id}`} className="font-medium text-white hover:text-blue-400 hover:underline transition-all">
+                                <Link href={`/patients/${p.id}`} className="font-semibold text-white hover:text-blue-400 hover:underline transition-all">
                                   {p.firstName} {p.lastName}
                                 </Link>
-                                <p className="text-xs text-gray-400">{p.email || '—'}</p>
+                                <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono">
+                                  <span>{p.mrn || 'MRN: —'}</span>
+                                  {p.addressState && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="text-gray-400 font-sans">{p.addressDistrict || p.addressState}</span>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </td>
                           <td>
-                            <span className={cn(
-                              "badge text-[10px]",
-                              p.hfType ? hfTypeBadgeColor(p.hfType) : 'badge-gray'
-                            )}>
-                              {p.hfType || '—'}
-                            </span>
+                            {isCathLab ? (
+                              <span className="badge badge-amber text-[10px] uppercase font-bold">
+                                Cath Lab & PCI
+                              </span>
+                            ) : (
+                              <span className={cn(
+                                "badge text-[10px] font-bold",
+                                p.hfType ? hfTypeBadgeColor(p.hfType) : 'badge-blue'
+                              )}>
+                                {p.hfType ? `HF · ${p.hfType}` : 'Heart Failure'}
+                              </span>
+                            )}
                           </td>
                           <td>
-                            <span className={cn(
-                              "badge text-[10px]",
-                              p.nyha ? nyhaBadgeColor(p.nyha) : 'badge-gray'
-                            )}>
-                              {p.nyha ? `Class ${p.nyha}` : '—'}
-                            </span>
+                            {isCathLab ? (
+                              <span className="badge badge-rose text-[10px] font-medium">
+                                {p.comorbidCAD ? 'CAD / STEMI Candidate' : 'PCI Interventional'}
+                              </span>
+                            ) : (
+                              <span className={cn(
+                                "badge text-[10px]",
+                                p.nyha ? nyhaBadgeColor(p.nyha) : 'badge-gray'
+                              )}>
+                                {p.nyha ? `NYHA Class ${p.nyha}` : 'Class II'}
+                              </span>
+                            )}
                           </td>
                           <td>
                             <span className="font-semibold text-xs" style={{ color: p.lvef ? lvefColor(p.lvef) : '#94a3b8' }}>
@@ -206,16 +234,16 @@ function PatientList() {
                               {status}
                             </span>
                           </td>
-                          <td className="text-gray-300 text-xs">{p.lastVisitDate ? formatDate(p.lastVisitDate) : '—'}</td>
+                          <td className="text-gray-300 text-xs">{p.lastVisitDate ? formatDate(p.lastVisitDate) : p.createdAt ? formatDate(p.createdAt) : '—'}</td>
                           <td>
                             <div className="flex justify-end gap-2">
                               <Link href={`/patients/${p.id}`}>
                                 <Button variant="outline" size="sm">
-                                  View Profile
+                                  View Record
                                 </Button>
                               </Link>
                               <Button variant="outline" size="sm" onClick={() => toggleStatus(p.id, p.status)}>
-                                Toggle Status
+                                Toggle
                               </Button>
                             </div>
                           </td>

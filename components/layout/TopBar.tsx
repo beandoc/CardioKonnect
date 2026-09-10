@@ -217,15 +217,15 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
           >
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm"
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
+              style={{ background: user?.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
             >
-              {user?.shortName ?? '??'}
+              {user?.shortName ?? 'AJ'}
             </div>
             <div className="hidden lg:block text-left">
-              <p className="text-xs font-semibold text-white leading-tight">{user?.name ?? 'Loading…'}</p>
+              <p className="text-xs font-semibold text-white leading-tight">{user?.name ?? 'Dr. A. Jayachandra'}</p>
               <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>
-                {user?.role}
-                {site ? ` · ${site.shortName}` : ''}
+                {user?.role || 'RegistryOwner'}
+                {site ? ` · ${site.shortName}` : ' · AICTS Pune'}
               </p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 hidden lg:block text-gray-500" />
@@ -257,7 +257,7 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                   <div className="flex items-center gap-3 p-2.5 mb-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                      style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
+                      style={{ background: selectedCandidate.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
                     >
                       {selectedCandidate.shortName}
                     </div>
@@ -271,7 +271,6 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                     <div className="space-y-1">
                       <div className="flex justify-between items-center text-[10px] text-gray-400 font-medium">
                         <span>Password Required</span>
-                        <span className="text-gray-500 font-mono">e.g. {selectedCandidate.defaultPassword}</span>
                       </div>
                       <div className="relative">
                         <Lock className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -315,15 +314,31 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
               ) : (
                 /* User Switcher List */
                 <>
-                  <div className="px-4 py-3 border-b flex justify-between items-center" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                  <div className="p-3 border-b border-white/[0.06] bg-slate-950/50">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Active Doctor Profile</p>
+                    <div className="flex items-center gap-2.5 mt-2">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm flex-shrink-0"
+                        style={{ background: user?.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
+                      >
+                        {user?.shortName || 'AJ'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-white truncate">{user?.name || 'Dr. A. Jayachandra'}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{user?.role} · {site?.name || 'AICTS Pune'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-4 py-2 border-b flex justify-between items-center bg-white/[0.02]" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                     <div>
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Switch User</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Select doctor (password required)</p>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Switch Doctor Account</p>
+                      <p className="text-[10px] text-gray-500">Requires password verification</p>
                     </div>
                     <Lock className="w-3.5 h-3.5 text-blue-400/60" />
                   </div>
 
-                  <div className="p-2 space-y-1 max-h-72 overflow-y-auto">
+                  <div className="p-2 space-y-1 max-h-64 overflow-y-auto">
                     {allUsers.map(u => {
                       const userSite = SITES[u.siteId]
                       const isActive = user?.id === u.id
@@ -332,13 +347,13 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                           key={u.id}
                           onClick={() => handleSelectUser(u)}
                           className={cn(
-                            'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors',
+                            'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors',
                             isActive ? 'bg-blue-500/15 border border-blue-500/25' : 'hover:bg-white/5'
                           )}
                         >
                           <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                            style={{ background: isActive ? 'linear-gradient(135deg, #3b82f6, #8b5cf6)' : 'rgba(255,255,255,0.1)' }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
+                            style={{ background: isActive ? (u.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)') : 'rgba(255,255,255,0.1)' }}
                           >
                             {u.shortName}
                           </div>
@@ -349,17 +364,10 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
                               {userSite && (
                                 <>
                                   <span className="text-[10px] text-gray-600">·</span>
-                                  <Building2 className="w-2.5 h-2.5 text-gray-500" />
                                   <span className="text-[10px] text-gray-400 truncate">{userSite.shortName}</span>
                                 </>
                               )}
                             </div>
-                            {u.piOf.length > 0 && (
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <Shield className="w-2.5 h-2.5 text-amber-400" />
-                                <span className="text-[10px] text-amber-400">PI: {u.piOf.join(', ')}</span>
-                              </div>
-                            )}
                           </div>
                           {isActive ? (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold flex-shrink-0 flex items-center gap-1">
