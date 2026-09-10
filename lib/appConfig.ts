@@ -136,7 +136,7 @@ export const APP_USERS: Record<string, AppUser> = {
     siteId: 'AICTS_PUNE',
     loginUsernames: ['cardiokonnect', 'cardioconnect', 'doctor', 'dr.jayachandra', 'jayachandra', 'aicts'],
     defaultPassword: 'test1234',
-    registryAccess: ['hf', 'acs', 'preventive', 'arrhythmia', 'structural', 'cathlab'],
+    registryAccess: ['hf', 'acs', 'preventive', 'arrhythmia', 'structural'],
     piOf: ['hf', 'acs', 'preventive'],
   },
   DR_RAJEEV_CHAUHAN: {

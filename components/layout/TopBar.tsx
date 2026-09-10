@@ -2,10 +2,10 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { format } from 'date-fns'
-import { Bell, Search, Moon, Sun, ChevronRight, Menu, ChevronDown, Building2, Shield, Lock, ArrowLeft, LogOut, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Bell, Search, Moon, Sun, ChevronRight, Menu, ChevronDown, Building2, Shield, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppUser } from '@/context/AppUserContext'
-import { SITES, type AppUser } from '@/lib/appConfig'
+import { SITES } from '@/lib/appConfig'
 import { toast } from 'sonner'
 
 const TITLES: Record<string, string> = {
@@ -51,12 +51,8 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
   const router = useRouter()
   const [time, setTime] = useState<Date | null>(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  const [selectedCandidate, setSelectedCandidate] = useState<AppUser | null>(null)
-  const [switchPassword, setSwitchPassword] = useState('')
-  const [switchError, setSwitchError] = useState('')
-  const [isVerifying, setIsVerifying] = useState(false)
   const switcherRef = useRef<HTMLDivElement>(null)
-  const { user, setUser, logout, allUsers } = useAppUser()
+  const { user, logout } = useAppUser()
 
   useEffect(() => {
     setTime(new Date())
@@ -64,57 +60,16 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
     return () => clearInterval(t)
   }, [])
 
-  // Close switcher on outside click
+  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) {
         setSwitcherOpen(false)
-        setSelectedCandidate(null)
-        setSwitchPassword('')
-        setSwitchError('')
       }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
-
-  const handleSelectUser = (u: AppUser) => {
-    if (user?.id === u.id) {
-      setSwitcherOpen(false)
-      return
-    }
-    setSelectedCandidate(u)
-    setSwitchPassword('')
-    setSwitchError('')
-  }
-
-  const handleVerifyPassword = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedCandidate) return
-
-    setIsVerifying(true)
-    setSwitchError('')
-
-    const entered = switchPassword.trim()
-    if (entered === selectedCandidate.defaultPassword) {
-      setUser(selectedCandidate)
-      localStorage.setItem('cardio_active_user_id', selectedCandidate.id)
-      localStorage.setItem('cardiokonnect_auth', 'true')
-      localStorage.setItem('cardiokonnect_role', selectedCandidate.role === 'DEO' ? 'deo' : 'doctor')
-
-      toast.success(`Authenticated — Switched to ${selectedCandidate.name}`, {
-        description: `${selectedCandidate.role} · ${SITES[selectedCandidate.siteId]?.shortName || selectedCandidate.siteId}`,
-      })
-
-      setIsVerifying(false)
-      setSelectedCandidate(null)
-      setSwitchPassword('')
-      setSwitcherOpen(false)
-    } else {
-      setIsVerifying(false)
-      setSwitchError(`Incorrect password for ${selectedCandidate.name}. Please try again.`)
-    }
-  }
 
   const handleLogout = () => {
     setSwitcherOpen(false)
@@ -203,15 +158,10 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: '#f43f5e' }} />
         </button>
 
-        {/* User Avatar + Switcher */}
+        {/* User Avatar + Profile Menu */}
         <div className="relative" ref={switcherRef}>
           <button
-            onClick={() => {
-              setSwitcherOpen(v => !v)
-              setSelectedCandidate(null)
-              setSwitchPassword('')
-              setSwitchError('')
-            }}
+            onClick={() => setSwitcherOpen(v => !v)}
             className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-xl hover:bg-white/5 transition-colors"
             style={{ borderLeft: '1px solid rgba(59,130,246,0.15)' }}
           >
@@ -231,168 +181,86 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
             <ChevronDown className="w-3.5 h-3.5 hidden lg:block text-gray-500" />
           </button>
 
-          {/* User switcher dropdown */}
+          {/* User profile dropdown - Discrete single-doctor session */}
           {switcherOpen && (
             <div
               className="absolute right-0 top-full mt-2 w-80 rounded-2xl border shadow-2xl z-50 overflow-hidden"
               style={{ background: 'rgba(15,26,61,0.98)', borderColor: 'rgba(59,130,246,0.25)', backdropFilter: 'blur(16px)' }}
             >
-              {selectedCandidate ? (
-                /* Password Verification Screen */
-                <div className="p-4 animate-fade-in">
-                  <div className="flex items-center gap-2 mb-3">
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedCandidate(null); setSwitchError(''); setSwitchPassword(''); }}
-                      className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                    </button>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">Enter Clinical Password</h4>
-                      <p className="text-[10px] text-gray-400">Authenticate user switch</p>
-                    </div>
+              {/* Active Doctor Profile Header */}
+              <div className="p-4 border-b border-white/[0.08] bg-slate-950/60">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-md flex-shrink-0"
+                    style={{ background: user?.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
+                  >
+                    {user?.shortName || 'AJ'}
                   </div>
-
-                  <div className="flex items-center gap-3 p-2.5 mb-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                      style={{ background: selectedCandidate.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
-                    >
-                      {selectedCandidate.shortName}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-bold text-white truncate">{user?.name || 'Dr. A. Jayachandra'}</p>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-white truncate">{selectedCandidate.name}</p>
-                      <p className="text-[10px] text-gray-400">{selectedCandidate.role} · {SITES[selectedCandidate.siteId]?.shortName}</p>
-                    </div>
+                    <p className="text-[11px] text-blue-400 font-medium">{user?.role || 'Registry Principal Investigator'}</p>
+                    <p className="text-[10px] text-gray-400 truncate">{user?.email || 'doctor@cardiokonnect.in'}</p>
                   </div>
-
-                  <form onSubmit={handleVerifyPassword} className="space-y-3">
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center text-[10px] text-gray-400 font-medium">
-                        <span>Password Required</span>
-                      </div>
-                      <div className="relative">
-                        <Lock className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                        <input
-                          type="password"
-                          autoFocus
-                          required
-                          value={switchPassword}
-                          onChange={(e) => setSwitchPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950/80 border border-gray-700/60 text-white placeholder-gray-500 text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-
-                    {switchError && (
-                      <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/20 text-rose-300 text-[11px] flex items-center gap-1.5">
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span>{switchError}</span>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => { setSelectedCandidate(null); setSwitchError(''); setSwitchPassword(''); }}
-                        className="flex-1 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isVerifying || !switchPassword}
-                        className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all disabled:opacity-50"
-                      >
-                        {isVerifying ? 'Verifying...' : 'Authorize Switch'}
-                      </button>
-                    </div>
-                  </form>
                 </div>
-              ) : (
-                /* User Switcher List */
-                <>
-                  <div className="p-3 border-b border-white/[0.06] bg-slate-950/50">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Active Doctor Profile</p>
-                    <div className="flex items-center gap-2.5 mt-2">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm flex-shrink-0"
-                        style={{ background: user?.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
-                      >
-                        {user?.shortName || 'AJ'}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-white truncate">{user?.name || 'Dr. A. Jayachandra'}</p>
-                        <p className="text-[10px] text-gray-400 truncate">{user?.role} · {site?.name || 'AICTS Pune'}</p>
-                      </div>
-                    </div>
-                  </div>
+              </div>
 
-                  <div className="px-4 py-2 border-b flex justify-between items-center bg-white/[0.02]" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              {/* Hospital & Registry Scope Details */}
+              <div className="p-3.5 space-y-2.5 bg-white/[0.01]">
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-white/[0.06] space-y-2 text-xs">
+                  <div className="flex items-start gap-2">
+                    <Building2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Switch Doctor Account</p>
-                      <p className="text-[10px] text-gray-500">Requires password verification</p>
+                      <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Hospital / Institution</p>
+                      <p className="font-semibold text-white leading-snug">{site?.name || 'All India Institute of Cardiothoracic Sciences (AICTS), Pune'}</p>
                     </div>
-                    <Lock className="w-3.5 h-3.5 text-blue-400/60" />
                   </div>
 
-                  <div className="p-2 space-y-1 max-h-64 overflow-y-auto">
-                    {allUsers.map(u => {
-                      const userSite = SITES[u.siteId]
-                      const isActive = user?.id === u.id
-                      return (
-                        <button
-                          key={u.id}
-                          onClick={() => handleSelectUser(u)}
-                          className={cn(
-                            'w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors',
-                            isActive ? 'bg-blue-500/15 border border-blue-500/25' : 'hover:bg-white/5'
-                          )}
-                        >
-                          <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
-                            style={{ background: isActive ? (u.siteId === 'KANPUR_APEX' ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #3b82f6, #8b5cf6)') : 'rgba(255,255,255,0.1)' }}
-                          >
-                            {u.shortName}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold text-white truncate">{u.name}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[10px] text-gray-400">{u.role}</span>
-                              {userSite && (
-                                <>
-                                  <span className="text-[10px] text-gray-600">·</span>
-                                  <span className="text-[10px] text-gray-400 truncate">{userSite.shortName}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {isActive ? (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold flex-shrink-0 flex items-center gap-1">
-                              <CheckCircle2 className="w-2.5 h-2.5" /> Active
-                            </span>
-                          ) : (
-                            <Lock className="w-3 h-3 text-gray-500 flex-shrink-0" />
-                          )}
-                        </button>
-                      )
-                    })}
+                  <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-[11px]">
+                    <span className="text-gray-400">Assigned Registry:</span>
+                    <span className="font-medium text-blue-300">
+                      {user?.siteId === 'KANPUR_APEX' ? 'Cath Lab & Interventional PCI' : 'Heart Failure & Cardiology'}
+                    </span>
                   </div>
 
-                  {/* Log out option */}
-                  <div className="p-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-500/10 transition-colors"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Log Out of Registry</span>
-                    </button>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-gray-400">Site Identifier:</span>
+                    <span className="font-mono text-gray-300">{user?.siteId || 'AICTS_PUNE'}</span>
                   </div>
-                </>
-              )}
+                </div>
+
+                {/* Discrete Data Isolation Notice */}
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] flex items-center gap-2">
+                  <Shield className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+                  <span className="leading-tight">Discrete Hospital Registry: Patient data strictly isolated per institutional governance.</span>
+                </div>
+              </div>
+
+              {/* Navigation & Logout actions */}
+              <div className="p-2 border-t border-white/[0.08] space-y-1 bg-slate-950/40">
+                <button
+                  onClick={() => {
+                    setSwitcherOpen(false)
+                    router.push('/settings?tab=profile')
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <Shield className="w-3.5 h-3.5 text-blue-400" />
+                    <span>My Profile & Settings</span>
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/15 transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log Out of Registry</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -99,18 +99,25 @@ function SettingsContent() {
     router.push(`/settings?tab=${t}`)
   }
 
-  // Admin Tab State & Logic
+  // Admin Tab State & Logic — Scoped strictly to the active user's affiliated hospital
   const [providers, setProviders] = useState<ProviderRow[]>(INITIAL_PROVIDERS)
   const [adminSearch, setAdminSearch] = useState('')
   const [adminStatusFilter, setAdminStatusFilter] = useState('All')
 
   const filteredProviders = useMemo(() => {
     return providers.filter(p => {
+      // Discrete hospital tenant isolation
+      const belongsToHospital = isKanpur
+        ? (p.hospital.includes('Apex') || p.hospital.includes('Kanpur'))
+        : (p.hospital.includes('AICTS') || p.hospital.includes('Pune'))
+
+      if (!belongsToHospital) return false
+
       const matchSearch = p.name.toLowerCase().includes(adminSearch.toLowerCase()) || p.email.toLowerCase().includes(adminSearch.toLowerCase())
       const matchStatus = adminStatusFilter === 'All' || p.status === adminStatusFilter
       return matchSearch && matchStatus
     })
-  }, [providers, adminSearch, adminStatusFilter])
+  }, [providers, adminSearch, adminStatusFilter, isKanpur])
 
   const toggleProviderStatus = (id: string) => {
     setProviders(prev => prev.map(p => p.id === id ? { ...p, status: p.status === 'Active' ? 'Inactive' : 'Active' } : p))

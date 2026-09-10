@@ -129,6 +129,9 @@ export interface Patient {
   registryEnrollments?: Record<string, RegistryEnrollment> // keyed by registryId
   siteId?: string                                          // Primary hospital site (e.g. 'AICTS_PUNE' | 'KANPUR_APEX')
   hospitalName?: string
+  transferredToSite?: string                              // Explicit inter-hospital transfer destination
+  sharedWithSites?: string[]                               // Explicitly shared hospital sites
+  sharedWithDoctors?: string[]                             // Explicitly shared doctor IDs or names
   indianCitizen?: boolean
   ethnicity?: 'Indian' | string
   studyConsented?: boolean

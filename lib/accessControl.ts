@@ -33,7 +33,17 @@ export function canAccessRegistry(user: AppUser | null, registryId: string): boo
 export function canViewPatient(user: AppUser | null, patient: Patient): boolean {
   if (!user) return true
 
-  // PI of Kanpur Cardiac Apex Hospital (Dr. Rajeev Chauhan)
+  // Explicit transfer or cross-registry sharing
+  const isExplicitlySharedOrTransferred =
+    patient.transferredToSite === user.siteId ||
+    (patient.sharedWithSites && patient.sharedWithSites.includes(user.siteId)) ||
+    (patient.sharedWithDoctors && (patient.sharedWithDoctors.includes(user.id) || patient.sharedWithDoctors.includes(user.name)))
+
+  if (isExplicitlySharedOrTransferred) {
+    return true
+  }
+
+  // 1. Kanpur Cardiac Apex Hospital (Dr. Rajeev Chauhan)
   if (user.siteId === 'KANPUR_APEX' || user.id === 'DR_RAJEEV_CHAUHAN') {
     const isKanpurPatient = 
       patient.siteId === 'KANPUR_APEX' ||
@@ -45,17 +55,32 @@ export function canViewPatient(user: AppUser | null, patient: Patient): boolean 
     return Boolean(isKanpurPatient)
   }
 
-  // RegistryOwner with global access (Dr. A. Jayachandra)
-  if (user.role === 'RegistryOwner' && user.registryAccess.length >= 4) {
-    return true
+  // 2. AICTS Pune (Dr. A. Jayachandra, Dr. Nitin Sharma, Dr. Arshdeep, etc.)
+  // Discrete hospital tenant — never show Kanpur Apex Cathlab patients to AICTS Pune doctors
+  const isKanpurPatient = 
+    patient.siteId === 'KANPUR_APEX' ||
+    patient.registryId === 'cathlab' ||
+    patient.registryIds?.includes('cathlab') ||
+    patient.hospitalName?.toLowerCase().includes('apex') ||
+    patient.mrn?.startsWith('7AFH')
+
+  if (isKanpurPatient) {
+    return false
   }
 
-  // Build the patient's registry memberships from both legacy and new fields
+  // If patient has a distinct siteId and it doesn't match the user's hospital site
+  if (patient.siteId && patient.siteId !== user.siteId) {
+    return false
+  }
+
+  // Registry overlap check for AICTS Pune
   const patientRegistries = new Set<string>()
   if (patient.registryId) patientRegistries.add(patient.registryId)
   patient.registryIds?.forEach(id => patientRegistries.add(id))
 
-  // Check overlap with user's authorized registries
+  // If patient has no explicit registry tagged yet, allow hospital matching
+  if (patientRegistries.size === 0) return true
+
   return user.registryAccess.some(id => patientRegistries.has(id))
 }
 
