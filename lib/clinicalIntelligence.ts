@@ -13,7 +13,7 @@
 import type { Patient, Visit } from './types'
 import { calculateMAGGIC, calculateCHADSVASc, calculateHASBLED as calcHASBLEDCanonical } from './riskScores'
 import { getAge } from './utils'
-import rfModel from '../scratch/heart_failure_rf.json'
+import rfModel from './models/heart_failure_rf.json'
 
 
 // ─── Alert severity ───────────────────────────────────────────────────────────
