@@ -233,10 +233,10 @@ export default function RegistryFrameworkPage() {
 
       {/* Flagship Registry Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filtered.map((reg, index) => {
+        {filtered.map((reg) => {
           const Icon = reg.icon
           return (
-            <div key={index} className="glass-card p-5 space-y-4 border border-blue-500/10 hover:border-blue-500/25 transition-all flex flex-col justify-between">
+            <div key={reg.title} className="glass-card p-5 space-y-4 border border-blue-500/10 hover:border-blue-500/25 transition-all flex flex-col justify-between">
               
               <div className="space-y-3">
                 <div className="flex justify-between items-start">

@@ -57,6 +57,12 @@ export function getAge(dob: string): number | null {
   catch { return null }
 }
 
+export function safeTime(dateStr: string | undefined | null): number {
+  if (!dateStr) return 0
+  const t = new Date(dateStr).getTime()
+  return isNaN(t) ? 0 : t
+}
+
 export function formatDate(iso: string | undefined, fmt = 'dd MMM yyyy'): string {
   if (!iso) return '—'
   try {

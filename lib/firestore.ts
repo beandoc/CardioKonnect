@@ -883,7 +883,7 @@ export function subscribePatients(onUpdate: (patients: Patient[]) => void): () =
   })
 }
 
-export function subscribeVisits(onUpdate: (visits: Visit[]) => void): () => void {
+export function subscribeVisits(onUpdate: (visits: Visit[]) => void, maxLimit = 5000): () => void {
   if (isDemoMode) {
     onUpdate(getLocalVisits())
 
@@ -910,7 +910,7 @@ export function subscribeVisits(onUpdate: (visits: Visit[]) => void): () => void
     }
   }
 
-  const q = collectionGroup(db, 'visits')
+  const q = query(collectionGroup(db, 'visits'), limit(maxLimit))
   return onSnapshot(q, (snap) => {
     const visits = snap.docs.map(d => {
       const patientId = d.ref.parent.parent?.id || ''
@@ -1106,7 +1106,7 @@ export async function getCathProceduresByPatient(patientId: string): Promise<Cat
   return getProcedures(patientId)
 }
 
-export function subscribeCathProcedures(onUpdate: (procedures: CathProcedure[]) => void): () => void {
+export function subscribeCathProcedures(onUpdate: (procedures: CathProcedure[]) => void, maxLimit = 5000): () => void {
   if (isDemoMode) {
     onUpdate(getLocalProcedures())
     const handleLocalUpdate = () => onUpdate(getLocalProcedures())
@@ -1125,7 +1125,7 @@ export function subscribeCathProcedures(onUpdate: (procedures: CathProcedure[]) 
     }
   }
 
-  const q = collectionGroup(db, 'procedures')
+  const q = query(collectionGroup(db, 'procedures'), limit(maxLimit))
   return onSnapshot(q, (snap) => {
     const procs = snap.docs.map(d => {
       const patientId = d.ref.parent.parent?.id || ''

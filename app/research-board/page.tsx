@@ -800,7 +800,7 @@ export default function ResearchBoardPage() {
                   const strengthColor = rho === null ? 'text-gray-500' : absR >= 0.7 ? 'text-emerald-400' : absR >= 0.4 ? 'text-blue-400' : absR >= 0.2 ? 'text-amber-400' : 'text-gray-500'
                   const dirColor = rho !== null && rho > 0 ? 'text-blue-400' : 'text-rose-400'
                   return (
-                    <tr key={i} className="hover:bg-white/[0.02] transition">
+                    <tr key={`${c.x}-${c.y}`} className="hover:bg-white/[0.02] transition">
                       <td className="px-4 py-2.5 text-gray-300">{c.x}</td>
                       <td className="px-4 py-2.5 text-gray-300">{c.y}</td>
                       <td className="text-center px-3 py-2.5 text-gray-400">{c.n}</td>

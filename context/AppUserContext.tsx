@@ -9,7 +9,7 @@
  * For now, it provides a user switcher to demo multi-user access control.
  */
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
 import { APP_USERS, USER_LIST, type AppUser } from '@/lib/appConfig'
 
 interface AppUserContextValue {
@@ -56,15 +56,15 @@ export function AppUserProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [])
 
-  const setUser = (u: AppUser) => {
+  const setUser = useCallback((u: AppUser) => {
     try {
       localStorage.setItem(STORAGE_KEY, u.id)
       localStorage.setItem('cardiokonnect_auth', 'true')
     } catch {}
     setUserState(u)
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_KEY)
       localStorage.removeItem('cardiokonnect_auth')
@@ -72,10 +72,18 @@ export function AppUserProvider({ children }: { children: ReactNode }) {
     } catch {}
     setUserState(null)
     window.location.href = '/login'
-  }
+  }, [])
+
+  const contextValue = useMemo(() => ({
+    user,
+    currentUser: user,
+    setUser,
+    logout,
+    allUsers: USER_LIST,
+  }), [user, setUser, logout])
 
   return (
-    <AppUserContext.Provider value={{ user, currentUser: user, setUser, logout, allUsers: USER_LIST }}>
+    <AppUserContext.Provider value={contextValue}>
       {children}
     </AppUserContext.Provider>
   )

@@ -2,9 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Bell, ShieldAlert, Sparkles, Filter, CheckCircle, Activity } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { getPatients } from '@/lib/firestore'
-import { collectionGroup, getDocs } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 
 interface AlertItem {
@@ -18,23 +16,6 @@ interface AlertItem {
   status: 'Open' | 'Resolved'
 }
 
-
-function toDate(ts: any): string {
-  if (!ts) return ''
-  if (ts.seconds) return new Date(ts.seconds * 1000).toISOString()
-  if (typeof ts === 'string') return ts
-  return ''
-}
-
-function docToVisit(id: string, patientId: string, data: any): Visit {
-  return {
-    ...data,
-    id,
-    patientId,
-    createdAt: toDate(data.createdAt),
-  } as Visit
-}
-
 export default function ClinicalAlertsPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,18 +24,15 @@ export default function ClinicalAlertsPage() {
   useEffect(() => {
     async function loadAlerts() {
       try {
-        const patients = await getPatients()
-        const visitsSnap = await getDocs(collectionGroup(db, 'visits'))
+        const [patients, allVisits] = await Promise.all([getPatients(), getAllVisits()])
         
         const visitsByPatient: Record<string, Visit[]> = {}
-        visitsSnap.docs.forEach(doc => {
-          const data = doc.data()
-          const patientId = doc.ref.parent.parent?.id
-          if (patientId) {
-            if (!visitsByPatient[patientId]) {
-              visitsByPatient[patientId] = []
+        allVisits.forEach(v => {
+          if (v.patientId) {
+            if (!visitsByPatient[v.patientId]) {
+              visitsByPatient[v.patientId] = []
             }
-            visitsByPatient[patientId].push(docToVisit(doc.id, patientId, data))
+            visitsByPatient[v.patientId].push(v)
           }
         })
 

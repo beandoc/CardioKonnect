@@ -469,7 +469,7 @@ function NtBnpQuartileCard({ quartiles }: {
           </thead>
           <tbody>
             {quartiles.map((q, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <tr key={q.quartile} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                 <td className="py-3 pr-6 font-semibold" style={{ color: quartileColors[i] }}>
                   <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: quartileColors[i] }} />
                   {q.quartile}
@@ -773,7 +773,7 @@ function ResearchBoardSection({ data }: { data: NonNullable<RegistryData['resear
                     }
                   }
                   return (
-                    <tr key={idx} className={row.bold ? 'font-semibold text-white bg-white/[0.02]' : 'text-gray-300'}>
+                    <tr key={row.label} className={row.bold ? 'font-semibold text-white bg-white/[0.02]' : 'text-gray-300'}>
                       <td className="py-2.5 pr-4 flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-violet-400/70" />
                         {row.label}

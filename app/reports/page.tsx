@@ -1139,9 +1139,9 @@ export default function ReportsArchitecturePage() {
                   No reports found matching your query.
                 </div>
               ) : (
-                activeReports.map((report, idx) => (
+                activeReports.map((report) => (
                   <div 
-                    key={idx} 
+                    key={report.title} 
                     onClick={() => handleOpenReport(report)}
                     className="glass-card p-5 space-y-4 flex flex-col justify-between hover:-translate-y-1 hover:border-blue-500/30 cursor-pointer transition-all duration-300 group"
                   >

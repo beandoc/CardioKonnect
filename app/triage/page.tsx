@@ -7,7 +7,7 @@ import {
   CheckCircle, Zap, Shield, Search, Sliders, ArrowRight,
   Info, Bell, FileText, ChevronRight, HelpCircle, Pill, ShieldAlert
 } from 'lucide-react'
-import { getPatients, getVisits } from '@/lib/firestore'
+import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import {
   computeMLRiskProfile,
@@ -47,11 +47,20 @@ export default function TriagePage() {
     async function loadCohortData() {
       setLoading(true)
       try {
-        const patients = await getPatients()
-        const processedRows = await Promise.all(
-          patients.map(async (patient) => {
-            const allVisits = await getVisits(patient.id)
-            const latestVisit = allVisits.length > 0 ? allVisits[0] : null
+        const [patients, allVisits] = await Promise.all([getPatients(), getAllVisits()])
+        const visitsByPatient = new Map<string, Visit[]>()
+        for (const v of allVisits) {
+          const list = visitsByPatient.get(v.patientId) || []
+          list.push(v)
+          visitsByPatient.set(v.patientId, list)
+        }
+        visitsByPatient.forEach((list) => {
+          list.sort((a: Visit, b: Visit) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())
+        })
+
+        const processedRows = patients.map((patient) => {
+          const patientVisits = visitsByPatient.get(patient.id) || []
+          const latestVisit = patientVisits.length > 0 ? patientVisits[0] : null
 
             if (!latestVisit) {
               return {
@@ -133,7 +142,6 @@ export default function TriagePage() {
               criticalAlertCount
             }
           })
-        )
 
         setRows(processedRows)
       } catch (err) {
