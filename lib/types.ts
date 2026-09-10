@@ -1253,69 +1253,7 @@ export type AccessSite =
   | 'Left Ulnar'
   | 'Brachial'
 
-export type CoronaryVessel =
-  | 'LM'
-  | 'pLAD'
-  | 'mLAD'
-  | 'dLAD'
-  | 'D1'
-  | 'D2'
-  | 'pLCx'
-  | 'mLCx'
-  | 'OM1'
-  | 'OM2'
-  | 'pRCA'
-  | 'mRCA'
-  | 'dRCA'
-  | 'PDA'
-  | 'PLV'
-  | 'Ramus'
-  | 'SVG'
-  | 'LIMA'
-  | 'RIMA'
-
 export type TimiFlow = 0 | 1 | 2 | 3
-
-export type CoronarySegmentId = 
-  | 1  // Proximal RCA
-  | 2  // Mid RCA
-  | 3  // Distal RCA
-  | 4  // Posterior Descending Artery (RCA)
-  | 5  // Left Main
-  | 6  // Proximal LAD
-  | 7  // Mid LAD
-  | 8  // Distal LAD
-  | 9  // First Diagonal (D1)
-  | 10 // Second Diagonal (D2)
-  | 11 // Proximal LCx
-  | 12 // First Obtuse Marginal (OM1)
-  | 13 // Mid / Distal LCx
-  | 14 // Second Obtuse Marginal (OM2)
-  | 15 // Posterior Descending Artery (LCx)
-  | 16 // Ramus Intermedius
-  | 17 // Saphenous Vein Graft (SVG)
-  | 18 // Internal Mammary Graft (LIMA/RIMA)
-
-export const CORONARY_SEGMENTS: { id: CoronarySegmentId; vessel: CoronaryVessel; label: string }[] = [
-  { id: 1,  vessel: 'pRCA',  label: '1. Proximal RCA' },
-  { id: 2,  vessel: 'mRCA',  label: '2. Mid RCA' },
-  { id: 3,  vessel: 'dRCA',  label: '3. Distal RCA' },
-  { id: 4,  vessel: 'PDA',   label: '4. Posterior Descending (PDA)' },
-  { id: 5,  vessel: 'LM',    label: '5. Left Main (LMCA)' },
-  { id: 6,  vessel: 'pLAD',  label: '6. Proximal LAD' },
-  { id: 7,  vessel: 'mLAD',  label: '7. Mid LAD' },
-  { id: 8,  vessel: 'dLAD',  label: '8. Distal LAD' },
-  { id: 9,  vessel: 'D1',    label: '9. First Diagonal (D1)' },
-  { id: 10, vessel: 'D2',    label: '10. Second Diagonal (D2)' },
-  { id: 11, vessel: 'pLCx',  label: '11. Proximal LCx' },
-  { id: 12, vessel: 'OM1',   label: '12. First Obtuse Marginal (OM1)' },
-  { id: 13, vessel: 'mLCx',  label: '13. Mid / Distal LCx' },
-  { id: 14, vessel: 'OM2',   label: '14. Second Obtuse Marginal (OM2)' },
-  { id: 15, vessel: 'PLV',   label: '15. Left Circumflex PDA / PLV' },
-  { id: 16, vessel: 'Ramus', label: '16. Ramus Intermedius' },
-  { id: 17, vessel: 'SVG',   label: '17. Saphenous Vein Graft (SVG)' },
-  { id: 18, vessel: 'LIMA',  label: '18. Arterial Graft (LIMA/RIMA)' },
-]
 
 // ── Re-export dedicated interventional types ─────────────────────────────────
 import type { DeviceRecord, LesionRecord } from './interventionalTypes'

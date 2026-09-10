@@ -17,6 +17,7 @@ const NAV = [
     section: 'Clinical Workspace',
     items: [
       { href: '/',            label: 'Dashboard',             icon: LayoutDashboard },
+      { href: '/home',        label: 'Clinical Overview',     icon: FileText },
       { href: '/deo',         label: 'DEO Data Entry Desk',   icon: ClipboardList },
       { href: '/registry-home', label: 'Registry Home',       icon: LayoutGrid },
       { href: '/patients',    label: 'Patients Database',     icon: Users },
@@ -43,6 +44,7 @@ const NAV = [
     section: 'Research & Analytics',
     items: [
       { href: '/analytics',        label: 'Population Analytics', icon: BarChart3 },
+      { href: '/analytics-dashboard', label: 'Live Analytics',   icon: BarChart3 },
       { href: '/research-board',   label: 'Research Board',       icon: FlaskConical },
       { href: '/cohort',           label: 'Cohort Builder',       icon: Layers },
       { href: '/risk',             label: 'Risk Calculators',     icon: Activity },
@@ -53,6 +55,7 @@ const NAV = [
     section: 'Configuration',
     items: [
       { href: '/registry',    label: 'Registry Fields',      icon: Database },
+      { href: '/log-categories', label: 'Log Categories',     icon: Database },
       { href: '/settings',    label: 'Settings',             icon: Settings },
     ],
   },

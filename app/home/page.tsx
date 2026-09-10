@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-export default function RegistryHomePage() {
+export default function ClinicalOverviewPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'clinical' | 'imaging' | 'pci' | 'followup' | 'consent'>('all')
 
   const sections = [
