@@ -177,7 +177,7 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
               <p className="text-xs font-semibold text-white leading-tight">{user?.name ?? 'Dr. A. Jayachandra'}</p>
               <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>
                 {user?.role || 'RegistryOwner'}
-                {site ? ` · ${site.shortName}` : ' · AICTS Pune'}
+                {site ? ` · ${site.shortName}` : ' · AICTS, Pune'}
               </p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 hidden lg:block text-gray-500" />
@@ -215,7 +215,7 @@ export default function TopBar({ sidebarOpen = true, onToggleSidebar }: TopBarPr
                     <Building2 className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Hospital / Institution</p>
-                      <p className="font-semibold text-white leading-snug">{site?.name || 'All India Institute of Cardiothoracic Sciences (AICTS), Pune'}</p>
+                      <p className="font-semibold text-white leading-snug">{site?.name || 'AICTS, Pune'}</p>
                     </div>
                   </div>
 

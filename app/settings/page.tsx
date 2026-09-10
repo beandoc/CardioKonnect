@@ -77,8 +77,8 @@ function SettingsContent() {
   const doctorShort = currentUser?.shortName || (isKanpur ? 'RC' : 'AJ')
   const doctorEmail = currentUser?.email || (isKanpur ? 'rajeev.chauhan@apexkanpur.in' : 'jayachandra.a@aicts.in')
   const doctorRole = isKanpur ? 'Registry Owner & Principal Investigator' : (currentUser?.role === 'RegistryOwner' ? 'Registry Owner' : currentUser?.role || 'Attending Doctor')
-  const doctorHospital = isKanpur ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune'
-  const doctorFacilityFull = isKanpur ? 'Kanpur Cardiac Apex Hospital, Kanpur, Uttar Pradesh' : 'All India Institute of Cardiothoracic Sciences (AICTS), Pune'
+  const doctorHospital = isKanpur ? 'Kanpur Cardiac Apex Hospital' : 'AICTS, Pune'
+  const doctorFacilityFull = isKanpur ? 'Kanpur Cardiac Apex Hospital, Kanpur, Uttar Pradesh' : 'AICTS, Pune'
   const doctorLicense = isKanpur ? 'UP-MCI-74892' : 'MH-MCI-123454'
   const doctorSubspecialty = isKanpur ? 'Cath Lab & Interventional Cardiology' : 'Cardiology & Heart Failure Research'
   const doctorExperience = isKanpur ? '16 years' : '18 years'
