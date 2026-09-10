@@ -673,7 +673,7 @@ export default function RegistryHomePage() {
                     className="flex items-center gap-1 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm"
                     style={{ background: `${reg.ringColor}20`, color: reg.ringColor, border: `1px solid ${reg.ringColor}40` }}
                   >
-                    Analytics <ArrowRight size={11} />
+                    Open Registry <ArrowRight size={11} />
                   </Link>
                 </div>
               </div>
