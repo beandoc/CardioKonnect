@@ -56,7 +56,7 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
   const [switchError, setSwitchError] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
   const switcherRef = useRef<HTMLDivElement>(null)
-  const { user, setUser, allUsers } = useAppUser()
+  const { user, setUser, logout, allUsers } = useAppUser()
 
   useEffect(() => {
     setTime(new Date())
@@ -117,12 +117,9 @@ export default function TopBar({ onToggleSidebar }: TopBarProps) {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('cardiokonnect_auth')
-    localStorage.removeItem('cardio_active_user_id')
-    localStorage.removeItem('cardiokonnect_role')
     setSwitcherOpen(false)
     toast.info('Logged out of session')
-    router.push('/login')
+    logout()
   }
 
   const isPatientDetail   = path.startsWith('/patients/') && path !== '/patients/new' && !path.includes('/visits/')

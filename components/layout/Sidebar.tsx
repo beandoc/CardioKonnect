@@ -10,6 +10,7 @@ import {
   Brain
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAppUser } from '@/context/AppUserContext'
 
 const NAV = [
   {
@@ -66,6 +67,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const path = usePathname()
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
+  const { logout } = useAppUser()
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -78,8 +80,8 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
   const handleLogout = () => {
     toast.success('Clinical session ended. Logged out successfully.')
-    router.push('/home')
     onClose?.()
+    logout()
   }
 
   return (

@@ -16,6 +16,7 @@ interface AppUserContextValue {
   user: AppUser | null
   currentUser: AppUser | null
   setUser: (u: AppUser) => void
+  logout: () => void
   allUsers: AppUser[]
 }
 
@@ -23,6 +24,7 @@ const AppUserContext = createContext<AppUserContextValue>({
   user: null,
   currentUser: null,
   setUser: () => {},
+  logout: () => {},
   allUsers: USER_LIST,
 })
 
@@ -34,18 +36,32 @@ export function AppUserProvider({ children }: { children: ReactNode }) {
 
   // Hydrate from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
+    const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
+    if (!isAuth) {
+      setUserState(null)
+      return
+    }
     const stored = localStorage.getItem(STORAGE_KEY)
     const userId = stored && APP_USERS[stored] ? stored : DEFAULT_USER_ID
-    setUserState(APP_USERS[userId])
+    setUserState(APP_USERS[userId] || null)
   }, [])
 
   const setUser = (u: AppUser) => {
     localStorage.setItem(STORAGE_KEY, u.id)
+    localStorage.setItem('cardiokonnect_auth', 'true')
     setUserState(u)
   }
 
+  const logout = () => {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem('cardiokonnect_auth')
+    localStorage.removeItem('cardiokonnect_role')
+    setUserState(null)
+    window.location.href = '/login'
+  }
+
   return (
-    <AppUserContext.Provider value={{ user, currentUser: user, setUser, allUsers: USER_LIST }}>
+    <AppUserContext.Provider value={{ user, currentUser: user, setUser, logout, allUsers: USER_LIST }}>
       {children}
     </AppUserContext.Provider>
   )
