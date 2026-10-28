@@ -77,6 +77,12 @@ export default function QuickDataEntryModal({
   const [hb, setHb] = useState<string>(
     latestVisit?.hb != null ? String(latestVisit.hb) : ''
   )
+  const [ferritin, setFerritin] = useState<string>(
+    latestVisit?.ferritin != null ? String(latestVisit.ferritin) : ''
+  )
+  const [transferrinSat, setTransferrinSat] = useState<string>(
+    latestVisit?.transferrinSat != null ? String(latestVisit.transferrinSat) : ''
+  )
   const [rhythm, setRhythm] = useState<string>(
     latestVisit?.rhythm || 'Sinus Rhythm'
   )
@@ -172,6 +178,8 @@ export default function QuickDataEntryModal({
       const numNa = sodium ? parseFloat(sodium) : undefined
       const numNtBnp = ntProBNP ? parseFloat(ntProBNP) : undefined
       const numHb = hb ? parseFloat(hb) : undefined
+      const numFerritin = ferritin ? parseFloat(ferritin) : undefined
+      const numTsat = transferrinSat ? parseFloat(transferrinSat) : undefined
       const num6mwt = sixMWT ? parseInt(sixMWT, 10) : undefined
       const numCr = creatinine ? parseFloat(creatinine) : undefined
       const computedEgfr = autoCalculatedEgfr ?? latestVisit?.egfr ?? undefined
@@ -198,6 +206,8 @@ export default function QuickDataEntryModal({
           sodium: numNa,
           ntProBNP: numNtBnp,
           hb: numHb,
+          ferritin: numFerritin,
+          transferrinSat: numTsat,
           hba1c: numHba1c,
           tft: numTft,
           sixMWT: num6mwt,
@@ -227,6 +237,8 @@ export default function QuickDataEntryModal({
           sodium: numNa,
           ntProBNP: numNtBnp,
           hb: numHb,
+          ferritin: numFerritin,
+          transferrinSat: numTsat,
           hba1c: numHba1c,
           tft: numTft,
           sixMWT: num6mwt,
@@ -633,6 +645,28 @@ export default function QuickDataEntryModal({
                   placeholder="6.3"
                   value={hba1c}
                   onChange={e => setHba1c(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Ferritin (µg/L)</label>
+                <input
+                  type="number"
+                  step="1"
+                  placeholder="120"
+                  value={ferritin}
+                  onChange={e => setFerritin(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">TSAT (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="25"
+                  value={transferrinSat}
+                  onChange={e => setTransferrinSat(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
                 />
               </div>

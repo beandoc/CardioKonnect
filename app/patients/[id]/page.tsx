@@ -1330,10 +1330,22 @@ export default function PatientDetailPage() {
                             {latest.hba1c != null ? `${latest.hba1c}%` : <span className="text-gray-500 font-normal">Not recorded</span>}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center py-1">
+                        <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
                           <span className="text-gray-400">TSH</span>
                           <span className="font-mono font-semibold text-white">
                             {latest.tft != null ? `${latest.tft} mIU/L` : <span className="text-gray-500 font-normal">Not recorded</span>}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
+                          <span className="text-gray-400">Serum Ferritin</span>
+                          <span className="font-mono font-semibold text-white">
+                            {latest.ferritin != null ? `${latest.ferritin} µg/L` : <span className="text-gray-500 font-normal">Not recorded</span>}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-gray-400">Transferrin Saturation (TSAT)</span>
+                          <span className="font-mono font-semibold text-white">
+                            {latest.transferrinSat != null ? `${latest.transferrinSat}%` : <span className="text-gray-500 font-normal">Not recorded</span>}
                           </span>
                         </div>
                       </div>
