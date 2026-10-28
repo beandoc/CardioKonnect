@@ -37,6 +37,9 @@ const CREDENTIAL_MAPPINGS: CredentialMapping[] = [
       normalize('Jayachandra'),
       normalize('test1234'),
       normalize('heart failure'),
+      normalize('cardiokonnect'),
+      normalize('cardio1234'),
+      normalize('admin'),
     ],
   },
   {

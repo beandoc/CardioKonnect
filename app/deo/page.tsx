@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import {
   Users, UserPlus, FileText, CheckCircle2, AlertTriangle, Search,
   RefreshCw, PlusCircle, ArrowRight, Activity, Heart, Shield,
-  ClipboardList, Edit3, Save, X, ChevronRight, Check, Sparkles,
+  ClipboardList, Edit3, Save, X, ChevronRight, ChevronLeft,
+  ChevronsLeft, ChevronsRight, Check, Sparkles,
   Database, Stethoscope, Layers, UploadCloud, LogOut, ArrowUpRight
 } from 'lucide-react'
 import { getPatients, getVisits, addPatient, addVisit, updateVisit, getAllLatestVisits } from '@/lib/firestore'
@@ -36,6 +37,20 @@ export default function DEOPortalPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
   const [editFormData, setEditFormData] = useState<Partial<VisitInput>>({})
+
+  // Worklist Pagination State
+  const [worklistPage, setWorklistPage] = useState(1)
+  const [worklistPageSize, setWorklistPageSize] = useState(10)
+
+  // Directory Pagination State
+  const [dirPage, setDirPage] = useState(1)
+  const [dirPageSize, setDirPageSize] = useState(12)
+
+  // Reset pagination when filter/search changes
+  useEffect(() => {
+    setWorklistPage(1)
+    setDirPage(1)
+  }, [searchQuery, filterGrade, worklistPageSize, dirPageSize])
 
   // New Patient Form State
   const [isRegistering, setIsRegistering] = useState(false)
@@ -161,6 +176,35 @@ export default function DEOPortalPage() {
       .sort((a, b) => a.completenessPct - b.completenessPct) // lowest completeness first for DEO action
   }, [processedPatients, searchQuery, filterGrade])
 
+  // Pagination for Worklist
+  const totalWorklistRows = worklistRows.length
+  const totalWorklistPages = Math.max(1, Math.ceil(totalWorklistRows / worklistPageSize))
+  const currentWorklistPage = Math.min(Math.max(1, worklistPage), totalWorklistPages)
+  const worklistStartIndex = (currentWorklistPage - 1) * worklistPageSize
+  const worklistEndIndex = Math.min(worklistStartIndex + worklistPageSize, totalWorklistRows)
+  const paginatedWorklistRows = useMemo(() => {
+    return worklistRows.slice(worklistStartIndex, worklistEndIndex)
+  }, [worklistRows, worklistStartIndex, worklistEndIndex])
+
+  // Directory Rows & Pagination
+  const directoryRows = useMemo(() => {
+    const query = searchQuery.toLowerCase()
+    return processedPatients.filter(row => {
+      const fullName = `${row.patient.firstName} ${row.patient.lastName}`.toLowerCase()
+      const mrn = (row.patient.mrn || row.patient.id).toLowerCase()
+      return fullName.includes(query) || mrn.includes(query)
+    })
+  }, [processedPatients, searchQuery])
+
+  const totalDirRows = directoryRows.length
+  const totalDirPages = Math.max(1, Math.ceil(totalDirRows / dirPageSize))
+  const currentDirPage = Math.min(Math.max(1, dirPage), totalDirPages)
+  const dirStartIndex = (currentDirPage - 1) * dirPageSize
+  const dirEndIndex = Math.min(dirStartIndex + dirPageSize, totalDirRows)
+  const paginatedDirRows = useMemo(() => {
+    return directoryRows.slice(dirStartIndex, dirEndIndex)
+  }, [directoryRows, dirStartIndex, dirEndIndex])
+
   // Overall Statistics
   const stats = useMemo(() => {
     const total = processedPatients.length
@@ -188,13 +232,16 @@ export default function DEOPortalPage() {
         height: visit.height,
         o2Sat: visit.o2Sat,
         oedema: visit.oedema || 'None',
-        nyha: visit.nyha || 'II',
-        lvef: visit.lvef,
+        nyha: (visit.nyha || patient.nyha || 'II') as VisitInput['nyha'],
+        hfType: (visit.hfType || patient.hfType || undefined) as VisitInput['hfType'],
+        rhythm: visit.rhythm || 'Sinus',
+        sixMWT: visit.sixMWT,
+        lvef: visit.lvef || patient.lvef,
         lvdd: visit.lvdd,
         tapse: visit.tapse,
         eEPrime: visit.eEPrime,
         rvsp: visit.rvsp,
-        rhythm: visit.rhythm || 'Sinus',
+        gls: visit.gls,
         qrsDuration: visit.qrsDuration,
         bbb: visit.bbb || '',
         creatinine: visit.creatinine,
@@ -216,10 +263,17 @@ export default function DEOPortalPage() {
       setEditFormData({
         visitDate: new Date().toISOString().split('T')[0],
         visitType: 'OPD',
-        nyha: 'II',
+        nyha: (patient.nyha || 'II') as VisitInput['nyha'],
+        hfType: (patient.hfType || undefined) as VisitInput['hfType'],
         oedema: 'None',
         rhythm: 'Sinus',
         bbb: '',
+        lvef: patient.lvef,
+        raasi: { prescribed: '' },
+        betaBlocker: { prescribed: '' },
+        mra: { prescribed: '' },
+        sglt2i: { prescribed: '' },
+        diuretic: { prescribed: '' },
       })
     }
     setIsEditModalOpen(true)
@@ -286,6 +340,16 @@ export default function DEOPortalPage() {
     const toastId = toast.loading('Registering new patient in registry...')
 
     try {
+      const comorbidities: string[] = []
+      if (regForm.comorbidHypertension) comorbidities.push('Hypertension')
+      if (regForm.comorbidDiabetes) comorbidities.push('Diabetes Mellitus')
+      if (regForm.comorbidCAD) comorbidities.push('Coronary Artery Disease')
+      if (regForm.comorbidCKD) comorbidities.push('Chronic Kidney Disease')
+      if (regForm.comorbidCOPD) comorbidities.push('COPD')
+
+      const lvefVal = regForm.lvef ? Number(regForm.lvef) : undefined
+      const inferredHfType = lvefVal !== undefined ? (lvefVal <= 40 ? 'HFrEF' : lvefVal <= 49 ? 'HFmrEF' : 'HFpEF') : undefined
+
       const patientInput: PatientInput = {
         mrn: regForm.mrn.trim() || generateMRN(),
         firstName: regForm.firstName.trim(),
@@ -301,12 +365,14 @@ export default function DEOPortalPage() {
         hospitalName: currentUser?.siteId === 'KANPUR_APEX' ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune',
         indexEtiology: [regForm.etiology],
         nyha: regForm.nyha,
-        lvef: regForm.lvef ? Number(regForm.lvef) : undefined,
+        lvef: lvefVal,
+        hfType: inferredHfType,
         comorbidHypertension: regForm.comorbidHypertension,
         comorbidDiabetes: regForm.comorbidDiabetes,
         comorbidCAD: regForm.comorbidCAD,
         comorbidCKD: regForm.comorbidCKD,
         comorbidCOPD: regForm.comorbidCOPD,
+        comorbidities,
       }
 
       const newId = await addPatient(patientInput)
@@ -317,7 +383,8 @@ export default function DEOPortalPage() {
           visitDate: new Date().toISOString().split('T')[0],
           visitType: 'OPD',
           nyha: regForm.nyha,
-          lvef: regForm.lvef ? Number(regForm.lvef) : undefined,
+          lvef: lvefVal,
+          hfType: inferredHfType,
           oedema: 'None',
           rhythm: 'Sinus',
           bbb: '',
@@ -626,7 +693,7 @@ export default function DEOPortalPage() {
                         </td>
                       </tr>
                     ) : (
-                      worklistRows.map(row => {
+                      paginatedWorklistRows.map(row => {
                         const fullName = `${row.patient.firstName} ${row.patient.lastName}`
                         const age = getAge(row.patient.dob) || row.patient.age || '—'
                         const isGradeCritical = row.dataGrade === 'C' || row.dataGrade === 'D'
@@ -709,6 +776,82 @@ export default function DEOPortalPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Worklist Pagination Footer */}
+              {totalWorklistRows > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-700/20 bg-slate-900/40 text-xs">
+                  <div className="flex items-center gap-3 text-gray-400">
+                    <span>
+                      Showing <strong className="text-white">{worklistStartIndex + 1}</strong> to{' '}
+                      <strong className="text-white">{worklistEndIndex}</strong> of{' '}
+                      <strong className="text-white">{totalWorklistRows}</strong> patients
+                    </span>
+                    <span className="text-gray-600 hidden sm:inline">|</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-400">Rows per page:</span>
+                      <select
+                        value={worklistPageSize}
+                        onChange={e => {
+                          setWorklistPageSize(Number(e.target.value))
+                          setWorklistPage(1)
+                        }}
+                        className="bg-slate-800 border border-gray-700/50 text-white rounded px-2 py-0.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={30}>30</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setWorklistPage(1)}
+                      disabled={currentWorklistPage === 1}
+                      className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                      title="First Page"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWorklistPage(p => Math.max(1, p - 1))}
+                      disabled={currentWorklistPage === 1}
+                      className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                      title="Previous Page"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center gap-1 px-2">
+                      <span className="font-semibold text-amber-400">Page {currentWorklistPage}</span>
+                      <span className="text-gray-500">of {totalWorklistPages}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setWorklistPage(p => Math.min(totalWorklistPages, p + 1))}
+                      disabled={currentWorklistPage === totalWorklistPages}
+                      className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                      title="Next Page"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWorklistPage(totalWorklistPages)}
+                      disabled={currentWorklistPage === totalWorklistPages}
+                      className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                      title="Last Page"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1019,10 +1162,70 @@ export default function DEOPortalPage() {
                 </div>
               </div>
 
+              {/* Clinical Assessment Grid */}
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3">2. Clinical Assessment & Functional Capacity</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">NYHA Class</label>
+                    <select
+                      value={encounterForm.nyha || ''}
+                      onChange={e => setEncounterForm({ ...encounterForm, nyha: e.target.value as any })}
+                      className="form-select w-full px-2.5 py-1.5 text-xs"
+                    >
+                      <option value="">Select Class</option>
+                      <option value="I">Class I</option>
+                      <option value="II">Class II</option>
+                      <option value="III">Class III</option>
+                      <option value="IV">Class IV</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">HF Phenotype</label>
+                    <select
+                      value={encounterForm.hfType || ''}
+                      onChange={e => setEncounterForm({ ...encounterForm, hfType: e.target.value as any })}
+                      className="form-select w-full px-2.5 py-1.5 text-xs"
+                    >
+                      <option value="">Select Phenotype</option>
+                      <option value="HFrEF">HFrEF (LVEF ≤40%)</option>
+                      <option value="HFmrEF">HFmrEF (LVEF 41–49%)</option>
+                      <option value="HFpEF">HFpEF (LVEF ≥50%)</option>
+                      <option value="HFimpEF">HFimpEF (Improved)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">Cardiac Rhythm</label>
+                    <select
+                      value={encounterForm.rhythm || 'Sinus'}
+                      onChange={e => setEncounterForm({ ...encounterForm, rhythm: e.target.value as any })}
+                      className="form-select w-full px-2.5 py-1.5 text-xs"
+                    >
+                      <option value="Sinus">Sinus Rhythm</option>
+                      <option value="AF">Atrial Fibrillation (AF)</option>
+                      <option value="Atrial Flutter">Atrial Flutter</option>
+                      <option value="VT">Ventricular Tachycardia (VT)</option>
+                      <option value="Paced">Paced</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">6MWT (metres)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 350"
+                      value={encounterForm.sixMWT ?? ''}
+                      onChange={e => setEncounterForm({ ...encounterForm, sixMWT: e.target.value ? Number(e.target.value) : undefined })}
+                      className="form-input w-full px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* 2D Echo & ECG Grid */}
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3">2. 2D Echocardiography & 12-Lead ECG</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3">3. 2D Echocardiography & 12-Lead ECG</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
                   <div>
                     <label className="form-label block text-[10px] mb-1">LVEF (%)</label>
                     <input
@@ -1075,6 +1278,17 @@ export default function DEOPortalPage() {
                     />
                   </div>
                   <div>
+                    <label className="form-label block text-[10px] mb-1">GLS (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. -14"
+                      value={encounterForm.gls ?? ''}
+                      onChange={e => setEncounterForm({ ...encounterForm, gls: e.target.value ? Number(e.target.value) : undefined })}
+                      className="form-input w-full px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                  <div>
                     <label className="form-label block text-[10px] mb-1">QRS (ms)</label>
                     <input
                       type="number"
@@ -1102,8 +1316,8 @@ export default function DEOPortalPage() {
 
               {/* Lab Parameters Grid */}
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3">3. Blood Laboratory Parameters</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-500 mb-3">4. Blood Laboratory Parameters</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-9 gap-3">
                   <div>
                     <label className="form-label block text-[10px] mb-1">Creatinine</label>
                     <input
@@ -1154,6 +1368,17 @@ export default function DEOPortalPage() {
                       placeholder="12.5"
                       value={encounterForm.hb ?? ''}
                       onChange={e => setEncounterForm({ ...encounterForm, hb: e.target.value ? Number(e.target.value) : undefined })}
+                      className="form-input w-full px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">HbA1c (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="6.5"
+                      value={encounterForm.hba1c ?? ''}
+                      onChange={e => setEncounterForm({ ...encounterForm, hba1c: e.target.value ? Number(e.target.value) : undefined })}
                       className="form-input w-full px-2.5 py-1.5 text-xs"
                     />
                   </div>
@@ -1275,56 +1500,124 @@ export default function DEOPortalPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {processedPatients
-                .filter(row => {
-                  const query = searchQuery.toLowerCase()
-                  const fullName = `${row.patient.firstName} ${row.patient.lastName}`.toLowerCase()
-                  const mrn = (row.patient.mrn || row.patient.id).toLowerCase()
-                  return fullName.includes(query) || mrn.includes(query)
-                })
-                .map(row => {
-                  const fullName = `${row.patient.firstName} ${row.patient.lastName}`
-                  const age = getAge(row.patient.dob) || row.patient.age || '—'
+              {paginatedDirRows.map(row => {
+                const fullName = `${row.patient.firstName} ${row.patient.lastName}`
+                const age = getAge(row.patient.dob) || row.patient.age || '—'
 
-                  return (
-                    <div key={row.patient.id} className="glass-card p-4 rounded-xl flex flex-col justify-between space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-white text-sm">{fullName}</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            row.dataGrade === 'A' ? 'badge-green' :
-                            row.dataGrade === 'B' ? 'badge-blue' :
-                            row.dataGrade === 'C' ? 'badge-amber' : 'badge-red'
-                          }`}>
-                            Grade {row.dataGrade} ({row.completenessPct}%)
-                          </span>
-                        </div>
-                        <div className="text-[11px] font-mono text-blue-500 mt-0.5">
-                          HID: {row.patient.mrn || row.patient.id.slice(0, 8)}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-2">
-                          {age} yrs · {row.patient.sex} · {row.patient.address || 'AICTS Pune'}
-                        </div>
-                        <div className="text-[11px] text-gray-500 mt-0.5 truncate">
-                          {row.patient.indexEtiology?.[0] || 'Heart Failure'}
-                        </div>
-                      </div>
-
-                      <div className="pt-3 border-t border-gray-700/20 flex items-center justify-between">
-                        <span className="text-[11px] text-gray-400">
-                          {row.visit ? `Last Visit: ${row.visit.visitDate}` : 'No visits recorded'}
+                return (
+                  <div key={row.patient.id} className="glass-card p-4 rounded-xl flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white text-sm">{fullName}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row.dataGrade === 'A' ? 'badge-green' :
+                          row.dataGrade === 'B' ? 'badge-blue' :
+                          row.dataGrade === 'C' ? 'badge-amber' : 'badge-red'
+                        }`}>
+                          Grade {row.dataGrade} ({row.completenessPct}%)
                         </span>
-                        <button
-                          onClick={() => openQuickEdit(row.patient, row.visit)}
-                          className="btn-outline px-2.5 py-1 rounded-lg text-xs font-semibold"
-                        >
-                          Quick Edit
-                        </button>
+                      </div>
+                      <div className="text-[11px] font-mono text-blue-500 mt-0.5">
+                        HID: {row.patient.mrn || row.patient.id.slice(0, 8)}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-2">
+                        {age} yrs · {row.patient.sex} · {row.patient.address || 'AICTS Pune'}
+                      </div>
+                      <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                        {row.patient.indexEtiology?.[0] || 'Heart Failure'}
                       </div>
                     </div>
-                  )
-                })}
+
+                    <div className="pt-3 border-t border-gray-700/20 flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">
+                        {row.visit ? `Last Visit: ${row.visit.visitDate}` : 'No visits recorded'}
+                      </span>
+                      <button
+                        onClick={() => openQuickEdit(row.patient, row.visit)}
+                        className="btn-outline px-2.5 py-1 rounded-lg text-xs font-semibold"
+                      >
+                        Quick Edit
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
+
+            {/* Directory Pagination Footer */}
+            {totalDirRows > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 rounded-xl glass-card text-xs">
+                <div className="flex items-center gap-3 text-gray-400">
+                  <span>
+                    Showing <strong className="text-white">{dirStartIndex + 1}</strong> to{' '}
+                    <strong className="text-white">{dirEndIndex}</strong> of{' '}
+                    <strong className="text-white">{totalDirRows}</strong> patients
+                  </span>
+                  <span className="text-gray-600 hidden sm:inline">|</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-400">Cards per page:</span>
+                    <select
+                      value={dirPageSize}
+                      onChange={e => {
+                        setDirPageSize(Number(e.target.value))
+                        setDirPage(1)
+                      }}
+                      className="bg-slate-800 border border-gray-700/50 text-white rounded px-2 py-0.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value={6}>6</option>
+                      <option value={12}>12</option>
+                      <option value={24}>24</option>
+                      <option value={48}>48</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setDirPage(1)}
+                    disabled={currentDirPage === 1}
+                    className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDirPage(p => Math.max(1, p - 1))}
+                    disabled={currentDirPage === 1}
+                    className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex items-center gap-1 px-2">
+                    <span className="font-semibold text-blue-400">Page {currentDirPage}</span>
+                    <span className="text-gray-500">of {totalDirPages}</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setDirPage(p => Math.min(totalDirPages, p + 1))}
+                    disabled={currentDirPage === totalDirPages}
+                    className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                    title="Next Page"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDirPage(totalDirPages)}
+                    disabled={currentDirPage === totalDirPages}
+                    className="p-1.5 rounded-lg btn-ghost disabled:opacity-30 disabled:pointer-events-none text-gray-400 hover:text-white"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1365,7 +1658,7 @@ export default function DEOPortalPage() {
               
               {/* Vitals Section */}
               <div>
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">Vital Signs & Physical State</h4>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">1. Vital Signs & Physical State</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                   <div>
                     <label className="form-label block text-[10px] mb-1">Systolic BP</label>
@@ -1433,10 +1726,70 @@ export default function DEOPortalPage() {
                 </div>
               </div>
 
+              {/* Clinical Assessment Section */}
+              <div>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">2. Clinical Assessment & Functional Capacity</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">NYHA Class</label>
+                    <select
+                      value={editFormData.nyha || ''}
+                      onChange={e => setEditFormData({ ...editFormData, nyha: e.target.value as any })}
+                      className="form-select w-full px-2.5 py-1.5 text-xs"
+                    >
+                      <option value="">Select NYHA</option>
+                      <option value="I">Class I (No limitation)</option>
+                      <option value="II">Class II (Slight limitation)</option>
+                      <option value="III">Class III (Marked limitation)</option>
+                      <option value="IV">Class IV (Inability / At rest)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">HF Phenotype</label>
+                    <select
+                      value={editFormData.hfType || ''}
+                      onChange={e => setEditFormData({ ...editFormData, hfType: e.target.value as any })}
+                      className="form-select w-full px-2.5 py-1.5 text-xs"
+                    >
+                      <option value="">Select Phenotype</option>
+                      <option value="HFrEF">HFrEF (LVEF ≤40%)</option>
+                      <option value="HFmrEF">HFmrEF (LVEF 41–49%)</option>
+                      <option value="HFpEF">HFpEF (LVEF ≥50%)</option>
+                      <option value="HFimpEF">HFimpEF (Improved)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">Cardiac Rhythm</label>
+                    <select
+                      value={editFormData.rhythm || 'Sinus'}
+                      onChange={e => setEditFormData({ ...editFormData, rhythm: e.target.value as any })}
+                      className="form-select w-full px-2.5 py-1.5 text-xs"
+                    >
+                      <option value="Sinus">Sinus Rhythm</option>
+                      <option value="AF">Atrial Fibrillation (AF)</option>
+                      <option value="Atrial Flutter">Atrial Flutter</option>
+                      <option value="VT">Ventricular Tachycardia (VT)</option>
+                      <option value="Paced">Paced</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label block text-[10px] mb-1">6MWT (metres)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 380"
+                      value={editFormData.sixMWT ?? ''}
+                      onChange={e => setEditFormData({ ...editFormData, sixMWT: e.target.value ? Number(e.target.value) : undefined })}
+                      className="form-input w-full px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* 2D Echo & ECG Section */}
               <div>
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">2D Echocardiography & ECG Conduction</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">3. 2D Echocardiography & Conduction</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
                   <div>
                     <label className="form-label block text-[10px] mb-1">LVEF (%)</label>
                     <input
@@ -1489,6 +1842,17 @@ export default function DEOPortalPage() {
                     />
                   </div>
                   <div>
+                    <label className="form-label block text-[10px] mb-1">GLS (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. -14"
+                      value={editFormData.gls ?? ''}
+                      onChange={e => setEditFormData({ ...editFormData, gls: e.target.value ? Number(e.target.value) : undefined })}
+                      className="form-input w-full px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                  <div>
                     <label className="form-label block text-[10px] mb-1">QRS (ms)</label>
                     <input
                       type="number"
@@ -1516,8 +1880,8 @@ export default function DEOPortalPage() {
 
               {/* Labs Section */}
               <div>
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">Blood Laboratory Values</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">4. Blood Laboratory Values</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-9 gap-3">
                   <div>
                     <label className="form-label block text-[10px] mb-1">Creatinine</label>
                     <input
@@ -1572,6 +1936,17 @@ export default function DEOPortalPage() {
                     />
                   </div>
                   <div>
+                    <label className="form-label block text-[10px] mb-1">HbA1c (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="%"
+                      value={editFormData.hba1c ?? ''}
+                      onChange={e => setEditFormData({ ...editFormData, hba1c: e.target.value ? Number(e.target.value) : undefined })}
+                      className="form-input w-full px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                  <div>
                     <label className="form-label block text-[10px] mb-1">NT-proBNP</label>
                     <input
                       type="number"
@@ -1601,6 +1976,40 @@ export default function DEOPortalPage() {
                       className="form-input w-full px-2.5 py-1.5 text-xs"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* 4-Pillar GDMT Section */}
+              <div>
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-500 mb-2">5. Guideline-Directed Medical Therapy (GDMT)</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { key: 'raasi', title: '1. RAASi / ARNI', defaultDrug: 'Sacubitril/Valsartan' },
+                    { key: 'betaBlocker', title: '2. Beta-Blocker', defaultDrug: 'Bisoprolol' },
+                    { key: 'mra', title: '3. MRA Antagonist', defaultDrug: 'Spironolactone' },
+                    { key: 'sglt2i', title: '4. SGLT2 Inhibitor', defaultDrug: 'Dapagliflozin' },
+                  ].map(pillar => (
+                    <div key={pillar.key} className="p-3 rounded-xl dark-card space-y-1.5">
+                      <div className="text-[11px] font-bold text-white">{pillar.title}</div>
+                      <select
+                        value={(editFormData as any)[pillar.key]?.prescribed ?? ''}
+                        onChange={e => setEditFormData({
+                          ...editFormData,
+                          [pillar.key]: {
+                            ...(editFormData as any)[pillar.key],
+                            prescribed: e.target.value,
+                            type: e.target.value === 'Yes' ? pillar.defaultDrug : undefined
+                          }
+                        })}
+                        className="form-select w-full px-2 py-1 text-xs"
+                      >
+                        <option value="">Not recorded</option>
+                        <option value="Yes">Prescribed (Yes)</option>
+                        <option value="No">Not Prescribed (No)</option>
+                        <option value="Contraindicated">Contraindicated</option>
+                      </select>
+                    </div>
+                  ))}
                 </div>
               </div>
 
