@@ -125,20 +125,22 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Username Input */}
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wider font-semibold text-gray-300">
-                Clinical User ID / Username
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-gray-300">
+                  Clinical User ID / Username
+                </label>
+                <span className="text-[10px] text-gray-500 font-normal">Optional with registry password</span>
+              </div>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
                   <User className="w-4 h-4" />
                 </span>
                 <input
                   type="text"
-                  required
                   disabled={loading}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your registered clinical ID"
+                  placeholder="e.g. cardiokonnect, cathlab, or clinical ID"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-700/60 bg-[#070e1b]/90 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition duration-200 text-xs"
                 />
               </div>
@@ -174,7 +176,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading || !username || !password}
+              disabled={loading || !password}
               className="w-full py-3 rounded-xl font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer mt-2"
             >
               {loading ? (
@@ -190,6 +192,46 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Quick Registry Select Presets */}
+          <div className="mt-5 pt-4 border-t border-gray-800/60">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold mb-2.5 text-center">
+              Quick Registry Access Presets
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-left">
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername('cardiokonnect')
+                  setPassword('DR A Jayachandra')
+                }}
+                className="p-2.5 rounded-xl bg-blue-950/30 border border-blue-500/25 hover:border-blue-500/60 hover:bg-blue-900/30 transition text-left group cursor-pointer focus:outline-none"
+              >
+                <div className="text-[11px] font-bold text-blue-300 group-hover:text-blue-200 flex items-center justify-between">
+                  <span>Heart Failure</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 group-hover:bg-blue-500/30">Select</span>
+                </div>
+                <div className="text-[10px] text-gray-300 mt-1 font-medium truncate">Dr. A. Jayachandra</div>
+                <div className="text-[9px] text-gray-400 mt-0.5 truncate">AICTS, Pune</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername('cathlab')
+                  setPassword('Dr Rajeev chauhan')
+                }}
+                className="p-2.5 rounded-xl bg-amber-950/25 border border-amber-500/25 hover:border-amber-500/60 hover:bg-amber-900/30 transition text-left group cursor-pointer focus:outline-none"
+              >
+                <div className="text-[11px] font-bold text-amber-300 group-hover:text-amber-200 flex items-center justify-between">
+                  <span>Cath Lab / PCI</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 group-hover:bg-amber-500/30">Select</span>
+                </div>
+                <div className="text-[10px] text-gray-300 mt-1 font-medium truncate">Dr. Rajeev Chauhan</div>
+                <div className="text-[9px] text-gray-400 mt-0.5 truncate">Apex Hospital Kanpur</div>
+              </button>
+            </div>
+          </div>
 
           {/* Secure indicator footer */}
           <div className="mt-6 pt-4 border-t border-gray-800/60 flex items-center justify-center gap-2 text-[10px] text-gray-400 uppercase tracking-wider">

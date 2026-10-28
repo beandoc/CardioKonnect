@@ -159,7 +159,11 @@ export const APP_USERS: Record<string, AppUser> = {
     email: 'jayachandra.a@aicts.in',
     role: 'RegistryOwner',
     siteId: 'AICTS_PUNE',
-    loginUsernames: ['cardiokonnect', 'cardioconnect', 'doctor', 'dr.jayachandra', 'jayachandra', 'aicts'],
+    loginUsernames: [
+      'cardiokonnect', 'cardioconnect', 'doctor', 'dr.jayachandra', 'jayachandra', 'aicts',
+      'dr a jayachandra', 'dr. a. jayachandra', 'dr. a jayachandra', 'dr a. jayachandra',
+      'dr jayachandra', 'dr_jayachandra', 'drajayachandra', 'heart failure', 'hf', 'aicts pune'
+    ],
     registryAccess: ['hf', 'acs', 'preventive', 'arrhythmia', 'structural'],
     piOf: ['hf', 'acs', 'preventive'],
   },
