@@ -815,7 +815,7 @@ export function subscribeVisits(
 // Only field names are logged, never clinical values or identifiers.
 
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'IMPORT' | 'VIEW' | 'LOGIN' | 'LOGOUT'
-export type AuditEntity = 'procedure' | 'patient' | 'visit' | 'outcome' | 'session' | 'report' | 'registry' | 'alert'
+export type AuditEntity = 'procedure' | 'patient' | 'visit' | 'outcome' | 'session' | 'report' | 'registry' | 'alert' | 'appointment'
 
 function auditEntry(
   action: AuditAction,
@@ -1016,4 +1016,83 @@ export async function deleteCathProcedure(id: string, patientId?: string): Promi
   } catch (e) {
     console.error('deleteCathProcedure failed:', e)
   }
+}
+
+// ─── Appointments ────────────────────────────────────────────────────────────
+
+export interface AppointmentDoc {
+  id: string
+  appointmentId: string
+  patientId: string
+  patientName: string
+  mrn: string
+  dateAndTime: string
+  type: string
+  registry: string
+  facility: string
+  doctor: string
+  status: 'Today' | 'Upcoming' | 'Completed' | 'Pending Acknowledgement' | 'Cancelled'
+  notes?: string
+  siteId: string
+  createdAt?: string
+}
+
+export type AppointmentInput = Omit<AppointmentDoc, 'id' | 'createdAt'>
+
+export async function getAppointments(): Promise<AppointmentDoc[]> {
+  const scope = requireScope()
+  try {
+    const q = scope.global
+      ? query(collection(db, 'appointments'), orderBy('dateAndTime', 'desc'))
+      : query(collection(db, 'appointments'), where('siteId', '==', scope.siteId), orderBy('dateAndTime', 'desc'))
+    const snap = await getDocs(q)
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as AppointmentDoc))
+  } catch {
+    const snap = await getDocs(
+      scope.global
+        ? collection(db, 'appointments')
+        : query(collection(db, 'appointments'), where('siteId', '==', scope.siteId))
+    )
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as AppointmentDoc))
+    return list.sort((a, b) => (b.dateAndTime || '').localeCompare(a.dateAndTime || ''))
+  }
+}
+
+export async function addAppointment(input: AppointmentInput): Promise<string> {
+  const scope = requireScope()
+  const siteId = input.siteId || scope.siteId
+  const clean = cleanForFirestore(input)
+  const ref = doc(collection(db, 'appointments'))
+  const batch = writeBatch(db)
+  batch.set(ref, {
+    ...clean,
+    siteId,
+    createdAt: serverTimestamp(),
+  })
+  stageAudit(batch, 'CREATE', 'appointment', ref.id, input.patientId, clean)
+  await batch.commit()
+  return ref.id
+}
+
+export async function updateAppointmentStatus(
+  id: string,
+  status: AppointmentDoc['status'],
+  patientId: string
+): Promise<void> {
+  const ref = doc(db, 'appointments', id)
+  const batch = writeBatch(db)
+  batch.update(ref, {
+    status,
+    updatedAt: serverTimestamp(),
+  })
+  stageAudit(batch, 'UPDATE', 'appointment', id, patientId, { status })
+  await batch.commit()
+}
+
+export async function deleteAppointment(id: string, patientId: string): Promise<void> {
+  const ref = doc(db, 'appointments', id)
+  const batch = writeBatch(db)
+  batch.delete(ref)
+  stageAudit(batch, 'DELETE', 'appointment', id, patientId)
+  await batch.commit()
 }
