@@ -144,8 +144,7 @@ export interface AppUser {
   email: string
   role: AppRole
   siteId: string           // Primary hospital affiliation
-  loginUsernames: string[] // Accepted username logins
-  defaultPassword: string  // Hardcoded demo password
+  loginUsernames: string[] // Username aliases that resolve to `email` at login
   /** Registry IDs this user has access to. SuperAdmin sees all. Empty = no registry access. */
   registryAccess: string[]
   /** If PI: the registry IDs they are PI for (subset of registryAccess) */
@@ -161,7 +160,6 @@ export const APP_USERS: Record<string, AppUser> = {
     role: 'RegistryOwner',
     siteId: 'AICTS_PUNE',
     loginUsernames: ['cardiokonnect', 'cardioconnect', 'doctor', 'dr.jayachandra', 'jayachandra', 'aicts'],
-    defaultPassword: 'test1234',
     registryAccess: ['hf', 'acs', 'preventive', 'arrhythmia', 'structural'],
     piOf: ['hf', 'acs', 'preventive'],
   },
@@ -173,13 +171,11 @@ export const APP_USERS: Record<string, AppUser> = {
     role: 'PI',
     siteId: 'KANPUR_APEX',
     loginUsernames: [
-      'cardiokonnect', 'cardioconnect', 'doctor',
       'dr.rajeev', 'dr. rajeev', 'dr rajeev', 'dr.rajeev.chauhan', 'dr.rajeevchauhan', 'dr rajeev chauhan', 'dr. rajeev chauhan',
       'dr.chauhan', 'dr chauhan', 'dr. chauhan',
       'rajeev', 'chauhan', 'rajeev.chauhan', 'rajeevchauhan', 'rajeev chauhan',
       'apexkanpur', 'apex', 'kanpur', 'cathlab', 'cathlab1234', 'pci'
     ],
-    defaultPassword: 'cathlab1234',
     // Can see Registry Home (all registries) but only access cathlab data
     registryAccess: ['cathlab'],
     piOf: ['cathlab'],
@@ -192,7 +188,6 @@ export const APP_USERS: Record<string, AppUser> = {
     role: 'Cardiologist',
     siteId: 'AICTS_PUNE',
     loginUsernames: ['dr.nitin', 'nitin', 'nitin.sharma'],
-    defaultPassword: 'nitin1234',
     registryAccess: ['hf', 'acs'],
     piOf: [],
   },
@@ -204,7 +199,6 @@ export const APP_USERS: Record<string, AppUser> = {
     role: 'SeniorResident',
     siteId: 'AICTS_PUNE',
     loginUsernames: ['dr.arshdeep', 'arshdeep'],
-    defaultPassword: 'arsh1234',
     registryAccess: ['hf'],
     piOf: [],
   },
@@ -214,26 +208,23 @@ export const APP_USERS: Record<string, AppUser> = {
 export const USER_LIST = Object.values(APP_USERS)
 
 /**
- * Validates login credentials against hardcoded user registry.
+ * Resolves a username alias or email to the account email used for Firebase Auth.
+ * Passwords are never stored or checked client-side.
  */
-export function authenticateUser(usernameInput: string, passwordInput: string): AppUser | null {
+export function resolveLoginEmail(usernameInput: string): string | null {
   const u = usernameInput.trim().toLowerCase()
-  const p = passwordInput.trim()
-
-  // 1. Direct match by username + password
-  for (const user of Object.values(APP_USERS)) {
-    const matchesUser = user.loginUsernames.some(name => name.toLowerCase() === u) || user.email.toLowerCase() === u
-    if (matchesUser && user.defaultPassword === p) {
-      return user
+  if (!u) return null
+  for (const user of USER_LIST) {
+    if (user.email.toLowerCase() === u || user.loginUsernames.some(name => name.toLowerCase() === u)) {
+      return user.email
     }
   }
+  return u.includes('@') ? u : null
+}
 
-  // 2. Unambiguous password-based match (e.g. cathlab1234 uniquely belongs to Dr. Rajeev Chauhan)
-  for (const user of Object.values(APP_USERS)) {
-    if (user.defaultPassword === p) {
-      return user
-    }
-  }
-
-  return null
+/** Maps an authenticated Firebase account email to its directory entry. */
+export function findUserByEmail(email: string | null | undefined): AppUser | null {
+  if (!email) return null
+  const e = email.toLowerCase()
+  return USER_LIST.find(user => user.email.toLowerCase() === e) ?? null
 }

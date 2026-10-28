@@ -8,6 +8,7 @@ import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { addProcedure, updateProcedure } from '@/lib/firestore'
+import { ACCESS_SITE_TYPES, complicationFormDefaults, complicationItemsFromForm } from '@/lib/complications'
 import type { Patient, CathProcedure, CathProcedureInput } from '@/lib/types'
 import { AHA_CORONARY_SEGMENTS, type LesionRecord, type DeviceRecord } from '@/lib/interventionalTypes'
 import { useAppUser } from '@/context/AppUserContext'
@@ -81,6 +82,8 @@ const deviceSchema = z.object({
   serialOrLotNumber: z.string().optional(),
 })
 
+const emptyToUndefined = (v: unknown) => (v === '' || v === null || Number.isNaN(v) ? undefined : v)
+
 const procedureFormSchema = z.object({
   siteId: z.string().min(1, 'Site ID required'),
   operatorId: z.string().min(1, 'Operator ID required'),
@@ -142,12 +145,12 @@ const procedureFormSchema = z.object({
   p2y12LoadingDoseGiven: z.boolean().default(true),
   gpIIbIIIaUsed: z.boolean().default(false),
   anticoagulant: z.enum(['Unfractionated Heparin', 'Bivalirudin', 'Enoxaparin', 'None']).default('Unfractionated Heparin'),
-  peakActSeconds: z.coerce.number().optional(),
+  peakActSeconds: z.preprocess(emptyToUndefined, z.coerce.number().optional()),
 
   // Radiation & Exposure
-  contrastVolumeMl: z.coerce.number().min(0).max(1000, 'Max contrast is 1000 mL').default(150),
+  contrastVolumeMl: z.preprocess(emptyToUndefined, z.coerce.number().min(0).max(1000, 'Max contrast is 1000 mL').optional()),
   contrastAgent: z.enum(['Iso-osmolar (e.g. Visipaque)', 'Low-osmolar (e.g. Omnipaque, Ultravist)']).default('Low-osmolar (e.g. Omnipaque, Ultravist)'),
-  fluoroscopyTimeMin: z.coerce.number().min(0).max(240, 'Max fluoro time 240 min').default(12),
+  fluoroscopyTimeMin: z.preprocess(emptyToUndefined, z.coerce.number().min(0).max(240, 'Max fluoro time 240 min').optional()),
   dapGyCm2: z.coerce.number().optional(),
   airKermaMGy: z.coerce.number().optional(),
 
@@ -157,6 +160,18 @@ const procedureFormSchema = z.object({
   perforationEllis: z.enum(['None', 'Class I', 'Class II', 'Class III', 'Class CS (Cavity Spilling)']).default('None'),
   sideBranchLoss: z.boolean().default(false),
   acuteStentThrombosis: z.boolean().default(false),
+
+  // In-hospital clinical complications (stored as CathComplicationItem[])
+  compDeath: z.enum(['None', 'Intra-procedural', 'Post-procedural']).default('None'),
+  compEmergencyCabg: z.boolean().default(false),
+  compStroke: z.boolean().default(false),
+  compTamponade: z.boolean().default(false),
+  compPeriMi: z.boolean().default(false),
+  compVentArrhythmia: z.boolean().default(false),
+  compContrastReaction: z.boolean().default(false),
+  compAccessSite: z.enum(['None', ...ACCESS_SITE_TYPES]).default('None'),
+  compBarc: z.enum(['None', '1', '2', '3a', '3b', '3c', '4', '5a', '5b']).default('None'),
+  compAkiStage: z.enum(['None', '1', '2', '3']).default('None'),
 
   // Disposition
   dischargeDate: z.string().optional(),
@@ -301,46 +316,8 @@ export default function ProcedureForm({ patient, procedureToEdit, onClose, onSuc
     ffrIfrDone: procedureToEdit?.ffrIfrDone ?? false,
     ffrIfrValues: procedureToEdit?.ffrIfrValues || '',
 
-    lesions: (procedureToEdit?.lesions as any) || [
-      {
-        id: 'lesion-1',
-        segmentNumber: 6, // LAD Proximal
-        vessel: 'LAD',
-        lesionOrder: 1,
-        preStenosisPct: 90,
-        postStenosisPct: 0,
-        lesionLengthMm: 24,
-        referenceVesselDiameterMm: 3.0,
-        accAhaClass: 'B2',
-        bifurcation: false,
-        ostial: false,
-        cto: false,
-        inStentRestenosis: false,
-        calcification: 'Mild',
-        thrombusGrade: 2,
-        tortuosity: 'None',
-        culprit: true,
-        treated: true,
-        preTimiFlow: 1,
-        postTimiFlow: 3,
-        deviceIds: ['dev-1'],
-      }
-    ],
-    devices: (procedureToEdit?.devices as any) || [
-      {
-        id: 'dev-1',
-        targetSegment: 6,
-        type: 'DES',
-        make: 'Abbott',
-        model: 'Xience Sierra',
-        diameterMm: 3.0,
-        lengthMm: 28,
-        deploymentPressureAtm: 14,
-        postDilatation: true,
-        postDilatationPressureAtm: 18,
-        serialOrLotNumber: 'SN-94812'
-      }
-    ],
+    lesions: (procedureToEdit?.lesions as any) || [],
+    devices: (procedureToEdit?.devices as any) || [],
 
     thrombectomyDone: procedureToEdit?.thrombectomyDone ?? false,
     atherectomyDone: procedureToEdit?.atherectomyDone ?? false,
@@ -354,11 +331,11 @@ export default function ProcedureForm({ patient, procedureToEdit, onClose, onSuc
     p2y12LoadingDoseGiven: procedureToEdit?.p2y12LoadingDoseGiven ?? true,
     gpIIbIIIaUsed: procedureToEdit?.gpIIbIIIaUsed ?? false,
     anticoagulant: procedureToEdit?.anticoagulant || 'Unfractionated Heparin',
-    peakActSeconds: procedureToEdit?.peakActSeconds || 280,
+    peakActSeconds: procedureToEdit?.peakActSeconds ?? undefined,
 
-    contrastVolumeMl: procedureToEdit?.contrastVolumeMl || 140,
+    contrastVolumeMl: procedureToEdit?.contrastVolumeMl ?? undefined,
     contrastAgent: procedureToEdit?.contrastAgent || 'Low-osmolar (e.g. Omnipaque, Ultravist)',
-    fluoroscopyTimeMin: procedureToEdit?.fluoroscopyTimeMin || 11,
+    fluoroscopyTimeMin: procedureToEdit?.fluoroscopyTimeMin ?? undefined,
     dapGyCm2: procedureToEdit?.dapGyCm2 || undefined,
     airKermaMGy: procedureToEdit?.airKermaMGy || undefined,
 
@@ -367,6 +344,7 @@ export default function ProcedureForm({ patient, procedureToEdit, onClose, onSuc
     perforationEllis: procedureToEdit?.perforationEllis || 'None',
     sideBranchLoss: procedureToEdit?.sideBranchLoss ?? false,
     acuteStentThrombosis: procedureToEdit?.acuteStentThrombosis ?? false,
+    ...complicationFormDefaults(procedureToEdit?.complications),
 
     dischargeDate: procedureToEdit?.dischargeDate || '',
     dischargeDaptAgent: procedureToEdit?.dischargeDaptAgent || 'Aspirin + Ticagrelor',
@@ -432,24 +410,21 @@ export default function ProcedureForm({ patient, procedureToEdit, onClose, onSuc
   const watchContrastVolume = watch('contrastVolumeMl')
   const watchArrival = watch('hospitalArrival')
   const watchFirstDevice = watch('firstDevice')
+  const watchArterialAccess = watch('arterialAccess')
   const watchNoReflow = watch('noReflow')
   const watchLesions = watch('lesions')
 
   // Live Derived Door-to-Balloon in UI
-  const liveDtb = useMemo(() => {
-    if (!watchArrival || !watchFirstDevice) return null
-    const arr = new Date(watchArrival).getTime()
-    const dev = new Date(watchFirstDevice).getTime()
-    if (isNaN(arr) || isNaN(dev)) return null
-    const diff = Math.round((dev - arr) / 60000)
-    return diff >= 0 ? diff : null
-  }, [watchArrival, watchFirstDevice])
+  const liveDtb = useMemo(
+    () => calculateDoorToBalloonMin({ hospitalArrival: watchArrival, firstDevice: watchFirstDevice, arterialAccess: watchArterialAccess } as CathProcedure),
+    [watchArrival, watchFirstDevice, watchArterialAccess]
+  )
 
-  // Mehran contrast threshold warning
-  const weightKg = (patient as any).weight || 65
-  const serumCr = (patient as any).creatinine || 1.1
-  const mehranContrastCap = Math.min(300, Math.round((5 * weightKg) / serumCr))
-  const isContrastOverCap = watchContrastVolume > mehranContrastCap
+  // Maximum acceptable contrast dose (5 × weight / creatinine) — only when both are recorded
+  const weightKg: number | undefined = (patient as any).weight
+  const serumCr: number | undefined = (patient as any).creatinine
+  const mehranContrastCap = weightKg && serumCr ? Math.min(300, Math.round((5 * weightKg) / serumCr)) : null
+  const isContrastOverCap = mehranContrastCap != null && watchContrastVolume != null && watchContrastVolume > mehranContrastCap
 
   // Segment click handler
   const handleSegmentStenosisChange = (segNum: number, stenosis: number) => {
@@ -568,9 +543,26 @@ export default function ProcedureForm({ patient, procedureToEdit, onClose, onSuc
 
         contrastVolumeMl: data.contrastVolumeMl,
         contrastAgent: data.contrastAgent,
+        contrastType: data.contrastAgent.includes('Iso-osmolar') ? 'Iso-osmolar' : 'Low-osmolar',
         fluoroscopyTimeMin: data.fluoroscopyTimeMin,
+        fluoroscopyTimeMinutes: data.fluoroscopyTimeMin,
         dapGyCm2: data.dapGyCm2,
         airKermaMGy: data.airKermaMGy,
+        radiationAirKermaGy: data.airKermaMGy != null ? data.airKermaMGy / 1000 : undefined,
+        doseAreaProductGyCm2: data.dapGyCm2,
+
+        procedureType: (data.lesions.some(l => l.treated) || data.devices.length > 0)
+          ? 'Percutaneous Coronary Intervention (PCI)'
+          : 'Coronary Angiography (Diagnostic)',
+        clinicalIndication: data.presentation === 'ChronicCoronarySyndrome' ? 'Chronic Coronary Syndrome' : data.presentation,
+        doorToBalloonMin: liveDtb,
+        stemiTimelines: {
+          dtbMinutes: liveDtb,
+          presentationType: data.presentation,
+        },
+        overallSuccess: (data.noReflow || data.acuteStentThrombosis) ? false : (
+          data.lesions.length === 0 ? true : data.lesions.filter(l => l.treated).every(l => l.postTimiFlow === 3 && l.postStenosisPct < 20)
+        ),
 
         noReflow: data.noReflow,
         dissectionNhlbi: data.dissectionNhlbi,
@@ -578,7 +570,11 @@ export default function ProcedureForm({ patient, procedureToEdit, onClose, onSuc
         sideBranchLoss: data.sideBranchLoss,
         acuteStentThrombosis: data.acuteStentThrombosis,
 
-        complications: [] as any,
+        complications: complicationItemsFromForm(data, procedureToEdit?.complications),
+        // A legacy flag-object audit is retained verbatim rather than lossily converted.
+        ...(procedureToEdit?.complications && !Array.isArray(procedureToEdit.complications)
+          ? { complicationsLegacy: procedureToEdit.complications }
+          : {}),
 
         dischargeDate: data.dischargeDate || undefined,
         dischargeDaptAgent: data.dischargeDaptAgent as any,
@@ -1237,6 +1233,61 @@ export default function ProcedureForm({ patient, procedureToEdit, onClose, onSuc
                   <span>Acute Stent Thrombosis</span>
                 </label>
               </div>
+
+              <h3 className="text-sm font-bold text-white border-b border-white/5 pb-2 pt-2">In-Hospital Clinical Complications</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <FieldWrap label="In-Hospital Death">
+                  <Select {...register('compDeath')}>
+                    <option value="None">None</option>
+                    <option value="Intra-procedural">Intra-procedural (in-lab)</option>
+                    <option value="Post-procedural">Post-procedural, before discharge</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="BARC Bleeding">
+                  <Select {...register('compBarc')}>
+                    <option value="None">None</option>
+                    {['1', '2', '3a', '3b', '3c', '4', '5a', '5b'].map(t => <option key={t} value={t}>BARC {t}</option>)}
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="Access-Site Complication">
+                  <Select {...register('compAccessSite')}>
+                    <option value="None">None</option>
+                    <option value="access-site-haematoma">Haematoma</option>
+                    <option value="access-site-pseudoaneurysm">Pseudoaneurysm</option>
+                    <option value="access-site-av-fistula">AV fistula</option>
+                    <option value="access-site-retroperitoneal">Retroperitoneal bleed</option>
+                    <option value="access-site-limb-ischaemia">Limb ischaemia</option>
+                  </Select>
+                </FieldWrap>
+                <FieldWrap label="AKI (KDIGO Stage)">
+                  <Select {...register('compAkiStage')}>
+                    <option value="None">None</option>
+                    <option value="1">Stage 1</option>
+                    <option value="2">Stage 2</option>
+                    <option value="3">Stage 3</option>
+                  </Select>
+                </FieldWrap>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-slate-950/60 border border-white/5 text-xs">
+                {([
+                  ['compEmergencyCabg', 'Emergency CABG'],
+                  ['compPeriMi', 'Peri-procedural MI'],
+                  ['compStroke', 'Stroke / TIA'],
+                  ['compTamponade', 'Cardiac Tamponade'],
+                  ['compVentArrhythmia', 'Ventricular Arrhythmia'],
+                  ['compContrastReaction', 'Contrast Reaction'],
+                ] as const).map(([field, label]) => (
+                  <label key={field} className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" {...register(field)} className="rounded text-rose-500" />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              {procedureToEdit?.complications && !Array.isArray(procedureToEdit.complications) && (
+                <p className="text-[11px] text-amber-300">
+                  This record has a legacy complication audit; it is kept unchanged alongside anything entered above.
+                </p>
+              )}
 
               {/* Radiation Exposure */}
               <h3 className="text-sm font-bold text-white border-b border-white/5 pb-2 pt-2">Radiation &amp; Contrast Exposure</h3>

@@ -5,8 +5,8 @@ import {
   Heart, Activity, TrendingUp, TrendingDown, ShieldCheck,
   AlertTriangle, Info, CheckCircle2, ChevronRight, Stethoscope, Sparkles
 } from 'lucide-react'
-import { cn, getAge } from '@/lib/utils'
-import { computeMLRiskProfile, evaluateGDMT, generateClinicalAlerts } from '@/lib/clinicalIntelligence'
+import { cn } from '@/lib/utils'
+import { computeMLRiskProfile, evaluateGDMT, generateClinicalAlerts, buildMaggicInputs } from '@/lib/clinicalIntelligence'
 import { calculateMAGGIC } from '@/lib/riskScores'
 import type { Patient, Visit } from '@/lib/types'
 
@@ -29,41 +29,9 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
   const gdmt = useMemo(() => evaluateGDMT(patient, visit), [patient, visit])
   const alerts = useMemo(() => generateClinicalAlerts(patient, visit, allVisits), [patient, visit, allVisits])
 
-  const age = (patient.dob ? getAge(patient.dob) : null) || patient.age || 65
-  const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
-
-  // Calculate exact validated MAGGIC scores
-  const maggic = useMemo(() => {
-    try {
-      const bmi = (visit.weight && visit.height)
-        ? visit.weight / ((visit.height / 100) ** 2)
-        : (visit.bmi ?? (visit.weight ? visit.weight / (1.65 ** 2) : 24))
-
-      return calculateMAGGIC({
-        age,
-        lvef: visit.lvef ?? patient.lvef ?? 35,
-        systolicBP: visit.bpSystolic ?? 120,
-        bmi: Math.round(bmi * 10) / 10,
-        creatinine: visit.creatinine ?? 1.1,
-        nyha: (visit.nyha || patient.nyha || 'II') as any,
-        sex: (patient.sex === 'Female' ? 'Female' : 'Male') as any,
-        diabetesMellitus: Boolean(patient.comorbidDiabetes || comorbStr.includes('dm') || comorbStr.includes('diabetes')),
-        currentSmoker: false,
-        copd: Boolean(patient.comorbidCOPD || comorbStr.includes('copd')),
-        heartFailureDiagnosisYears: 2,
-        betaBlocker: visit.betaBlocker?.prescribed === 'Yes',
-        aceInhibitorOrArb: visit.raasi?.prescribed === 'Yes',
-      })
-    } catch {
-      return {
-        score: 22,
-        oneYearMortality: 0.104,
-        threeYearMortality: 0.268,
-        fiveYearMortality: 0.38,
-        riskCategory: 'Intermediate' as const
-      }
-    }
-  }, [patient, visit, age, comorbStr])
+  // Same recorded-data inputs as the risk profile; defaulted inputs are disclosed below.
+  const maggicBuild = useMemo(() => buildMaggicInputs(patient, visit), [patient, visit])
+  const maggic = useMemo(() => calculateMAGGIC(maggicBuild.input), [maggicBuild])
 
   const colors = RISK_COLORS[risk.riskCategory]
   const criticalAlerts = alerts.filter(a => a.severity === 'critical')
@@ -76,7 +44,9 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
         <Activity className={cn('w-5 h-5 flex-shrink-0', colors.text)} />
         <div className="flex-1 min-w-0">
           <p className="text-xs text-gray-400">Research Exploratory Risk</p>
-          <p className={cn('text-sm font-bold', colors.text)}>{oneYrPct}% · {risk.riskCategory} Risk</p>
+          <p className={cn('text-sm font-bold', colors.text)}>
+            {risk.insufficientData ? 'Not estimable — ' + maggicBuild.missingCore.join(', ') + ' missing' : `${oneYrPct}% · ${risk.riskCategory} Risk${risk.imputedInputs.length ? ' (inputs defaulted)' : ''}`}
+          </p>
         </div>
         <span className="text-[9px] bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded px-1.5 py-0.5 font-medium">
           Research Only
@@ -97,9 +67,9 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
         {/* Subtle background glow */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-center gap-3">
-            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center border', colors.bg, colors.border)}>
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center border flex-shrink-0', colors.bg, colors.border)}>
               <Activity className={cn('w-5 h-5', colors.text)} />
             </div>
             <div>
@@ -112,24 +82,35 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
                   MAGGIC {maggic.score} pts
                 </span>
               </div>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className={cn('text-2xl font-extrabold', colors.text)}>{oneYrPct}%</span>
-                <span className="text-xs text-gray-400">1-year trial mortality</span>
-                <span className="text-gray-600">·</span>
-                <span className="text-sm font-bold text-gray-300">{threeYrPct}%</span>
-                <span className="text-xs text-gray-400">3-year</span>
-              </div>
+              {risk.insufficientData ? (
+                <p className="text-sm font-bold text-amber-300 mt-1">
+                  Not estimable — {maggicBuild.missingCore.join(' and ')} not recorded
+                </p>
+              ) : (
+                <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
+                  <span className={cn('text-2xl font-extrabold', colors.text)}>{oneYrPct}%</span>
+                  <span className="text-xs text-gray-400">1-year trial mortality</span>
+                  <span className="text-gray-600 hidden sm:inline">·</span>
+                  <span className="text-sm font-bold text-gray-300">{threeYrPct}%</span>
+                  <span className="text-xs text-gray-400">3-year</span>
+                </div>
+              )}
+              {!risk.insufficientData && risk.imputedInputs.length > 0 && (
+                <p className="text-[10px] text-amber-300/90 mt-1">
+                  Not recorded, population default used: {risk.imputedInputs.join(', ')}
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="text-right">
+          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-1 pt-1 sm:pt-0 border-t border-white/5 sm:border-t-0">
             <span className={cn(
-              'text-xs font-bold px-2.5 py-1 rounded-full border shadow-sm',
+              'text-xs font-bold px-2.5 py-1 rounded-full border shadow-sm whitespace-nowrap',
               colors.bg, colors.border, colors.text
             )}>
-              {risk.riskCategory} Risk
+              {risk.insufficientData ? 'Insufficient Data' : `${risk.riskCategory} Risk`}
             </span>
-            <p className="text-[10px] text-amber-300/80 mt-1.5 font-mono">Uncalibrated in India</p>
+            <p className="text-[10px] text-amber-300/80 font-mono whitespace-nowrap">Uncalibrated in India</p>
           </div>
         </div>
 
@@ -216,7 +197,7 @@ export default function MLRiskCard({ patient, visit, allVisits, compact = false 
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {gdmt.pillars.map(p => (
             <div key={p.drug} className={cn(
               'flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs border transition-colors',

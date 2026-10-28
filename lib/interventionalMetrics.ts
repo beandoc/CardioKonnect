@@ -10,6 +10,7 @@
  * Metrics return { value, numerator, denominator, definition } and suppress values below n=20.
  */
 
+import { complicationFlags } from './complications'
 import type { CathProcedure, LesionRecord, DeviceRecord } from './interventionalTypes'
 
 // ─── Time Intervals (Pure Functions over ISO timestamps) ──────────────────────
@@ -33,6 +34,22 @@ export function calculateDoorToBalloonMin(proc: CathProcedure): number | null {
   if (arrival === null || device === null) return null
   const diffMinutes = Math.round((device - arrival) / (1000 * 60))
   return diffMinutes >= 0 && diffMinutes <= 1440 ? diffMinutes : null
+}
+
+/**
+ * True when the procedure was a STEMI presentation. Older records only carry
+ * clinicalIndication, newer ones carry presentation.
+ */
+export function isStemiProcedure(proc: CathProcedure): boolean {
+  return proc.presentation === 'STEMI' || proc.clinicalIndication === 'STEMI'
+}
+
+/**
+ * Door-to-balloon from the recorded timestamps, falling back to the value
+ * saved with the procedure when the timestamps are missing.
+ */
+export function procedureDtbMin(proc: CathProcedure): number | null {
+  return calculateDoorToBalloonMin(proc) ?? proc.stemiTimelines?.dtbMinutes ?? proc.doorToBalloonMin ?? null
 }
 
 /**
@@ -157,15 +174,12 @@ export function calculateProceduralSuccess(proc: CathProcedure): boolean {
   const angioSuccess = calculateAngiographicSuccess(proc)
   if (!angioSuccess) return false
 
-  // Check for severe adverse events
-  const hasSevereComplication = (proc.complications || []).some((c: any) =>
-    c.type === 'in-hospital-death' ||
-    c.type === 'emergency-cabg' ||
-    c.type === 'stroke' ||
-    c.type === 'cardiac-tamponade'
-  )
+  // Check for severe adverse events (array, legacy-object and top-level CRF shapes)
+  const f = complicationFlags(proc)
+  const hasSevereComplication =
+    f.inLabDeath || f.inHospitalDeath || f.emergencyCabg || f.strokeOrTia || f.cardiacTamponade
 
-  return !hasSevereComplication && !proc.acuteStentThrombosis
+  return !hasSevereComplication && !f.acuteStentThrombosis
 }
 
 /**
@@ -276,12 +290,7 @@ export function calculateProceduralSuccessMetric(procs: CathProcedure[]): Regist
  */
 export function calculateMajorBleedingMetric(procs: CathProcedure[]): RegistryMetricResult {
   const denominator = procs.length
-  const numerator = procs.filter(p =>
-    (p.complications || []).some((c: any) =>
-      c.type === 'barc-bleeding' && (c.barcType === '3a' || c.barcType === '3b' || c.barcType === '3c' || c.barcType === '4' || c.barcType === '5a' || c.barcType === '5b')
-    ) ||
-    (p.complications || []).some((c: any) => c.type === 'access-site-retroperitoneal')
-  ).length
+  const numerator = procs.filter(p => complicationFlags(p).majorBleed).length
   const isSuppressed = denominator < MINIMUM_SAMPLE_SIZE
   const value = isSuppressed || denominator === 0 ? null : parseFloat(((numerator / denominator) * 100).toFixed(1))
 

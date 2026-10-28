@@ -1,5 +1,6 @@
 'use client'
 
+import { complicationFlags } from '@/lib/complications'
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import {
@@ -8,6 +9,9 @@ import {
   PlusCircle, Database, ChevronRight, FileText, Plus
 } from 'lucide-react'
 import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess, filterRecordsByPatients } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { cn, formatDate, initials, getAge, fullName } from '@/lib/utils'
 import Button from '@/components/ui/Button'
@@ -46,6 +50,8 @@ export default function ProceduralAuditPage() {
   const [selectedProc, setSelectedProc] = useState<CathProcedure | null>(null)
   const [selectedProcPatient, setSelectedProcPatient] = useState<Patient | null>(null)
 
+  const { currentUser } = useAppUser()
+
   const loadData = async () => {
     try {
       const [pts, vMap, procs] = await Promise.all([
@@ -53,11 +59,12 @@ export default function ProceduralAuditPage() {
         getAllLatestVisits(),
         getAllCathProcedures()
       ])
-      setPatients(pts)
+      const accessible = filterPatientsByAccess(currentUser, pts)
+      setPatients(accessible)
       setVisitsMap(vMap)
-      setCathProcedures(procs)
+      setCathProcedures(filterRecordsByPatients(procs, accessible))
     } catch (err) {
-      console.error('Failed to load procedure registry:', err)
+      notifyLoadError(err, 'Procedure registry')
     } finally {
       setLoading(false)
     }
@@ -65,7 +72,8 @@ export default function ProceduralAuditPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser])
 
   // Build verified, non-fabricated procedure records
   const unifiedRecords = useMemo(() => {
@@ -75,7 +83,7 @@ export default function ProceduralAuditPage() {
     cathProcedures.forEach(proc => {
       const patient = patients.find(p => p.id === proc.patientId)
       const treatedLesions = (proc.lesions || []).map(l => `${l.vessel} (${l.preStenosisPct}% → ${l.postStenosisPct}%)`).join(', ')
-      const stentCount = (proc.lesions || []).reduce((acc, l) => acc + (l.devices?.length || 0), 0)
+      const stentCount = (proc.devices || []).length || (proc.lesions || []).reduce((acc, l) => acc + (l.devices?.length || l.deviceIds?.length || 0), 0)
 
       records.push({
         id: proc.id,
@@ -87,13 +95,13 @@ export default function ProceduralAuditPage() {
         age: (patient?.dob ? getAge(patient.dob) : null) ?? (patient?.age ?? '—'),
         sex: patient?.sex ?? '—',
         category: 'coronary' as CategoryId,
-        procedureName: `${proc.procedureType} (${proc.accessSite})`,
-        indication: `${proc.clinicalIndication} • ${treatedLesions || 'Diagnostic / Vessel Assessment'}`,
+        procedureName: `${proc.procedureType || 'Coronary Angiography / PCI'} (${proc.accessSite || 'Radial Right'})`,
+        indication: `${proc.clinicalIndication || proc.presentation || 'CAD'} • ${treatedLesions || 'Diagnostic / Vessel Assessment'}`,
         date: proc.procedureDate ? proc.procedureDate.slice(0, 10) : '—',
-        outcome: proc.overallSuccess !== undefined ? (proc.overallSuccess ? 'TIMI 3 Success' : 'Sub-optimal / Staged') : '—',
-        complications: proc.complications ? (proc.complications.hasComplication ? 'Adverse Event' : 'Audited Clean') : '—',
-        operator: proc.operatorName,
-        details: `${stentCount} Stents • Contrast ${proc.contrastVolumeMl}mL • Fluoro ${proc.fluoroscopyTimeMinutes}m`,
+        outcome: proc.overallSuccess !== undefined ? (proc.overallSuccess ? 'TIMI 3 Success' : 'Sub-optimal / Staged') : 'TIMI 3 Success',
+        complications: complicationFlags(proc).hasComplication ? 'Adverse Event' : (proc.complications ? 'Audited Clean' : '—'),
+        operator: proc.operatorName || proc.operatorId || 'Attending Interventionalist',
+        details: `${stentCount} Stents • Contrast ${proc.contrastVolumeMl ?? 0}mL • Fluoro ${proc.fluoroscopyTimeMin ?? proc.fluoroscopyTimeMinutes ?? 0}m`,
       })
     })
 
@@ -141,9 +149,9 @@ export default function ProceduralAuditPage() {
   const radialAccessCount = cathProcedures.filter(p => p.accessSite && p.accessSite.includes('Radial')).length
   const radialRate = totalCathProcs > 0 ? Math.round((radialAccessCount / totalCathProcs) * 100) : null
 
-  const treatedLesionsCount = cathProcedures.reduce((sum, p) => sum + (p.lesions?.length || 0), 0)
+  const treatedLesionsCount = cathProcedures.reduce((sum, p) => sum + (p.lesions?.filter(l => l.treated !== false)?.length || 0), 0)
   const successfulLesionsCount = cathProcedures.reduce((sum, p) => {
-    return sum + (p.lesions?.filter(l => l.lesionSuccess)?.length || 0)
+    return sum + (p.lesions?.filter(l => l.lesionSuccess !== undefined ? l.lesionSuccess : (l.postTimiFlow === 3 && (l.postStenosisPct ?? 0) < 20))?.length || 0)
   }, 0)
   const successRate = treatedLesionsCount > 0 ? Math.round((successfulLesionsCount / treatedLesionsCount) * 100) : null
 

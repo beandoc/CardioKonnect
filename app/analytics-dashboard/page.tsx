@@ -1,4 +1,5 @@
 'use client'
+import { complicationFlags } from '@/lib/complications'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Activity, Users, Heart, BarChart3, TrendingUp, AlertTriangle, Zap,
@@ -11,6 +12,7 @@ import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/fir
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { useAppUser } from '@/context/AppUserContext'
 import { filterPatientsByAccess } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import CathStatisticalBenchmarking from '@/components/analytics/CathStatisticalBenchmarking'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -110,16 +112,16 @@ export default function AnalyticsDashboardPage() {
     Promise.all([
       getPatients(),
       getAllLatestVisits(),
-      getAllCathProcedures().catch(() => [] as CathProcedure[])
+      getAllCathProcedures()
     ])
       .then(([allPts, vmap, allProcs]) => {
-        const accessible = currentUser ? filterPatientsByAccess(currentUser, allPts) : allPts
+        const accessible = filterPatientsByAccess(currentUser, allPts)
         const accessibleIds = new Set(accessible.map(p => p.id))
         setPatients(accessible)
         setVisitMap(vmap)
         setProcedures(allProcs.filter(pr => accessibleIds.has(pr.patientId)))
       })
-      .catch(console.error)
+      .catch(err => notifyLoadError(err, 'Analytics'))
       .finally(() => setLoading(false))
   }, [currentUser])
 
@@ -135,10 +137,10 @@ export default function AnalyticsDashboardPage() {
     const allTreatedLesions = pciProcedures.flatMap(p => (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy'))
     const successfulLesions = pciProcedures.flatMap(p => {
       const hasMace = !!(
-        p.complications?.inLabDeath ||
-        p.complications?.emergencyCabg ||
-        p.complications?.acuteStentThrombosis ||
-        p.complications?.periproceduralMi
+        complicationFlags(p).inLabDeath ||
+        complicationFlags(p).emergencyCabg ||
+        complicationFlags(p).acuteStentThrombosis ||
+        complicationFlags(p).periproceduralMi
       )
       if (hasMace) return []
       return (p.lesions || []).filter(l => {
@@ -160,7 +162,7 @@ export default function AnalyticsDashboardPage() {
     const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
 
     // 4. Complications / Adverse events
-    const compCount = procedures.filter(p => p.complications?.hasComplication).length
+    const compCount = procedures.filter(p => complicationFlags(p).hasComplication).length
     const compRate = totalProcs > 0 ? ((compCount / totalProcs) * 100).toFixed(1) : null
 
     // 5. Radiation & Contrast
@@ -210,12 +212,12 @@ export default function AnalyticsDashboardPage() {
     const avgStentLength = totalStents > 0 ? (stentLengthSum / totalStents).toFixed(1) : null
 
     // Specific complications
-    const dissectionCount = procedures.filter(p => p.complications?.coronaryDissection).length
-    const perforationCount = procedures.filter(p => p.complications?.coronaryPerforation).length
-    const thrombosisCount = procedures.filter(p => p.complications?.acuteStentThrombosis).length
-    const inLabDeathCount = procedures.filter(p => p.complications?.inLabDeath).length
-    const bleedCount = procedures.filter(p => p.complications?.majorBleed).length
-    const cabgCount = procedures.filter(p => p.complications?.emergencyCabg).length
+    const dissectionCount = procedures.filter(p => complicationFlags(p).coronaryDissection).length
+    const perforationCount = procedures.filter(p => complicationFlags(p).coronaryPerforation).length
+    const thrombosisCount = procedures.filter(p => complicationFlags(p).acuteStentThrombosis).length
+    const inLabDeathCount = procedures.filter(p => complicationFlags(p).inLabDeath).length
+    const bleedCount = procedures.filter(p => complicationFlags(p).majorBleed).length
+    const cabgCount = procedures.filter(p => complicationFlags(p).emergencyCabg).length
 
     return {
       totalProcs,

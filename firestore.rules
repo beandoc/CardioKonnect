@@ -1,40 +1,142 @@
+// DO NOT DEPLOY YET. These rules require Firebase Auth (request.auth) and a
+// users/{uid} profile. The app currently uses fixed username/password logins
+// checked by /api/login, which do not create a Firebase Auth session, so
+// deploying these rules would reject every request. See docs/SECURITY_ROLLOUT.md.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Top-level patients and subcollections
+
+    // ── Identity ──────────────────────────────────────────────────────────────
+    // Every request must come from a Firebase Auth user that has a profile at
+    // users/{uid} = { role, siteId, registryAccess[] }. Profiles are provisioned
+    // with scripts/provision_users.ts (Admin SDK) and cannot be written by clients.
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profilePath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(profilePath());
+    }
+
+    function profile() {
+      return get(profilePath()).data;
+    }
+
+    function isSuperAdmin() {
+      return hasProfile() && profile().role == 'SuperAdmin';
+    }
+
+    // Site tenancy: a user may only touch records of their own hospital site.
+    function inSite(siteId) {
+      return hasProfile() && (profile().role == 'SuperAdmin' || siteId == profile().siteId);
+    }
+
+    function canDelete() {
+      return hasProfile() && profile().role in ['SuperAdmin', 'RegistryOwner', 'PI'];
+    }
+
+    function patientSite(patientId) {
+      return get(/databases/$(database)/documents/patients/$(patientId)).data.siteId;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow write: if false;
+    }
+
+    // ── Patients ──────────────────────────────────────────────────────────────
     match /patients/{patientId} {
-      allow read, write: if true;
+      allow read: if inSite(resource.data.siteId);
+      allow create: if inSite(request.resource.data.siteId);
+      allow update: if inSite(resource.data.siteId)
+                    && request.resource.data.siteId == resource.data.siteId;
+      allow delete: if canDelete() && inSite(resource.data.siteId);
+
+      // Child records carry a denormalized siteId so collection-group reads can
+      // be scoped; it must match the parent patient's site.
+      function childReadable() {
+        return inSite(patientSite(patientId));
+      }
+      function childCreatable() {
+        return inSite(patientSite(patientId))
+            && request.resource.data.siteId == patientSite(patientId);
+      }
+      function childUpdatable() {
+        return inSite(patientSite(patientId))
+            && request.resource.data.siteId == resource.data.siteId;
+      }
 
       match /visits/{visitId} {
-        allow read, write: if true;
+        allow read: if childReadable();
+        allow create: if childCreatable();
+        allow update: if childUpdatable();
+        allow delete: if inSite(patientSite(patientId));
       }
 
       match /procedures/{procedureId} {
-        allow read, write: if true;
+        allow read: if childReadable();
+        allow create: if childCreatable();
+        allow update: if childUpdatable();
+        allow delete: if inSite(patientSite(patientId));
       }
 
       match /outcomes/{outcomeId} {
-        allow read, write: if true;
+        allow read: if childReadable();
+        allow create: if childCreatable();
+        allow update: if childUpdatable();
+        allow delete: if inSite(patientSite(patientId));
       }
 
       match /events/{eventId} {
-        allow read, write: if true;
+        allow read: if childReadable();
+        allow create: if childCreatable();
+        allow update: if childUpdatable();
+        allow delete: if inSite(patientSite(patientId));
       }
     }
 
-    // Collection group query access for national/multi-center reporting
-    match /{path=**}/procedures/{procedureId} {
-      allow read, write: if true;
-    }
-
+    // Collection-group reads (registry dashboards). Queries must filter on
+    // siteId == the caller's site, which the data layer always does.
     match /{path=**}/visits/{visitId} {
-      allow read, write: if true;
+      allow read: if inSite(resource.data.siteId);
+    }
+    match /{path=**}/procedures/{procedureId} {
+      allow read: if inSite(resource.data.siteId);
+    }
+    match /{path=**}/outcomes/{outcomeId} {
+      allow read: if inSite(resource.data.siteId);
     }
 
-    // Default fallback
-    match /{document=**} {
-      allow read, write: if true;
+    // ── Clinical alert acknowledgements (shared per site) ─────────────────────
+    match /alertAcks/{alertId} {
+      allow read: if hasProfile() && (isSuperAdmin() || resource.data.siteId == profile().siteId);
+      allow create, update: if hasProfile()
+                    && request.resource.data.siteId == profile().siteId
+                    && request.resource.data.resolvedAt == request.time;
+      allow delete: if false;
     }
+
+    // ── Audit trail (append-only) ─────────────────────────────────────────────
+    match /auditLog/{entryId} {
+      allow create: if hasProfile()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.siteId == profile().siteId
+                    && request.resource.data.at == request.time;
+      allow read: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+    match /settings/{docId} {
+      allow read: if hasProfile();
+      allow write: if hasProfile() && profile().role in ['SuperAdmin', 'RegistryOwner'];
+    }
+
+    // Everything else is denied by default.
   }
 }
-

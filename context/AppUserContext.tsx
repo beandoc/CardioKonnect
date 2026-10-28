@@ -3,58 +3,53 @@
  * context/AppUserContext.tsx
  *
  * Provides the current application user via React context.
- * Persists the active user to localStorage so it survives page refreshes.
  *
- * In production, this would be replaced with Firebase Auth + Firestore user lookup.
- * For now, it provides a user switcher to demo multi-user access control.
+ * Credentials are checked server-side by /api/login; the signed-in user id is
+ * kept in localStorage so the session survives refreshes. Every data read is
+ * scoped to that user's site via setDataScope.
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
-import { APP_USERS, USER_LIST, type AppUser } from '@/lib/appConfig'
+import { APP_USERS, type AppUser } from '@/lib/appConfig'
+import { setDataScope, writeAudit } from '@/lib/firestore'
 
 interface AppUserContextValue {
   user: AppUser | null
   currentUser: AppUser | null
-  setUser: (u: AppUser) => void
+  /** True until the stored session has been read on the client. */
+  authLoading: boolean
+  login: (u: AppUser) => void
   logout: () => void
-  allUsers: AppUser[]
 }
 
 const AppUserContext = createContext<AppUserContextValue>({
   user: null,
   currentUser: null,
-  setUser: () => {},
+  authLoading: true,
+  login: () => {},
   logout: () => {},
-  allUsers: USER_LIST,
 })
 
 const STORAGE_KEY = 'cardio_active_user_id'
-const DEFAULT_USER_ID = 'DR_JAYACHANDRA'
+
+function applyScope(u: AppUser | null) {
+  setDataScope(u ? { siteId: u.siteId, global: u.role === 'SuperAdmin', uid: `session:${u.id}`, userId: u.id } : null)
+}
 
 export function AppUserProvider({ children }: { children: ReactNode }) {
-  const [user, setUserState] = useState<AppUser | null>(() => {
-    if (typeof window === 'undefined') return APP_USERS[DEFAULT_USER_ID]
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored && APP_USERS[stored]) return APP_USERS[stored]
-      const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
-      if (isAuth) return APP_USERS[DEFAULT_USER_ID]
-    } catch {}
-    return APP_USERS[DEFAULT_USER_ID]
-  })
+  const [user, setUserState] = useState<AppUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
-  // Hydrate from localStorage after mount and keep in sync
   useEffect(() => {
     const syncFromStorage = () => {
+      let stored: string | null = null
       try {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        const isAuth = localStorage.getItem('cardiokonnect_auth') === 'true'
-        if (stored && APP_USERS[stored]) {
-          setUserState((prev) => (prev?.id === stored ? prev : APP_USERS[stored]))
-        } else if (isAuth) {
-          setUserState((prev) => (prev?.id === DEFAULT_USER_ID ? prev : APP_USERS[DEFAULT_USER_ID]))
-        }
+        stored = localStorage.getItem(STORAGE_KEY)
       } catch {}
+      const u = stored && APP_USERS[stored] ? APP_USERS[stored] : null
+      applyScope(u)
+      setUserState(u)
+      setAuthLoading(false)
     }
 
     syncFromStorage()
@@ -62,31 +57,38 @@ export function AppUserProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', syncFromStorage)
   }, [])
 
-  const setUser = useCallback((u: AppUser) => {
+  const login = useCallback((u: AppUser) => {
     try {
       localStorage.setItem(STORAGE_KEY, u.id)
       localStorage.setItem('cardiokonnect_auth', 'true')
     } catch {}
+    applyScope(u)
     setUserState(u)
   }, [])
 
   const logout = useCallback(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-      localStorage.removeItem('cardiokonnect_auth')
-      localStorage.removeItem('cardiokonnect_role')
-    } catch {}
-    setUserState(null)
-    window.location.href = '/login'
-  }, [])
+    // Record the logout while the session scope is still set.
+    writeAudit('LOGOUT', 'session', user?.id ?? '', '')
+      .catch(() => {})
+      .finally(() => {
+        try {
+          localStorage.removeItem(STORAGE_KEY)
+          localStorage.removeItem('cardiokonnect_auth')
+          localStorage.removeItem('cardiokonnect_role')
+        } catch {}
+        applyScope(null)
+        setUserState(null)
+        window.location.href = '/login'
+      })
+  }, [user])
 
   const contextValue = useMemo(() => ({
     user,
     currentUser: user,
-    setUser,
+    authLoading,
+    login,
     logout,
-    allUsers: USER_LIST,
-  }), [user, setUser, logout])
+  }), [user, authLoading, login, logout])
 
   return (
     <AppUserContext.Provider value={contextValue}>

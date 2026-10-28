@@ -7,6 +7,9 @@ import {
 } from 'lucide-react'
 import { cn, getAge } from '@/lib/utils'
 import { getPatients, getVisits } from '@/lib/firestore'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import type { Patient, Visit, MedEntry } from '@/lib/types'
 import {
   computeMLRiskProfile, evaluateGDMT, generateClinicalAlerts,
@@ -58,6 +61,7 @@ const DEFAULT_SIMULATION_VISIT = (patientId: string): Visit => ({
 })
 
 export default function AIEnginePage() {
+  const { currentUser } = useAppUser()
   const [patients, setPatients] = useState<Patient[]>([])
   const patientsRef = useRef<Patient[]>([])
   useEffect(() => {
@@ -119,25 +123,24 @@ export default function AIEnginePage() {
   const [kagSodium, setKagSodium] = useState<number>(137)
   const [kagSex, setKagSex] = useState<'Male' | 'Female'>('Male')
   const [kagSmoking, setKagSmoking] = useState<boolean>(false)
-  const [kagTime, setKagTime] = useState<number>(365)
 
   // Load patients on mount
   useEffect(() => {
     async function loadData() {
       try {
-        const pts = await getPatients()
+        const pts = filterPatientsByAccess(currentUser, await getPatients())
         setPatients(pts)
         if (pts.length > 0) {
           setSelectedPatientId(pts[0].id)
         }
       } catch (err) {
-        console.error('Failed to load patients for AI engine:', err)
+        notifyLoadError(err, 'Patients')
       } finally {
         setLoading(false)
       }
     }
     loadData()
-  }, [])
+  }, [currentUser])
 
   // Load visits when patient changes
   useEffect(() => {
@@ -224,7 +227,6 @@ export default function AIEnginePage() {
         setKagCreatinine(baseVisit.creatinine ?? 1.1)
         setKagSodium(baseVisit.sodium ?? 137)
         setKagSmoking(comorbStr.includes('smoking') || comorbStr.includes('smoker'))
-        setKagTime(365)
 
       } catch (err) {
         console.error('Failed to load visits for selected patient:', err)
@@ -369,10 +371,10 @@ export default function AIEnginePage() {
       sodium: kagSodium,
     }
     
-    return predictKaggleHeartFailure(mockPatient, mockVisit, kagTime, kagCpk)
+    return predictKaggleHeartFailure(mockPatient, mockVisit, undefined, kagCpk)
   }, [
     selectedPatient, kagAge, kagSex, kagAnaemia, kagDiabetes, kagSmoking,
-    kagHbp, kagEf, kagPlatelets, kagCreatinine, kagSodium, kagTime, kagCpk
+    kagHbp, kagEf, kagPlatelets, kagCreatinine, kagSodium, kagCpk
   ])
 
   const handleResetKaggle = () => {
@@ -407,7 +409,6 @@ export default function AIEnginePage() {
     setKagCreatinine(baselineVisit.creatinine ?? 1.1)
     setKagSodium(baselineVisit.sodium ?? 137)
     setKagSmoking(comorbStr.includes('smoking') || comorbStr.includes('smoker'))
-    setKagTime(365)
   }
 
   const handleResetDiagnostics = () => {
@@ -1056,7 +1057,10 @@ export default function AIEnginePage() {
                 Kaggle RF Adjuster
               </h3>
               <p className="text-[10px] text-gray-500 leading-normal">
-                Tweak patient parameters to feed into the 12-feature Random Forest mortality model.
+                Tweak patient parameters to feed into the 11-feature Random Forest mortality model.
+              </p>
+              <p className="text-[10px] text-amber-300/90 leading-normal border border-amber-500/20 bg-amber-500/5 rounded-lg px-2 py-1.5">
+                Educational only. Trained on the 299-patient public Faisalabad heart failure dataset (Ahmad et al. 2017) and not validated for clinical decisions.
               </p>
             </div>
 
@@ -1272,21 +1276,6 @@ export default function AIEnginePage() {
                   />
                 </div>
 
-                {/* Time / Follow-up */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center text-[10px] text-gray-400">
-                    <span>Follow-up Horizon (Days)</span>
-                    <span className="text-white font-mono font-bold">{kagTime} Days</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="10"
-                    max="365"
-                    value={kagTime}
-                    onChange={e => setKagTime(parseInt(e.target.value))}
-                    className="w-full h-1 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                  />
-                </div>
               </div>
             </div>
 
@@ -1472,10 +1461,6 @@ export default function AIEnginePage() {
                   <div className="p-2 bg-slate-950/40 rounded flex flex-col border border-gray-800/20 hover:border-gray-800/55 transition-all">
                     <span className="text-gray-500 text-[8px] uppercase">[10] smoking</span>
                     <span className="text-white font-bold text-xs mt-0.5">{kaggleResult.featuresUsed.smoking}</span>
-                  </div>
-                  <div className="p-2 bg-slate-950/40 rounded flex flex-col border border-gray-800/20 hover:border-gray-800/55 transition-all">
-                    <span className="text-gray-500 text-[8px] uppercase">[11] time</span>
-                    <span className="text-white font-bold text-xs mt-0.5">{kaggleResult.featuresUsed.time} days</span>
                   </div>
                 </div>
               </div>

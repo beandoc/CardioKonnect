@@ -292,7 +292,7 @@ function RiskCalculatorContent() {
 
   // Derived filtered patients by selected registry track
   const selectablePatients = useMemo(() => {
-    const list = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
+    const list = filterPatientsByAccess(currentUser, allPatients)
     if (selectedRegistry === 'all') return list
     return list.filter(p => {
       if (selectedRegistry === 'cathlab') {

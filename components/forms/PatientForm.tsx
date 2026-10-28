@@ -321,11 +321,15 @@ export default function PatientForm({ defaultValues, onSubmit, loading, submitLa
     // and cross-registry contamination is prevented.
     if (v.registryId) {
       const now = new Date().toISOString()
-      // registryIds is an array — supports future cross-enrollment
-      payload.registryIds = [v.registryId]
-      // registryEnrollments is a map keyed by registryId
+      const existingEnrollments = (defaultValues as any)?.registryEnrollments || {}
+      const existingEnrollment = existingEnrollments[v.registryId]
+      const existingIds = (defaultValues as any)?.registryIds || []
+      const regList = Array.from(new Set([...existingIds, v.registryId]))
+
+      payload.registryIds = regList
       payload.registryEnrollments = {
-        [v.registryId]: {
+        ...existingEnrollments,
+        [v.registryId]: existingEnrollment || {
           enrolledAt: now,
           enrolledBy: currentUser?.id || 'form_submission',
           siteId: targetSiteId,

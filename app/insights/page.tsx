@@ -8,6 +8,7 @@ import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import { useAppUser } from '@/context/AppUserContext'
 import { filterPatientsByAccess } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import {
   summarisePopulationML, evaluateGDMT, generateClinicalAlerts,
   computeMLRiskProfile,
@@ -35,7 +36,7 @@ export default function InsightsPage() {
         getAllVisits(),
       ])
 
-      const patients = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
+      const patients = filterPatientsByAccess(currentUser, allPatients)
 
       const visitsByPatientMap = new Map<string, Visit[]>()
       allVisits.forEach(v => {
@@ -56,7 +57,7 @@ export default function InsightsPage() {
       setData(result)
       setLastRefresh(new Date())
     } catch (e) {
-      console.error(e)
+      notifyLoadError(e, 'Insights')
     } finally {
       setLoading(false)
     }
@@ -82,7 +83,7 @@ export default function InsightsPage() {
         risk: computeMLRiskProfile(d.patient, d.latestVisit, d.allVisits),
         alerts: generateClinicalAlerts(d.patient, d.latestVisit, d.allVisits),
       }))
-      .filter(d => d.risk.riskCategory === 'High' || d.risk.riskCategory === 'Very High')
+      .filter(d => !d.risk.insufficientData && (d.risk.riskCategory === 'High' || d.risk.riskCategory === 'Very High'))
       .sort((a, b) => b.risk.oneYearEventProbability - a.risk.oneYearEventProbability),
     [data]
   )
@@ -275,7 +276,7 @@ export default function InsightsPage() {
                 {(['Low', 'Intermediate', 'High', 'Very High'] as const).map(level => {
                   const count = data.filter(d => {
                     const r = computeMLRiskProfile(d.patient, d.latestVisit, d.allVisits)
-                    return r.riskCategory === level
+                    return !r.insufficientData && r.riskCategory === level
                   }).length
                   const pct = data.length > 0 ? Math.round((count / data.length) * 100) : 0
                   const color = level === 'Low' ? 'bg-emerald-500' :

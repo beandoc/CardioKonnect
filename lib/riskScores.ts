@@ -59,8 +59,6 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
   let points = 0
 
   // ── LVEF points ──────────────────────────────────────────────────────────
-  // LVEF interaction with age and other predictors is handled via grouped tables.
-  // Points for EF < 30 are additive with EF-group adjustments below.
   const efGroup: '<20' | '20-24' | '25-29' | '30-34' | '35-39' | '>=40' =
     input.lvef < 20  ? '<20'   :
     input.lvef < 25  ? '20-24' :
@@ -73,34 +71,33 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
   }
   points += efPoints[efGroup]
 
-  // ── Age points (MAGGIC Table 2) ──────────────────────────────────────────
-  // EF < 30: age interaction adds extra points
-  const efBelow30 = input.lvef < 30
+  // Age and systolic BP interact with EF: Table 2 gives separate columns for
+  // EF <30%, 30–39% and ≥40%.
+  const efTier = input.lvef < 30 ? 0 : input.lvef < 40 ? 1 : 2
 
-  if (input.age < 55) {
-    points += efBelow30 ? 0 : 0
-  } else if (input.age < 60) {
-    points += efBelow30 ? 1 : 1
-  } else if (input.age < 65) {
-    points += efBelow30 ? 2 : 2
-  } else if (input.age < 70) {
-    points += efBelow30 ? 4 : 3
-  } else if (input.age < 75) {
-    points += efBelow30 ? 6 : 5
-  } else if (input.age < 80) {
-    points += efBelow30 ? 8 : 7
-  } else {
-    points += efBelow30 ? 10 : 9
-  }
+  // ── Age points ───────────────────────────────────────────────────────────
+  //                 <55  55–59 60–64 65–69 70–74 75–79 ≥80
+  const agePoints = [
+    [0, 1, 2, 4, 6, 8, 10],    // EF <30
+    [0, 2, 4, 6, 8, 10, 13],   // EF 30–39
+    [0, 3, 5, 7, 9, 12, 15],   // EF ≥40
+  ]
+  const ageBand =
+    input.age < 55 ? 0 : input.age < 60 ? 1 : input.age < 65 ? 2 :
+    input.age < 70 ? 3 : input.age < 75 ? 4 : input.age < 80 ? 5 : 6
+  points += agePoints[efTier][ageBand]
 
   // ── Systolic BP points ───────────────────────────────────────────────────
+  //                 <110 110–119 120–129 130–139 140–149 ≥150
+  const sbpPoints = [
+    [5, 4, 3, 2, 1, 0],   // EF <30
+    [3, 2, 1, 1, 0, 0],   // EF 30–39
+    [2, 1, 1, 0, 0, 0],   // EF ≥40
+  ]
   const sbp = input.systolicBP
-  if (sbp < 110)      points += 5
-  else if (sbp < 120) points += 4
-  else if (sbp < 130) points += 3
-  else if (sbp < 140) points += 2
-  else if (sbp < 150) points += 1
-  // >=150: 0 points
+  const sbpBand =
+    sbp < 110 ? 0 : sbp < 120 ? 1 : sbp < 130 ? 2 : sbp < 140 ? 3 : sbp < 150 ? 4 : 5
+  points += sbpPoints[efTier][sbpBand]
 
   // ── BMI (kg/m²) — obesity paradox ─────────────────────────────────────────
   const bmi = input.bmi
@@ -110,21 +107,23 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
   else if (bmi < 30) points += 2
   // >=30: 0 points
 
-  // ── Serum creatinine (mg/dL) ──────────────────────────────────────────────
-  const cr = input.creatinine
-  if (cr < 0.90)      points += 0
-  else if (cr < 1.13) points += 1
-  else if (cr < 1.36) points += 2
-  else if (cr < 1.58) points += 3
-  else if (cr < 1.81) points += 4
-  else if (cr < 2.04) points += 5
-  else if (cr < 2.26) points += 6
-  else if (cr < 2.49) points += 7
-  else                points += 8
+  // ── Serum creatinine (published in µmol/L; input is mg/dL) ───────────────
+  const crUmol = input.creatinine * 88.4
+  if (crUmol < 90)       points += 0
+  else if (crUmol < 110) points += 1
+  else if (crUmol < 130) points += 2
+  else if (crUmol < 150) points += 3
+  else if (crUmol < 170) points += 4
+  else if (crUmol < 210) points += 5
+  else if (crUmol < 250) points += 6
+  else                   points += 8
 
   // ── NYHA class ────────────────────────────────────────────────────────────
   const nyhaPoints: Record<NYHAClass, number> = { I: 0, II: 2, III: 6, IV: 8 }
   points += nyhaPoints[input.nyha] ?? 0
+
+  // ── Male sex ─────────────────────────────────────────────────────────────
+  if (input.sex === 'Male') points += 1
 
   // ── Current smoker ───────────────────────────────────────────────────────
   if (input.currentSmoker) points += 1
@@ -136,35 +135,39 @@ export function calculateMAGGIC(input: MAGGICInput): MAGGICResult {
   if (input.copd) points += 2
 
   // ── HF diagnosed > 18 months ago ────────────────────────────────────────
-  // (heartFailureDiagnosisYears ≥ 1.5 yr treated as "not newly diagnosed")
+  // Figure 2 of the paper prints "first diagnosis in the past 18 months", but the
+  // fitted models (Tables 5–6: HF duration >18 months, RR ≈1.19) and the text put
+  // the risk on longer duration, so the 2 points go to HF of ≥18 months.
   if (input.heartFailureDiagnosisYears >= 1.5) points += 2
 
-  // ── Beta-blocker prescribed (protective — negative points) ───────────────
-  if (input.betaBlocker) points -= 3
-
-  // ── ACEi or ARB prescribed ───────────────────────────────────────────────
-  if (input.aceInhibitorOrArb) points -= 1
+  // ── Not on beta-blocker / not on ACEi or ARB (points for absence) ────────
+  if (!input.betaBlocker) points += 3
+  if (!input.aceInhibitorOrArb) points += 1
 
   // Floor at 0
   const finalScore = Math.max(0, points)
 
-  // ── Mortality look-up table (Pocock 2013, Figure 3 / Table 3) ────────────
-  // Published 1-year and 3-year mortality rates by integer score band
-  const mortalityTable: Array<{ maxScore: number; oneYr: number; threeYr: number }> = [
-    { maxScore: 10,  oneYr: 0.02,  threeYr: 0.06  },
-    { maxScore: 15,  oneYr: 0.04,  threeYr: 0.11  },
-    { maxScore: 20,  oneYr: 0.07,  threeYr: 0.18  },
-    { maxScore: 25,  oneYr: 0.11,  threeYr: 0.26  },
-    { maxScore: 30,  oneYr: 0.17,  threeYr: 0.38  },
-    { maxScore: 35,  oneYr: 0.24,  threeYr: 0.51  },
-    { maxScore: 40,  oneYr: 0.34,  threeYr: 0.64  },
-    { maxScore: 45,  oneYr: 0.45,  threeYr: 0.75  },
-    { maxScore: 50,  oneYr: 0.57,  threeYr: 0.84  },
-    { maxScore: 999, oneYr: 0.70,  threeYr: 0.92  },
+  // ── Mortality look-up (Pocock 2013, Table 4) ─────────────────────────────
+  // Predicted probability of death for each integer score 0–50; scores above 50 use 50.
+  const ONE_YEAR = [
+    0.015, 0.016, 0.018, 0.020, 0.022, 0.024, 0.027, 0.029, 0.032, 0.036,  // 0–9
+    0.039, 0.043, 0.048, 0.052, 0.058, 0.063, 0.070, 0.077, 0.084, 0.093,  // 10–19
+    0.102, 0.111, 0.122, 0.134, 0.147, 0.160, 0.175, 0.191, 0.209, 0.227,  // 20–29
+    0.248, 0.269, 0.292, 0.316, 0.342, 0.369, 0.398, 0.427, 0.458, 0.490,  // 30–39
+    0.523, 0.557, 0.591, 0.625, 0.659, 0.692, 0.725, 0.757, 0.787, 0.816,  // 40–49
+    0.842,  // 50–50
   ]
-
-  const row = mortalityTable.find((r) => finalScore <= r.maxScore)!
-  const { oneYr, threeYr } = row
+  const THREE_YEAR = [
+    0.039, 0.043, 0.048, 0.052, 0.058, 0.063, 0.070, 0.077, 0.084, 0.092,  // 0–9
+    0.102, 0.111, 0.122, 0.134, 0.146, 0.160, 0.175, 0.191, 0.209, 0.227,  // 10–19
+    0.247, 0.269, 0.292, 0.316, 0.342, 0.369, 0.397, 0.427, 0.458, 0.490,  // 20–29
+    0.523, 0.556, 0.590, 0.625, 0.658, 0.692, 0.725, 0.756, 0.787, 0.815,  // 30–39
+    0.842, 0.866, 0.889, 0.908, 0.926, 0.941, 0.953, 0.964, 0.973, 0.980,  // 40–49
+    0.985,  // 50–50
+  ]
+  const idx = Math.min(finalScore, 50)
+  const oneYr = ONE_YEAR[idx]
+  const threeYr = THREE_YEAR[idx]
 
   const riskCategory: MAGGICResult['riskCategory'] =
     finalScore <= 20 ? 'Low' :
@@ -280,14 +283,15 @@ export interface H2FPEFInput {
 
 export interface H2FPEFResult {
   score: number           // 0-9
-  probability: number     // 0-1 (logistic model from Reddy 2018 Table 3)
+  probability: number     // 0-1 (continuous H2FPEF model, Reddy 2018)
   interpretation: string
 }
 
 /**
  * H2FPEF score.
- * Probability of HFpEF estimated from logistic regression coefficients
- * reported in Reddy 2018 Table 3: log-odds = -9.1917 + 1.490*score
+ * The integer score (0-9) sets the low / intermediate / high band. The
+ * probability comes from the continuous H2FPEF model in Reddy 2018, which uses
+ * the raw age, BMI, E/e', PASP and AF values rather than the integer score.
  */
 export function calculateH2FPEF(input: H2FPEFInput): H2FPEFResult {
   let score = 0
@@ -310,9 +314,15 @@ export function calculateH2FPEF(input: H2FPEFInput): H2FPEFResult {
   // F — Filling pressures: E/e' > 9 → 1 point
   if (input.echoEEPrime > 9) score += 1
 
-  // Probability from logistic model (Reddy 2018, Table 3)
-  // P(HFpEF) = 1 / (1 + exp(-(-9.1917 + 1.490 × score)))
-  const logOdds = -9.1917 + 1.490 * score
+  // Continuous model (Reddy 2018):
+  // logit = -9.1917 + 0.0451·age + 0.1307·BMI + 0.0859·E/e' + 0.0520·PASP + 1.6997·AF
+  const logOdds =
+    -9.1917 +
+    0.0451 * input.age +
+    0.1307 * input.bmi +
+    0.0859 * input.echoEEPrime +
+    0.0520 * input.pulmonaryArterialPressure +
+    1.6997 * (input.atrialFibrillation ? 1 : 0)
   const probability = parseFloat((1 / (1 + Math.exp(-logOdds))).toFixed(3))
 
   const interpretation =
@@ -2315,7 +2325,9 @@ export interface NCDRMortalityResult {
 }
 
 export function calculateNCDRMortality(input: NCDRMortalityInput): NCDRMortalityResult {
-  // Published NCDR CathPCI full logistic regression intercept and beta coefficients
+  // Approximate logistic model built on the NCDR CathPCI predictor set. These
+  // intercept and coefficient values have not been checked against the
+  // Brennan 2013 tables — treat output as an estimate, not the registry model.
   let logOdds = -5.85 // Baseline intercept for young elective PCI
 
   // Age per decade > 60
@@ -2324,8 +2336,10 @@ export function calculateNCDRMortality(input: NCDRMortalityInput): NCDRMortality
     logOdds += 0.52 * decades
   }
 
-  // Hemodynamic instability (dominant predictors in NCDR)
-  if (input.cardiogenicShockPreProcedure) {
+  // Hemodynamic instability (dominant predictors in NCDR).
+  // Killip IV is cardiogenic shock, so shock is counted once whichever field records it.
+  const inShock = input.cardiogenicShockPreProcedure || input.killipClass === 'IV'
+  if (inShock) {
     logOdds += 2.85
   }
   if (input.cardiacArrestWithin24h) {
@@ -2339,10 +2353,8 @@ export function calculateNCDRMortality(input: NCDRMortalityInput): NCDRMortality
     logOdds += 0.58
   }
 
-  // Killip Class
-  if (input.killipClass === 'IV') {
-    logOdds += 1.20
-  } else if (input.killipClass === 'III') {
+  // Killip Class (IV already counted as shock above)
+  if (input.killipClass === 'III') {
     logOdds += 0.75
   } else if (input.killipClass === 'II') {
     logOdds += 0.35
@@ -2381,7 +2393,7 @@ export function calculateNCDRMortality(input: NCDRMortalityInput): NCDRMortality
     logOdds: parseFloat(logOdds.toFixed(3)),
     recommendation,
     validationDisclaimer:
-      'NCDR CathPCI model derived from US healthcare centers. Indian patients present with higher ischemic times and distinct comorbidity burdens; calibration has not been formally evaluated on Indian multi-center cohorts.'
+      'Approximation of the NCDR CathPCI model (coefficients not verified against Brennan 2013). The NCDR model was derived from US healthcare centers. Indian patients present with higher ischemic times and distinct comorbidity burdens; calibration has not been formally evaluated on Indian multi-center cohorts.'
   }
 }
 

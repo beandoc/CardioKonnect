@@ -1,9 +1,11 @@
 'use client'
+import { complicationFlags } from '@/lib/complications'
 import Link from 'next/link'
 import { Users, TrendingUp, CheckCircle, ArrowRight, Clock, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
+import { notifyLoadError } from '@/lib/notify'
 import type { CathProcedure, Patient } from '@/lib/types'
 import { calculateLesionSuccess } from '@/lib/interventionalMetrics'
 
@@ -366,10 +368,10 @@ export default function RegistryHomePage() {
             // True Angiographic Success: TIMI 3 flow + residual stenosis threshold with NO in-lab MACE
             const successfulLesions = pciProcedures.flatMap(p => {
               const hasInLabMace = !!(
-                p.complications?.inLabDeath ||
-                p.complications?.emergencyCabg ||
-                p.complications?.acuteStentThrombosis ||
-                p.complications?.periproceduralMi
+                complicationFlags(p).inLabDeath ||
+                complicationFlags(p).emergencyCabg ||
+                complicationFlags(p).acuteStentThrombosis ||
+                complicationFlags(p).periproceduralMi
               )
               if (hasInLabMace) return []
               return (p.lesions || []).filter(l => calculateLesionSuccess(l))
@@ -541,7 +543,7 @@ export default function RegistryHomePage() {
           }
         }))
       } catch (err) {
-        console.error('Failed to calculate registry live data:', err)
+        notifyLoadError(err, 'Registry overview')
       } finally {
         setLoading(false)
       }

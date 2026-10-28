@@ -10,11 +10,12 @@ interface Props {
   onClick?: () => void
   className?: string
   style?: React.CSSProperties
+  title?: string
 }
 
 export default function Button({
   children, variant = 'primary', size = 'md',
-  type = 'button', disabled, loading, onClick, className, style,
+  type = 'button', disabled, loading, onClick, className, style, title,
 }: Props) {
   const cls = {
     primary: 'btn-primary',
@@ -35,6 +36,7 @@ export default function Button({
       onClick={onClick}
       disabled={disabled || loading}
       style={style}
+      title={title}
       className={cn(cls, sz, className)}
     >
       {loading ? (

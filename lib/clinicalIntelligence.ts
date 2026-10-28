@@ -11,7 +11,7 @@
  */
 
 import type { Patient, Visit } from './types'
-import { calculateMAGGIC, calculateCHADSVASc, calculateHASBLED as calcHASBLEDCanonical } from './riskScores'
+import { calculateMAGGIC, calculateCHADSVASc, calculateHASBLED as calcHASBLEDCanonical, type MAGGICInput } from './riskScores'
 import { getAge } from './utils'
 import rfModel from './models/heart_failure_rf.json'
 
@@ -101,6 +101,10 @@ export interface ExploratoryRiskSummary {
   confidence: string
   lastUpdated: string
   exploratoryDisclaimer: string
+  /** MAGGIC inputs that were not recorded and were filled with population defaults. */
+  imputedInputs: string[]
+  /** True when a core predictor (age, LVEF) is missing — the estimate must not be shown as individualized. */
+  insufficientData: boolean
 }
 
 export type MLRiskProfile = ExploratoryRiskSummary
@@ -294,6 +298,8 @@ export function evaluateGDMT(patient: Patient, visit: Visit): GDMTSummary {
   const raasi = visit.raasi
   const raasiContra =
     sbp && sbp < 90 ? 'Systolic BP < 90 mmHg' :
+    // ESC: don't start RAASi above K⁺ 5.0; reduce/stop an existing one above 5.5
+    k && raasi?.prescribed !== 'Yes' && k > 5.0 ? 'Potassium > 5.0 mmol/L (do not initiate)' :
     k && k > 5.5 ? 'Potassium > 5.5 mmol/L' :
     egfr && egfr < 30 ? 'eGFR < 30 ml/min/1.73m² (relative caution)' :
     null
@@ -393,8 +399,13 @@ export function evaluateGDMT(patient: Patient, visit: Visit): GDMTSummary {
   const missing = pillars.filter(p => p.status === 'missing')
   const belowTarget = pillars.filter(p => p.status === 'below-target')
 
-  const optimizationScore = applicable === 0 ? 100 :
-    Math.round((pillars.filter(p => p.status === 'prescribed').length / applicable) * 100)
+  // Target dose = 1, initiated/titrating = 0.75, missing = 0. Contraindicated
+  // pillars cannot be optimised, so they are left out of the denominator.
+  const scoreable = pillars.filter(p => p.status !== 'not-indicated' && p.status !== 'contraindicated')
+  const weighted = scoreable.reduce((sum, p) =>
+    sum + (p.status === 'prescribed' ? 1 : p.status === 'below-target' ? 0.75 : 0), 0)
+  const optimizationScore = scoreable.length === 0 ? 100 :
+    Math.round((weighted / scoreable.length) * 100)
 
   const nextBestAction =
     missing.length > 0
@@ -788,48 +799,75 @@ export function generateClinicalAlerts(patient: Patient, visit: Visit, allVisits
 // Replace with TF.js model when n > 200 real patients.
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface MaggicInputBuild {
+  input: MAGGICInput
+  /** Non-core inputs filled with population defaults because they were not recorded. */
+  imputed: string[]
+  /** Core predictors that are missing; when non-empty no individualized estimate should be shown. */
+  missingCore: string[]
+}
+
+/**
+ * Assembles MAGGIC inputs from recorded data, tracking every value that had to
+ * be defaulted so the UI can disclose it instead of presenting an invented
+ * value as an individualized estimate.
+ */
+export function buildMaggicInputs(patient: Patient, visit: Visit): MaggicInputBuild {
+  const imputed: string[] = []
+  const missingCore: string[] = []
+  const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
+
+  const age = (patient.dob ? getAge(patient.dob) : null) ?? patient.age ?? null
+  if (age == null) missingCore.push('Age')
+  const lvef = visit.lvef ?? patient.lvef ?? null
+  if (lvef == null) missingCore.push('LVEF')
+
+  const pick = <T,>(value: T | null | undefined, fallback: T, label: string): T => {
+    if (value === null || value === undefined) {
+      imputed.push(label)
+      return fallback
+    }
+    return value
+  }
+
+  const recordedBmi = visit.weight && visit.height
+    ? visit.weight / ((visit.height / 100) ** 2)
+    : visit.bmi
+
+  const hfSince = patient.hfConfirmationDate || patient.indexDate
+  const hfYears = hfSince ? (Date.now() - new Date(hfSince).getTime()) / (365.25 * 24 * 3600 * 1000) : NaN
+
+  const input: MAGGICInput = {
+    age: age ?? 65,
+    lvef: lvef ?? 35,
+    systolicBP: pick(visit.bpSystolic, 120, 'Systolic BP'),
+    bmi: Math.round(pick(recordedBmi, 24, 'BMI') * 10) / 10,
+    creatinine: pick(visit.creatinine, 1.1, 'Creatinine'),
+    nyha: pick((visit.nyha || patient.nyha || null) as MAGGICInput['nyha'] | null, 'II', 'NYHA class'),
+    sex: (patient.sex === 'Female' ? 'Female' : 'Male') as MAGGICInput['sex'],
+    diabetesMellitus: Boolean(patient.comorbidDiabetes || comorbStr.includes('dm') || comorbStr.includes('diabetes')),
+    currentSmoker: pick(patient.currentSmoker, false, 'Smoking status'),
+    copd: Boolean(patient.comorbidCOPD || comorbStr.includes('copd')),
+    heartFailureDiagnosisYears: pick(Number.isFinite(hfYears) && hfYears >= 0 ? hfYears : null, 2, 'HF duration'),
+    betaBlocker: visit.betaBlocker?.prescribed === 'Yes',
+    aceInhibitorOrArb: visit.raasi?.prescribed === 'Yes',
+  }
+  if (!patient.sex) imputed.push('Sex')
+
+  return { input, imputed, missingCore }
+}
+
 export function computeMLRiskProfile(
   patient: Patient,
   visit: Visit,
   allVisits: Visit[]
 ): MLRiskProfile {
-  const age = (patient.dob ? getAge(patient.dob) : null) || patient.age || 65
-  const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase()
-  const isDM = Boolean(patient.comorbidDiabetes || comorbStr.includes('dm') || comorbStr.includes('diabetes'))
-  const isCOPD = Boolean(patient.comorbidCOPD || comorbStr.includes('copd'))
+  const { input: maggicInput, imputed, missingCore } = buildMaggicInputs(patient, visit)
+  const age = maggicInput.age
+  const isDM = maggicInput.diabetesMellitus
 
-  // Use validated MAGGIC as the international gold-standard mortality backbone
-  let maggicResult: any = {
-    score: 22,
-    oneYearMortality: 0.104,
-    threeYearMortality: 0.268,
-    fiveYearMortality: 0.38,
-    riskCategory: 'Intermediate'
-  }
-
-  try {
-    const bmi = (visit.weight && visit.height)
-      ? visit.weight / ((visit.height / 100) ** 2)
-      : (visit.bmi ?? (visit.weight ? visit.weight / (1.65 ** 2) : 24))
-    
-    maggicResult = calculateMAGGIC({
-      age,
-      lvef: visit.lvef ?? patient.lvef ?? 35,
-      systolicBP: visit.bpSystolic ?? 120,
-      bmi: Math.round(bmi * 10) / 10,
-      creatinine: visit.creatinine ?? 1.1,
-      nyha: (visit.nyha || patient.nyha || 'II') as any,
-      sex: (patient.sex === 'Female' ? 'Female' : 'Male') as any,
-      diabetesMellitus: isDM,
-      currentSmoker: false,
-      copd: isCOPD,
-      heartFailureDiagnosisYears: 2,
-      betaBlocker: visit.betaBlocker?.prescribed === 'Yes',
-      aceInhibitorOrArb: visit.raasi?.prescribed === 'Yes',
-    })
-  } catch (e) {
-    console.warn('MAGGIC calculation fallback:', e)
-  }
+  // Use validated MAGGIC as the mortality backbone
+  const maggicResult = calculateMAGGIC(maggicInput)
 
   let finalProb = maggicResult.oneYearMortality
 
@@ -867,7 +905,7 @@ export function computeMLRiskProfile(
     }
   }
 
-  if (age >= 70) {
+  if (!missingCore.includes('Age') && age >= 70) {
     factors.push({ label: `Advanced age (${age} years)`, direction: 'risk', magnitude: 0.06 })
   }
 
@@ -899,7 +937,9 @@ export function computeMLRiskProfile(
 
   // Primary risk driver identification
   const topRisk = factors.filter(f => f.direction === 'risk').sort((a, b) => b.magnitude - a.magnitude)[0]
-  const primaryDriver = topRisk ? topRisk.label : `LVEF ${currentLvef || 25}% with 4-Pillar GDMT Protection`
+  const primaryDriver = missingCore.length > 0
+    ? `Insufficient data — ${missingCore.join(' and ')} not recorded`
+    : topRisk ? topRisk.label : (currentLvef != null ? `LVEF ${currentLvef}%` : 'No dominant risk factor recorded')
 
   // Confidence based on true essential cardiology data
   const hasVitals = visit.bpSystolic != null && visit.heartRate != null
@@ -907,9 +947,13 @@ export function computeMLRiskProfile(
   const hasLabs = visit.ntProBNP != null || visit.egfr != null || visit.hb != null
   const hasMeds = visit.raasi?.prescribed != null && visit.betaBlocker?.prescribed != null
 
-  const confidence = (hasVitals && hasEcho && hasLabs && hasMeds)
-    ? 'High confidence — Comprehensive Clinical & GDMT Data'
-    : 'Moderate confidence — Based on documented Vitals, Echo & GDMT'
+  const confidence = missingCore.length > 0
+    ? `Not estimable — ${missingCore.join(' and ')} missing`
+    : imputed.length > 0
+      ? `Low confidence — ${imputed.length} input(s) defaulted: ${imputed.join(', ')}`
+      : (hasVitals && hasEcho && hasLabs && hasMeds)
+        ? 'High confidence — Comprehensive Clinical & GDMT Data'
+        : 'Moderate confidence — Based on documented Vitals, Echo & GDMT'
 
   return {
     oneYearEventProbability: parseFloat(finalProb.toFixed(3)),
@@ -920,6 +964,8 @@ export function computeMLRiskProfile(
     confidence,
     lastUpdated: new Date().toISOString().split('T')[0],
     exploratoryDisclaimer: 'Research-only exploratory risk summary (Statistical baseline model; uncalibrated in Indian ADHF populations without local external validation).',
+    imputedInputs: imputed,
+    insufficientData: missingCore.length > 0,
   }
 }
 
@@ -1127,16 +1173,20 @@ export interface HeartFailureKaggleResult {
   riskCategory: 'Low' | 'Intermediate' | 'High' | 'Very High';
   featuresUsed: Record<string, number>;
   cpkAvailable: boolean;
+  /** Features that were not recorded and were filled with population defaults. */
+  imputedFeatures: string[];
 }
 
 export function predictKaggleHeartFailure(
   patient: Patient,
   visit: Visit,
-  customTimeHorizon?: number,
+  _unusedTimeHorizon?: number, // kept for call-site compatibility; time is not a model input
   customCpk?: number
 ): HeartFailureKaggleResult {
-  const dob = patient.dob || '1960-01-01';
-  const age = getAge(dob) ?? 60;
+  const imputedFeatures: string[] = [];
+  const recordedAge = (patient.dob ? getAge(patient.dob) : null) ?? patient.age;
+  if (recordedAge == null) imputedFeatures.push('age');
+  const age = recordedAge ?? 60;
   const comorbStr = (patient.comorbidities ?? []).join(' ').toLowerCase();
 
   // 1. anaemia
@@ -1151,13 +1201,15 @@ export function predictKaggleHeartFailure(
 
   // 2. creatinine_phosphokinase
   const cpkAvailable = customCpk !== undefined;
+  if (!cpkAvailable) imputedFeatures.push('creatinine_phosphokinase');
   const creatinine_phosphokinase = cpkAvailable ? customCpk : 250;
 
   // 3. diabetes
   const diabetes = (comorbStr.includes('diabetes') || comorbStr.includes('dm')) ? 1 : 0;
 
   // 4. ejection_fraction
-  const ejection_fraction = visit.lvef !== undefined && visit.lvef !== null ? visit.lvef : 35;
+  if (visit.lvef == null) imputedFeatures.push('ejection_fraction');
+  const ejection_fraction = visit.lvef ?? 35;
 
   // 5. high_blood_pressure
   let high_blood_pressure = 0;
@@ -1165,13 +1217,16 @@ export function predictKaggleHeartFailure(
   if (comorbStr.includes('htn') || comorbStr.includes('hypertension')) high_blood_pressure = 1;
 
   // 6. platelets (standardized to actual count)
-  const platelets = visit.platelets !== undefined && visit.platelets !== null ? visit.platelets * 1000 : 250000;
+  if (visit.platelets == null) imputedFeatures.push('platelets');
+  const platelets = visit.platelets != null ? visit.platelets * 1000 : 250000;
 
   // 7. serum_creatinine
-  const serum_creatinine = visit.creatinine !== undefined && visit.creatinine !== null ? visit.creatinine : 1.1;
+  if (visit.creatinine == null) imputedFeatures.push('serum_creatinine');
+  const serum_creatinine = visit.creatinine ?? 1.1;
 
   // 8. serum_sodium
-  const serum_sodium = visit.sodium !== undefined && visit.sodium !== null ? visit.sodium : 137;
+  if (visit.sodium == null) imputedFeatures.push('serum_sodium');
+  const serum_sodium = visit.sodium ?? 137;
 
   // 9. sex: 1 = Male, 0 = Female
   const sex = patient.sex === 'Female' ? 0 : 1;
@@ -1179,8 +1234,8 @@ export function predictKaggleHeartFailure(
   // 10. smoking
   const smoking = (comorbStr.includes('smoking') || comorbStr.includes('smoker')) ? 1 : 0;
 
-  // 11. time: default is 365 days
-  const time = customTimeHorizon !== undefined ? customTimeHorizon : 365;
+  // The dataset's `time` column is each patient's follow-up/censoring time, which
+  // leaks the outcome, so the model was trained without it and it is not an input.
 
   const features = [
     age,
@@ -1230,9 +1285,9 @@ export function predictKaggleHeartFailure(
       serum_sodium,
       sex,
       smoking,
-      time
     },
-    cpkAvailable
+    cpkAvailable,
+    imputedFeatures,
   };
 }
 

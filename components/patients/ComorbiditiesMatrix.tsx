@@ -284,7 +284,7 @@ export default function ComorbiditiesMatrix({ patient, onRefresh }: Comorbiditie
 
           {/* Multi-Select Dropdown Popover */}
           {isOpen && (
-            <div className="comorbidity-popover absolute right-0 top-full mt-2 w-80 sm:w-96 glass-card p-3 border border-blue-500/30 shadow-2xl z-50 animate-fade-in bg-slate-950/95 backdrop-blur-xl rounded-xl">
+            <div className="comorbidity-popover absolute right-0 sm:right-0 top-full mt-2 w-[calc(100vw-2.5rem)] sm:w-96 max-w-sm glass-card p-3 border border-blue-500/30 shadow-2xl z-50 animate-fade-in bg-slate-950/95 backdrop-blur-xl rounded-xl">
               <div className="flex items-center justify-between border-b border-blue-500/15 pb-2 mb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> Select Comorbidities

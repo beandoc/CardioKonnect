@@ -1,4 +1,6 @@
 import type { CathProcedure, Patient, Visit } from '@/lib/types'
+import { complicationFlags } from '@/lib/complications'
+import { isStemiProcedure, procedureDtbMin } from '@/lib/interventionalMetrics'
 import { safeTime } from '@/lib/utils'
 import type { RegistryData } from './types'
 import { getEnrollmentTrend } from './utils'
@@ -40,9 +42,9 @@ export function computeAcsRegistry(
     const newThisMonth = acsPatients.filter(p => p.createdAt && new Date(p.createdAt) >= startOfMonth).length
 
     // 1. STEMI Door-to-Balloon Time
-    const stemiCases = acsProcedures.filter(p => p.clinicalIndication === 'STEMI' && p.stemiTimelines?.dtbMinutes != null)
-    const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) <= 90).length
-    const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
+    const stemiDtbs = acsProcedures.filter(isStemiProcedure).map(procedureDtbMin).filter((d): d is number => d !== null)
+    const dtbMet = stemiDtbs.filter(d => d <= 90).length
+    const dtbRate = stemiDtbs.length > 0 ? Math.round((dtbMet / stemiDtbs.length) * 100) : null
 
     // 2. TIMI 3 Flow post-PCI
     const treatedLesions = acsProcedures.flatMap(p => p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy')
@@ -68,7 +70,7 @@ export function computeAcsRegistry(
     // 4. 30-Day MACE (in-hospital death, periprocedural MI, TVR/TLR, stroke)
     let maceCount = 0
     acsProcedures.forEach(p => {
-      if (p.complications?.inHospitalDeath || p.complications?.periproceduralMi || p.complications?.strokeOrTia || p.complications?.targetVesselRevascularization) {
+      if (complicationFlags(p).inHospitalDeath || complicationFlags(p).periproceduralMi || complicationFlags(p).strokeOrTia || complicationFlags(p).targetVesselRevascularization) {
         maceCount++
       }
     })
@@ -162,7 +164,7 @@ export function computeAcsRegistry(
       fieldsCaptured: acsAvgCaptured,
       status: (acsPatients.length > 0 ? 'Active' : 'Suspended') as 'Active' | 'Suspended',
       kpis: [
-        { label: 'DTB ≤ 90 min', value: dtbRate !== null ? `${dtbRate}%` : '—', sub: stemiCases.length ? `${dtbMet}/${stemiCases.length} STEMIs` : 'no STEMI cases' },
+        { label: 'DTB ≤ 90 min', value: dtbRate !== null ? `${dtbRate}%` : '—', sub: stemiDtbs.length ? `${dtbMet}/${stemiDtbs.length} STEMIs` : 'no STEMI cases' },
         { label: 'TIMI 3 Flow', value: timi3Rate !== null ? `${timi3Rate}%` : '—', sub: treatedLesions.length ? `${timi3Lesions.length}/${treatedLesions.length} treated lesions` : 'no lesions treated' },
         { label: 'DAPT Rate', value: daptRate !== null ? `${daptRate}%` : '—', sub: evaluatedMedsCount ? `${daptPrescribedCount}/${evaluatedMedsCount} Aspirin + P2Y12` : 'no discharge meds' },
         { label: '30-Day MACE', value: maceRate !== null ? `${maceRate}%` : '—', sub: acsProcedures.length ? `${maceCount}/${acsProcedures.length} audited cases` : 'no procedures' },

@@ -1,15 +1,19 @@
 'use client'
+import { complicationFlags } from '@/lib/complications'
 import { useEffect, useState } from 'react'
 import { Bell, ShieldAlert, Sparkles, Filter, CheckCircle, Activity } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { getPatients, getAllVisits, getAllCathProcedures } from '@/lib/firestore'
+import { getPatients, getAllVisits, getAllCathProcedures, getResolvedAlertIds, resolveAlert as saveAlertResolution } from '@/lib/firestore'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { fullName } from '@/lib/utils'
 import { useAppUser } from '@/context/AppUserContext'
 import { filterPatientsByAccess } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
+import { toast } from 'sonner'
 
 interface AlertItem {
   id: string
+  patientId: string
   patient: string
   mrn: string
   trigger: string
@@ -28,14 +32,15 @@ export default function ClinicalAlertsPage() {
   useEffect(() => {
     async function loadAlerts() {
       try {
-        const [allPatients, allVisits, allProcs] = await Promise.all([
+        const [allPatients, allVisits, allProcs, resolvedIds] = await Promise.all([
           getPatients(),
           getAllVisits(),
-          getAllCathProcedures().catch(() => [] as CathProcedure[]),
+          getAllCathProcedures(),
+          getResolvedAlertIds(),
         ])
 
         // Strictly enforce patient access control per institutional scope
-        const patients = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
+        const patients = filterPatientsByAccess(currentUser, allPatients)
         const accessiblePatientIds = new Set(patients.map(p => p.id))
         
         const visitsByPatient: Record<string, Visit[]> = {}
@@ -58,106 +63,110 @@ export default function ClinicalAlertsPage() {
           }
         })
 
-        const resolvedIds = JSON.parse(localStorage.getItem('resolved_alerts') || '[]')
         const dynamicAlerts: AlertItem[] = []
 
         patients.forEach(p => {
-          const patientVisits = visitsByPatient[p.id] || []
-          if (patientVisits.length === 0) return
-
-          // Find latest visit
-          const latest = patientVisits.reduce((latestVisit, currentVisit) => {
-            const latestTime = new Date(latestVisit.visitDate).getTime()
-            const currentTime = new Date(currentVisit.visitDate).getTime()
-            return (!isNaN(currentTime) && currentTime > latestTime) ? currentVisit : latestVisit
-          }, patientVisits[0])
-
           const pName = fullName(p)
           const mrn = p.mrn || '—'
+          const patientVisits = visitsByPatient[p.id] || []
 
-          // 1. NT-proBNP > 2000
-          if (latest.ntProBNP && latest.ntProBNP > 2000) {
-            const alertId = `ntprobnp-${p.id}-${latest.id}`
-            dynamicAlerts.push({
-              id: alertId,
-              patient: pName,
-              mrn,
-              trigger: 'Decompensated Heart Failure Risk',
-              severity: 'Critical',
-              value: `NT-proBNP: ${latest.ntProBNP} pg/mL`,
-              timestamp: latest.visitDate,
-              status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
-            })
-          }
+          if (patientVisits.length > 0) {
+            // Find latest visit
+            const latest = patientVisits.reduce((latestVisit, currentVisit) => {
+              const latestTime = new Date(latestVisit.visitDate).getTime()
+              const currentTime = new Date(currentVisit.visitDate).getTime()
+              return (!isNaN(currentTime) && currentTime > latestTime) ? currentVisit : latestVisit
+            }, patientVisits[0])
 
-          // 2. eGFR < 45
-          if (latest.egfr && latest.egfr < 45) {
-            const alertId = `egfr-${p.id}-${latest.id}`
-            dynamicAlerts.push({
-              id: alertId,
-              patient: pName,
-              mrn,
-              trigger: 'eGFR Decline',
-              severity: 'Warning',
-              value: `eGFR: ${latest.egfr} ml/min`,
-              timestamp: latest.visitDate,
-              status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
-            })
-          }
+            // 1. NT-proBNP > 2000
+            if (latest.ntProBNP && latest.ntProBNP > 2000) {
+              const alertId = `ntprobnp-${p.id}-${latest.id}`
+              dynamicAlerts.push({
+                id: alertId,
+                patientId: p.id,
+                patient: pName,
+                mrn,
+                trigger: 'Decompensated Heart Failure Risk',
+                severity: 'Critical',
+                value: `NT-proBNP: ${latest.ntProBNP} pg/mL`,
+                timestamp: latest.visitDate,
+                status: resolvedIds.has(alertId) ? 'Resolved' : 'Open'
+              })
+            }
 
-          // 3. Potassium > 5.5
-          if (latest.potassium && latest.potassium > 5.5) {
-            const alertId = `potassium-high-${p.id}-${latest.id}`
-            dynamicAlerts.push({
-              id: alertId,
-              patient: pName,
-              mrn,
-              trigger: 'Hyperkalemia Alert',
-              severity: 'Critical',
-              value: `Potassium: ${latest.potassium} mmol/L`,
-              timestamp: latest.visitDate,
-              status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
-            })
-          }
+            // 2. eGFR < 45
+            if (latest.egfr && latest.egfr < 45) {
+              const alertId = `egfr-${p.id}-${latest.id}`
+              dynamicAlerts.push({
+                id: alertId,
+                patientId: p.id,
+                patient: pName,
+                mrn,
+                trigger: 'eGFR Decline',
+                severity: 'Warning',
+                value: `eGFR: ${latest.egfr} ml/min`,
+                timestamp: latest.visitDate,
+                status: resolvedIds.has(alertId) ? 'Resolved' : 'Open'
+              })
+            }
 
-          // 4. Potassium < 3.5
-          if (latest.potassium && latest.potassium < 3.5) {
-            const alertId = `potassium-low-${p.id}-${latest.id}`
-            dynamicAlerts.push({
-              id: alertId,
-              patient: pName,
-              mrn,
-              trigger: 'Hypokalemia Alert',
-              severity: 'Critical',
-              value: `Potassium: ${latest.potassium} mmol/L`,
-              timestamp: latest.visitDate,
-              status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
-            })
+            // 3. Potassium > 5.5
+            if (latest.potassium && latest.potassium > 5.5) {
+              const alertId = `potassium-high-${p.id}-${latest.id}`
+              dynamicAlerts.push({
+                id: alertId,
+                patientId: p.id,
+                patient: pName,
+                mrn,
+                trigger: 'Hyperkalemia Alert',
+                severity: 'Critical',
+                value: `Potassium: ${latest.potassium} mmol/L`,
+                timestamp: latest.visitDate,
+                status: resolvedIds.has(alertId) ? 'Resolved' : 'Open'
+              })
+            }
+
+            // 4. Potassium < 3.5
+            if (latest.potassium && latest.potassium < 3.5) {
+              const alertId = `potassium-low-${p.id}-${latest.id}`
+              dynamicAlerts.push({
+                id: alertId,
+                patientId: p.id,
+                patient: pName,
+                mrn,
+                trigger: 'Hypokalemia Alert',
+                severity: 'Critical',
+                value: `Potassium: ${latest.potassium} mmol/L`,
+                timestamp: latest.visitDate,
+                status: resolvedIds.has(alertId) ? 'Resolved' : 'Open'
+              })
+            }
           }
 
           // 5. Interventional / Cath Lab Alerts
           const ptProcs = procsByPatient[p.id] || []
           ptProcs.forEach(proc => {
-            if (proc.complications?.hasComplication) {
+            if (complicationFlags(proc).hasComplication) {
               const alertId = `proc-comp-${proc.id}`
               const compDesc = [
-                proc.complications.inLabDeath && 'In-Lab Mortality',
-                proc.complications.coronaryPerforation && 'Coronary Perforation',
-                proc.complications.coronaryDissection && 'Coronary Dissection',
-                proc.complications.acuteStentThrombosis && 'Acute Stent Thrombosis',
-                proc.complications.majorBleed && 'Major Bleed',
-                proc.complications.emergencyCabg && 'Emergency CABG'
+                complicationFlags(proc).inLabDeath && 'In-Lab Mortality',
+                complicationFlags(proc).coronaryPerforation && 'Coronary Perforation',
+                complicationFlags(proc).coronaryDissection && 'Coronary Dissection',
+                complicationFlags(proc).acuteStentThrombosis && 'Acute Stent Thrombosis',
+                complicationFlags(proc).majorBleed && 'Major Bleed',
+                complicationFlags(proc).emergencyCabg && 'Emergency CABG'
               ].filter(Boolean).join(', ') || 'Procedural Complication Recorded'
 
               dynamicAlerts.push({
                 id: alertId,
+                patientId: p.id,
                 patient: pName,
                 mrn,
                 trigger: 'Post-PCI Adverse Event',
                 severity: 'Critical',
                 value: compDesc,
                 timestamp: proc.procedureDate || new Date().toISOString(),
-                status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
+                status: resolvedIds.has(alertId) ? 'Resolved' : 'Open'
               })
             }
 
@@ -166,13 +175,14 @@ export default function ClinicalAlertsPage() {
               const alertId = `contrast-high-${proc.id}`
               dynamicAlerts.push({
                 id: alertId,
+                patientId: p.id,
                 patient: pName,
                 mrn,
                 trigger: 'High Contrast Volume (CIN Risk)',
                 severity: 'Warning',
                 value: `Volume: ${proc.contrastVolumeMl} mL`,
                 timestamp: proc.procedureDate || new Date().toISOString(),
-                status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
+                status: resolvedIds.has(alertId) ? 'Resolved' : 'Open'
               })
             }
 
@@ -182,13 +192,14 @@ export default function ClinicalAlertsPage() {
               const alertId = `suboptimal-timi-${proc.id}-${suboptimalLesion.vessel}`
               dynamicAlerts.push({
                 id: alertId,
+                patientId: p.id,
                 patient: pName,
                 mrn,
                 trigger: 'Sub-optimal Coronary Perfusion',
                 severity: 'Warning',
                 value: `${suboptimalLesion.vessel}: TIMI ${suboptimalLesion.postTimiFlow} flow`,
                 timestamp: proc.procedureDate || new Date().toISOString(),
-                status: resolvedIds.includes(alertId) ? 'Resolved' : 'Open'
+                status: resolvedIds.has(alertId) ? 'Resolved' : 'Open'
               })
             }
           })
@@ -196,7 +207,7 @@ export default function ClinicalAlertsPage() {
 
         setAlerts(dynamicAlerts)
       } catch (err) {
-        console.error(err)
+        notifyLoadError(err, 'Alerts')
       } finally {
         setLoading(false)
       }
@@ -204,12 +215,13 @@ export default function ClinicalAlertsPage() {
     loadAlerts()
   }, [currentUser])
 
-  const resolveAlert = (id: string) => {
-    setAlerts(prev => prev.map(a => a.id === id ? { ...a, status: 'Resolved' } : a))
-    const resolvedIds = JSON.parse(localStorage.getItem('resolved_alerts') || '[]')
-    if (!resolvedIds.includes(id)) {
-      resolvedIds.push(id)
-      localStorage.setItem('resolved_alerts', JSON.stringify(resolvedIds))
+  const resolveAlert = async (alert: AlertItem) => {
+    try {
+      await saveAlertResolution(alert.id, alert.patientId)
+      setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, status: 'Resolved' } : a))
+    } catch (err) {
+      console.error(err)
+      toast.error('Could not save the alert resolution. Please try again.')
     }
   }
 
@@ -285,7 +297,7 @@ export default function ClinicalAlertsPage() {
               </div>
               <div className="flex gap-2">
                 {alert.status === 'Open' ? (
-                  <Button variant="outline" size="sm" className="btn-sm text-emerald-400" onClick={() => resolveAlert(alert.id)}>
+                  <Button variant="outline" size="sm" className="btn-sm text-emerald-400" onClick={() => resolveAlert(alert)}>
                     <CheckCircle className="w-3.5 h-3.5" /> Resolve flag
                   </Button>
                 ) : (

@@ -31,7 +31,8 @@ export function canAccessRegistry(user: AppUser | null, registryId: string): boo
  * A patient is viewable if at least one of their registries overlaps with the user's access.
  */
 export function canViewPatient(user: AppUser | null, patient: Patient): boolean {
-  if (!user) return true
+  if (!user) return false
+  if (user.role === 'SuperAdmin') return true
 
   // Explicit transfer or cross-registry sharing
   const isExplicitlySharedOrTransferred =
@@ -88,8 +89,17 @@ export function canViewPatient(user: AppUser | null, patient: Patient): boolean 
  * Filters a patient list to only those the user can view.
  */
 export function filterPatientsByAccess(user: AppUser | null, patients: Patient[]): Patient[] {
-  if (!user) return patients
+  if (!user) return []
   return patients.filter(p => canViewPatient(user, p))
+}
+
+/**
+ * Restricts procedures/visits/events to those belonging to patients the user can view.
+ * Pass the already-filtered patient list.
+ */
+export function filterRecordsByPatients<T extends { patientId: string }>(records: T[], accessiblePatients: Patient[]): T[] {
+  const ids = new Set(accessiblePatients.map(p => p.id))
+  return records.filter(r => ids.has(r.patientId))
 }
 
 /**

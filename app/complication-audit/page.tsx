@@ -1,4 +1,5 @@
 'use client'
+import { complicationFlags, complicationLabels } from '@/lib/complications'
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import {
@@ -8,6 +9,9 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess, filterRecordsByPatients } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { cn, formatDate } from '@/lib/utils'
 import Button from '@/components/ui/Button'
@@ -21,6 +25,8 @@ export default function ComplicationAuditPage() {
   const [procedures, setProcedures] = useState<CathProcedure[]>([])
   const [loading, setLoading] = useState(true)
 
+  const { currentUser } = useAppUser()
+
   useEffect(() => {
     async function load() {
       try {
@@ -29,56 +35,57 @@ export default function ComplicationAuditPage() {
           getAllLatestVisits(),
           getAllCathProcedures()
         ])
-        setPatients(pts)
+        const accessible = filterPatientsByAccess(currentUser, pts)
+        setPatients(accessible)
         setVisitsMap(vMap)
-        setProcedures(procs)
+        setProcedures(filterRecordsByPatients(procs, accessible))
       } catch (err) {
-        console.error('Failed to load complication audit data:', err)
+        notifyLoadError(err, 'Complication audit')
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [])
+  }, [currentUser])
 
   const totalPatients = patients.length
   const totalProcedures = procedures.length
 
   // Authentic procedural complications
   const complicationProcedures = useMemo(() => {
-    return procedures.filter(p => p.complications?.hasComplication)
+    return procedures.filter(p => complicationFlags(p).hasComplication)
   }, [procedures])
 
   const perforationCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.coronaryPerforation).length
+    return procedures.filter(p => complicationFlags(p).coronaryPerforation).length
   }, [procedures])
 
   const dissectionCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.coronaryDissection).length
+    return procedures.filter(p => complicationFlags(p).coronaryDissection).length
   }, [procedures])
 
   const noReflowCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.noReflowSlowReflow).length
+    return procedures.filter(p => complicationFlags(p).noReflowSlowReflow).length
   }, [procedures])
 
   const stentThrombosisCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.acuteStentThrombosis).length
+    return procedures.filter(p => complicationFlags(p).acuteStentThrombosis).length
   }, [procedures])
 
   const emergencyCabgCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.emergencyCabg).length
+    return procedures.filter(p => complicationFlags(p).emergencyCabg).length
   }, [procedures])
 
   const bleedingCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.accessSiteBleeding).length
+    return procedures.filter(p => complicationFlags(p).accessSiteBleeding).length
   }, [procedures])
 
   const akiCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.contrastInducedAki).length
+    return procedures.filter(p => complicationFlags(p).contrastInducedAki).length
   }, [procedures])
 
   const mortalityCount = useMemo(() => {
-    return procedures.filter(p => p.complications?.inLabDeath || p.complications?.inHospitalDeath).length
+    return procedures.filter(p => complicationFlags(p).inLabDeath || complicationFlags(p).inHospitalDeath).length
   }, [procedures])
 
   const hospHistoryCount = useMemo(() => {
@@ -312,17 +319,8 @@ export default function ComplicationAuditPage() {
                         <tbody className="divide-y divide-white/[0.05]">
                           {complicationProcedures.map((proc) => {
                             const p = patients.find(pt => pt.id === proc.patientId)
-                            const comp = proc.complications
-                            const events: string[] = []
-                            if (comp.coronaryPerforation) events.push(`Perforation (Ellis ${comp.coronaryPerforationEllisClass || '?'})`)
-                            if (comp.coronaryDissection) events.push(`Dissection (NHLBI ${comp.coronaryDissectionNhlbiType || '?'})`)
-                            if (comp.noReflowSlowReflow) events.push('Slow / No-Reflow')
-                            if (comp.acuteStentThrombosis) events.push('Stent Thrombosis')
-                            if (comp.emergencyCabg) events.push('Emergent CABG')
-                            if (comp.accessSiteBleeding) events.push(`Bleeding (${comp.barcBleedingType || 'BARC'})`)
-                            if (comp.contrastInducedAki) events.push('Contrast AKI')
-                            if (comp.strokeOrTia) events.push('Stroke / TIA')
-                            if (comp.inLabDeath || comp.inHospitalDeath) events.push('Mortality')
+                            const comp = complicationFlags(proc)
+                            const events = complicationLabels(comp)
 
                             return (
                               <tr key={proc.id} className="hover:bg-white/[0.02] text-[11px]">
@@ -351,7 +349,7 @@ export default function ComplicationAuditPage() {
                                   {comp.barcBleedingType || comp.coronaryPerforationEllisClass || comp.coronaryDissectionNhlbiType || 'Documented'}
                                 </td>
                                 <td className="py-2 px-3 text-gray-400">{proc.operatorName}</td>
-                                <td className="py-2 px-3 text-gray-400 max-w-xs truncate">{comp.complicationNotes || '—'}</td>
+                                <td className="py-2 px-3 text-gray-400 max-w-xs truncate">{(proc.complications as any)?.complicationNotes || '—'}</td>
                               </tr>
                             )
                           })}

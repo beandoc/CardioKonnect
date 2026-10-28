@@ -233,10 +233,10 @@ export default function QuickDataEntryModal({
           creatinine: numCr,
           egfr: computedEgfr,
           followupDate: followupDate || undefined,
-          raasi: { prescribed: 'Yes' },
-          betaBlocker: { prescribed: 'Yes' },
-          mra: { prescribed: 'No' },
-          sglt2i: { prescribed: 'Yes' },
+          raasi: { prescribed: '' },
+          betaBlocker: { prescribed: '' },
+          mra: { prescribed: '' },
+          sglt2i: { prescribed: '' },
         } as unknown as VisitInput)
       }
 
@@ -253,6 +253,16 @@ export default function QuickDataEntryModal({
       if (af) updatedComorbiditiesList.push('AF')
       if (copd) updatedComorbiditiesList.push('COPD')
 
+      // Preserve any existing comorbidities not covered by the modal's 10 checkboxes
+      const modalManagedKeys = new Set([
+        'HTN', 'Hypertension', 'DM2', 'Diabetes', 'Type 2 Diabetes',
+        'CAD', 'Coronary Artery Disease', 'Prior MI', 'Prior MI / IHD', 'PriorMI_IHD',
+        'Prior PCI', 'PriorPCI', 'Prior CABG', 'CABG', 'PriorCardiacSurgery',
+        'Dyslipidemia', 'CKD', 'Chronic Kidney Disease', 'AF', 'Atrial Fibrillation', 'COPD'
+      ])
+      const preservedOtherComorbidities = (patient.comorbidities || []).filter(c => !modalManagedKeys.has(c))
+      const finalComorbidities = Array.from(new Set([...preservedOtherComorbidities, ...updatedComorbiditiesList]))
+
       await updatePatient(patient.id, {
         lvef: numLvef,
         hfType: hfType as any,
@@ -268,7 +278,7 @@ export default function QuickDataEntryModal({
         comorbidCKD: ckd,
         comorbidAF: af,
         comorbidCOPD: copd,
-        comorbidities: updatedComorbiditiesList,
+        comorbidities: finalComorbidities,
       })
 
       toast.success('Clinical data and calculations saved successfully!', { id: toastId })

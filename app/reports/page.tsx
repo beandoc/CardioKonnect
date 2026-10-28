@@ -1,19 +1,23 @@
 'use client'
+import { complicationFlags } from '@/lib/complications'
 import { useState, useMemo, useEffect } from 'react'
 import {
-  FileText, Search, BarChart3, Heart, ShieldAlert, Award, Compass, Sparkles, Download, ArrowUpRight, TrendingUp, X, Printer, Calendar, AlertTriangle, Users, Database
+  FileText, Search, BarChart3, Heart, ShieldAlert, Award, Compass, Sparkles, Download, ArrowUpRight, TrendingUp, X, Printer, Calendar, AlertTriangle, Users, Database, CheckCircle
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { cn, fullName } from '@/lib/utils'
+import { cn, fullName, getAge } from '@/lib/utils'
+import { toCsv } from '@/lib/csv'
 import { toast } from 'sonner'
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine
 } from 'recharts'
-import { getPatients, getAllLatestVisits, getAllCathProcedures } from '@/lib/firestore'
+import { getPatients, getAllLatestVisits, getAllCathProcedures, writeAudit } from '@/lib/firestore'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { useAppUser } from '@/context/AppUserContext'
-import { filterPatientsByAccess } from '@/lib/accessControl'
+import { filterPatientsByAccess, filterRecordsByPatients } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import { calculateLesionSuccess } from '@/lib/interventionalMetrics'
+import { buildLiveReport } from '@/lib/reportAggregates'
 
 // Left Navigation sections
 const REPORT_SECTIONS = [
@@ -85,7 +89,8 @@ const REPORTS_REGISTRY: Record<string, { title: string; category: string; descri
   ]
 }
 
-// Complete visualization mapping configuration
+// Chart layout and guidance text per report. chartData is always filled from
+// live registry records by buildLiveReport(); it is never hardcoded here.
 interface ReportVisualConfig {
   chartType: 'bar' | 'line' | 'pie'
   chartData: any[]
@@ -101,13 +106,7 @@ interface ReportVisualConfig {
 const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   'Demographic Distribution': {
     chartType: 'bar',
-    chartData: [
-      { name: '<40 yrs', Patients: 105 },
-      { name: '40–49 yrs', Patients: 224 },
-      { name: '50–59 yrs', Patients: 424 },
-      { name: '60–69 yrs', Patients: 350 },
-      { name: '≥70 yrs', Patients: 145 }
-    ],
+    chartData: [],
     xAxisKey: 'name',
     yAxisLabel: 'Patients',
     summary: 'Visualizes the age cohort distribution of enrolled registry patients. High concentration is noted in the 50-69 age bracket.',
@@ -122,12 +121,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Disease Category Distribution': {
     chartType: 'pie',
-    chartData: [
-      { name: 'CAD', value: 45 },
-      { name: 'Heart Failure', value: 32 },
-      { name: 'Arrhythmias', value: 18 },
-      { name: 'Valvular Disease', value: 5 }
-    ],
+    chartData: [],
     colors: ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b'],
     summary: 'Shows clinical category representation. Coronary Artery Disease remains the dominant registry cohort (45%), followed closely by Heart Failure.',
     recommendations: [
@@ -141,14 +135,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Disease Burden & Prevalence Trends': {
     chartType: 'line',
-    chartData: [
-      { month: 'Jan', 'Young MI (<40)': 7.8, 'Multi-vessel CAD': 36.4 },
-      { month: 'Feb', 'Young MI (<40)': 8.0, 'Multi-vessel CAD': 37.1 },
-      { month: 'Mar', 'Young MI (<40)': 8.2, 'Multi-vessel CAD': 37.9 },
-      { month: 'Apr', 'Young MI (<40)': 8.5, 'Multi-vessel CAD': 38.0 },
-      { month: 'May', 'Young MI (<40)': 8.3, 'Multi-vessel CAD': 38.1 },
-      { month: 'Jun', 'Young MI (<40)': 8.4, 'Multi-vessel CAD': 38.2 }
-    ],
+    chartData: [],
     xAxisKey: 'month',
     yAxisLabel: 'Percentage (%)',
     summary: 'Tracks the rising prevalence of premature Coronary Artery Disease (Young MI) and multi-vessel blockages in registry outcomes.',
@@ -163,12 +150,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Angiography Distribution Patterns': {
     chartType: 'bar',
-    chartData: [
-      { vessel: 'LAD Involvement', Prevalence: 62 },
-      { vessel: 'RCA Involvement', Prevalence: 45 },
-      { vessel: 'LCx Involvement', Prevalence: 38 },
-      { vessel: 'Left Main Disease', Prevalence: 12.4 }
-    ],
+    chartData: [],
     xAxisKey: 'vessel',
     yAxisLabel: 'Prevalence (%)',
     summary: 'A coronary map showcasing target vessel blockages. LAD involvement represents the highest ischemic territory burden in Cath labs.',
@@ -183,14 +165,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'STEMI Quality Metrics': {
     chartType: 'line',
-    chartData: [
-      { month: 'Jan', 'Median D2B': 64, Target: 90 },
-      { month: 'Feb', 'Median D2B': 62, Target: 90 },
-      { month: 'Mar', 'Median D2B': 60, Target: 90 },
-      { month: 'Apr', 'Median D2B': 58, Target: 90 },
-      { month: 'May', 'Median D2B': 59, Target: 90 },
-      { month: 'Jun', 'Median D2B': 58, Target: 90 }
-    ],
+    chartData: [],
     xAxisKey: 'month',
     yAxisLabel: 'Minutes',
     targetVal: 90,
@@ -206,11 +181,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Outcomes & MACE Records': {
     chartType: 'bar',
-    chartData: [
-      { period: 'In-Hospital', Rate: 1.4, MACE: 1.8 },
-      { period: '30-Day', Rate: 1.9, MACE: 2.1 },
-      { period: '90-Day', Rate: 2.4, MACE: 3.5 }
-    ],
+    chartData: [],
     xAxisKey: 'period',
     yAxisLabel: 'Incidence (%)',
     summary: 'Surveillance of clinical major adverse cardiovascular events (death, re-infarction, stroke, revascularization) across follow-up intervals.',
@@ -225,11 +196,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'HF Population Cohorts': {
     chartType: 'pie',
-    chartData: [
-      { name: 'HFrEF', value: 48 },
-      { name: 'HFpEF', value: 35 },
-      { name: 'HFmrEF', value: 17 }
-    ],
+    chartData: [],
     colors: ['#2563eb', '#10b981', '#6366f1'],
     summary: 'Proportion of heart failure patients stratified by LVEF. HFrEF (LVEF < 40%) represents the largest registry subgroup.',
     recommendations: [
@@ -243,12 +210,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Guideline-Directed Medical Therapy (GDMT)': {
     chartType: 'bar',
-    chartData: [
-      { class: 'Beta-Blocker', Compliance: 88 },
-      { class: 'RAASi', Compliance: 82 },
-      { class: 'SGLT2i', Compliance: 76 },
-      { class: 'MRA', Compliance: 63 }
-    ],
+    chartData: [],
     xAxisKey: 'class',
     yAxisLabel: 'Prescribing Rate (%)',
     summary: 'Monitors prescribing compliance across the four cornerstone pillars of HF management. SGLT2i and MRA show opportunity for growth.',
@@ -263,12 +225,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Remote Monitoring & Congestion Risks': {
     chartType: 'line',
-    chartData: [
-      { week: 'Wk 1', Alerts: 18, Resolved: 16 },
-      { week: 'Wk 2', Alerts: 15, Resolved: 14 },
-      { week: 'Wk 3', Alerts: 12, Resolved: 12 },
-      { week: 'Wk 4', Alerts: 14, Resolved: 13 }
-    ],
+    chartData: [],
     xAxisKey: 'week',
     yAxisLabel: 'Count',
     summary: 'Tracks remote monitoring sensor compliance, patient weight fluctuations, and decompensation alerts handled by care coordination.',
@@ -283,11 +240,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'AF Registry & Anticoagulation': {
     chartType: 'pie',
-    chartData: [
-      { name: 'NOAC / OAC', value: 88 },
-      { name: 'Antiplatelet only', value: 8 },
-      { name: 'No therapy', value: 4 }
-    ],
+    chartData: [],
     colors: ['#059669', '#d97706', '#dc2626'],
     summary: 'Anticoagulation status based on stroke risk. 88% compliance rate shows close adherence to ESC stroke prevention guidelines.',
     recommendations: [
@@ -301,14 +254,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'EP Procedure & Ablation Success': {
     chartType: 'line',
-    chartData: [
-      { month: 'Jan', 'Success Rate': 82.5 },
-      { month: 'Feb', 'Success Rate': 83.1 },
-      { month: 'Mar', 'Success Rate': 84.0 },
-      { month: 'Apr', 'Success Rate': 84.3 },
-      { month: 'May', 'Success Rate': 84.5 },
-      { month: 'Jun', 'Success Rate': 84.5 }
-    ],
+    chartData: [],
     xAxisKey: 'month',
     yAxisLabel: 'Success Rate (%)',
     summary: 'Tracks the 1-year success rates of catheter ablation procedures for paroxysmal/persistent atrial fibrillation.',
@@ -323,12 +269,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Device Rhythm Burden Tracker': {
     chartType: 'bar',
-    chartData: [
-      { week: 'Wk 1', 'AF Burden >10%': 15, 'VT/VF Episodes': 8 },
-      { week: 'Wk 2', 'AF Burden >10%': 12, 'VT/VF Episodes': 10 },
-      { week: 'Wk 3', 'AF Burden >10%': 11, 'VT/VF Episodes': 12 },
-      { week: 'Wk 4', 'AF Burden >10%': 12, 'VT/VF Episodes': 15 }
-    ],
+    chartData: [],
     xAxisKey: 'week',
     yAxisLabel: 'Cases',
     summary: 'Aggregates diagnostic telemetry from implanted pacemakers, ICDs, and loop recorders to alert on clinical arrhythmic burden.',
@@ -343,12 +284,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Implant & Utilization Trends': {
     chartType: 'bar',
-    chartData: [
-      { type: 'Pacemaker', Implants: 120 },
-      { type: 'ICD', Implants: 84 },
-      { type: 'CRT-D', Implants: 75 },
-      { type: 'CRT-P', Implants: 33 }
-    ],
+    chartData: [],
     xAxisKey: 'type',
     yAxisLabel: 'Implants',
     summary: 'Volume of implants logged. CRT-D accounts for 24% of the total, showing appropriate target selection in HFrEF cohorts.',
@@ -363,13 +299,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Device Performance & Battery Longevity': {
     chartType: 'line',
-    chartData: [
-      { year: 'Yr 1', 'Lead Impedance': 510, 'Battery (%)': 98 },
-      { year: 'Yr 2', 'Lead Impedance': 505, 'Battery (%)': 90 },
-      { year: 'Yr 3', 'Lead Impedance': 498, 'Battery (%)': 82 },
-      { year: 'Yr 4', 'Lead Impedance': 502, 'Battery (%)': 73 },
-      { year: 'Yr 5', 'Lead Impedance': 495, 'Battery (%)': 65 }
-    ],
+    chartData: [],
     xAxisKey: 'year',
     yAxisLabel: 'Value',
     summary: 'Longitudinal telemetry analytics on battery depletion rates and lead impedance parameters to preempt device failures.',
@@ -384,10 +314,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'TAVR Procedural Benchmarks': {
     chartType: 'bar',
-    chartData: [
-      { case: 'Pre-Procedure', Gradient: 42, PVL: 0 },
-      { case: 'Post-Procedure', Gradient: 8, PVL: 2 }
-    ],
+    chartData: [],
     xAxisKey: 'case',
     yAxisLabel: 'Mean Gradient (mmHg)',
     summary: ' procedural benchmark tracker showcasing trans-valvular pressure gradient reductions and residual paravalvular leak grades.',
@@ -402,10 +329,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Mitral & Tricuspid Interventions': {
     chartType: 'bar',
-    chartData: [
-      { stage: 'Pre-Clip', 'MR Severe': 86, 'TR Severe': 54 },
-      { stage: 'Post-Clip', 'MR Severe': 12, 'TR Severe': 18 }
-    ],
+    chartData: [],
     xAxisKey: 'stage',
     yAxisLabel: 'Percentage (%)',
     summary: 'Tracks transcatheter edge-to-edge repair (TEER) outcomes. 84% reduction in mitral regurgitation severity is achieved.',
@@ -420,12 +344,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Echocardiography Quality Indices': {
     chartType: 'bar',
-    chartData: [
-      { age: '<50', 'GLS (%)': -16.8 },
-      { age: '50-59', 'GLS (%)': -15.1 },
-      { age: '60-69', 'GLS (%)': -14.2 },
-      { age: '70+', 'GLS (%)': -13.1 }
-    ],
+    chartData: [],
     xAxisKey: 'age',
     yAxisLabel: 'Mean GLS (%)',
     summary: 'Echocardiography strain analytics. Tracking global longitudinal strain provides early prognostic clues in cardiotoxicity.',
@@ -440,12 +359,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'CT Coronary & Calcium Scores': {
     chartType: 'bar',
-    chartData: [
-      { range: 'Score 0', Distribution: 35 },
-      { range: 'Score 1-100', Distribution: 28 },
-      { range: 'Score 101-400', Distribution: 19 },
-      { range: 'Score >400', Distribution: 18 }
-    ],
+    chartData: [],
     xAxisKey: 'range',
     yAxisLabel: 'Distribution (%)',
     summary: 'Calcium score distribution maps. 18% show high calcification index (>400 Agatston units), signaling high risk.',
@@ -460,11 +374,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Cardiac MRI Scar Mapping': {
     chartType: 'pie',
-    chartData: [
-      { name: 'No LGE Scar', value: 68 },
-      { name: 'Mild LGE (<10%)', value: 18 },
-      { name: 'Moderate/Severe (≥10%)', value: 14 }
-    ],
+    chartData: [],
     colors: ['#10b981', '#3b82f6', '#ef4444'],
     summary: 'MRI Late Gadolinium Enhancement (LGE) distribution. Moderate-to-severe scar burden represents a high risk for cardiac events.',
     recommendations: [
@@ -478,14 +388,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Workflow & Cath Lab Turnaround': {
     chartType: 'line',
-    chartData: [
-      { month: 'Jan', 'Turnaround Time': 38 },
-      { month: 'Feb', 'Turnaround Time': 36 },
-      { month: 'Mar', 'Turnaround Time': 34 },
-      { month: 'Apr', 'Turnaround Time': 33 },
-      { month: 'May', 'Turnaround Time': 32 },
-      { month: 'Jun', 'Turnaround Time': 32 }
-    ],
+    chartData: [],
     xAxisKey: 'month',
     yAxisLabel: 'Minutes',
     summary: 'Analyzes Cath Lab operational performance. Decreases in turnaround time maximize room utilization and procedure workflow.',
@@ -500,14 +403,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Safety, Contrast & Radiation Logs': {
     chartType: 'bar',
-    chartData: [
-      { month: 'Jan', 'CIN Rate (%)': 1.4, 'Mean DAP (Gy.cm²)': 45 },
-      { month: 'Feb', 'CIN Rate (%)': 1.3, 'Mean DAP (Gy.cm²)': 43 },
-      { month: 'Mar', 'CIN Rate (%)': 1.2, 'Mean DAP (Gy.cm²)': 42 },
-      { month: 'Apr', 'CIN Rate (%)': 1.1, 'Mean DAP (Gy.cm²)': 41 },
-      { month: 'May', 'CIN Rate (%)': 1.1, 'Mean DAP (Gy.cm²)': 42 },
-      { month: 'Jun', 'CIN Rate (%)': 1.1, 'Mean DAP (Gy.cm²)': 42 }
-    ],
+    chartData: [],
     xAxisKey: 'month',
     yAxisLabel: 'Value',
     summary: 'Cath Lab safety benchmarks tracking radiation dose area products (DAP) and post-procedure contrast-induced nephropathy (CIN) rates.',
@@ -522,13 +418,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Longitudinal Survival & Kaplan-Meier': {
     chartType: 'line',
-    chartData: [
-      { year: 'Yr 0', Survival: 100 },
-      { year: 'Yr 1', Survival: 94.2 },
-      { year: 'Yr 2', Survival: 91.5 },
-      { year: 'Yr 3', Survival: 89.8 },
-      { year: 'Yr 5', Survival: 85.2 }
-    ],
+    chartData: [],
     xAxisKey: 'year',
     yAxisLabel: 'Survival Probability (%)',
     summary: 'Kaplan-Meier survival estimation showing strong long-term survival trends. Outcomes benchmarked against national averages.',
@@ -543,14 +433,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'Readmissions & Emergency Revisits': {
     chartType: 'bar',
-    chartData: [
-      { month: 'Jan', '7-Day': 1.8, '30-Day': 8.8 },
-      { month: 'Feb', '7-Day': 1.6, '30-Day': 8.5 },
-      { month: 'Mar', '7-Day': 1.5, '30-Day': 8.3 },
-      { month: 'Apr', '7-Day': 1.4, '30-Day': 8.2 },
-      { month: 'May', '7-Day': 1.4, '30-Day': 8.2 },
-      { month: 'Jun', '7-Day': 1.4, '30-Day': 8.2 }
-    ],
+    chartData: [],
     xAxisKey: 'month',
     yAxisLabel: 'Readmission Rate (%)',
     summary: 'Assesses 30-day and 7-day readmission statistics. Transitions of care programs have successfully kept rates below benchmark targets.',
@@ -565,12 +448,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
   },
   'GDMT Persistence & DAPT Compliance': {
     chartType: 'line',
-    chartData: [
-      { month: 'Month 1', 'GDMT Persistence': 92, 'DAPT Compliance': 98 },
-      { month: 'Month 3', 'GDMT Persistence': 89, 'DAPT Compliance': 96 },
-      { month: 'Month 6', 'GDMT Persistence': 88, 'DAPT Compliance': 95 },
-      { month: 'Month 12', 'GDMT Persistence': 87, 'DAPT Compliance': 94 }
-    ],
+    chartData: [],
     xAxisKey: 'month',
     yAxisLabel: 'Rate (%)',
     summary: 'Traces patient therapy compliance and drug persistence rates at key milestones post-discharge. Adherence remains high.',
@@ -588,14 +466,7 @@ const REPORT_VISUALS: Record<string, ReportVisualConfig> = {
 // Fallback visual config for safety
 const DEFAULT_VISUAL_CONFIG: ReportVisualConfig = {
   chartType: 'line',
-  chartData: [
-    { name: 'Month 1', value: 85 },
-    { name: 'Month 2', value: 88 },
-    { name: 'Month 3', value: 87 },
-    { name: 'Month 4', value: 91 },
-    { name: 'Month 5', value: 90 },
-    { name: 'Month 6', value: 92 }
-  ],
+  chartData: [],
   xAxisKey: 'name',
   yAxisLabel: 'Compliance (%)',
   summary: 'Longitudinal performance tracking of selected registry indicators.',
@@ -632,12 +503,12 @@ export default function ReportsArchitecturePage() {
           getAllLatestVisits(),
           getAllCathProcedures()
         ])
-        const accessiblePts = currentUser ? filterPatientsByAccess(currentUser, pts) : pts
+        const accessiblePts = filterPatientsByAccess(currentUser, pts)
         setPatients(accessiblePts)
         setVisitsMap(vMap)
-        setProcedures(procs)
+        setProcedures(filterRecordsByPatients(procs, accessiblePts))
       } catch (err) {
-        console.error('Failed to load reports database:', err)
+        notifyLoadError(err, 'Reports')
       } finally {
         setLoading(false)
       }
@@ -649,14 +520,15 @@ export default function ReportsArchitecturePage() {
   const total = patients.length
   const maleCount = patients.filter(p => p.sex === 'Male').length
   const malePct = total > 0 ? Math.round((maleCount / total) * 100) : 0
-  const avgAge = total > 0 ? Math.round(patients.reduce((acc, p) => acc + (p.age || 60), 0) / total) : 0
+  // Means are computed over recorded values only; missing data is never imputed.
+  const ageValues = patients.map(p => (p.dob ? getAge(p.dob) : null) ?? p.age).filter((a): a is number => typeof a === 'number')
+  const avgAge = ageValues.length > 0 ? Math.round(ageValues.reduce((a, b) => a + b, 0) / ageValues.length) : null
 
-  const hfPatients = patients.filter(p => p.registryId === 'hf' || p.hfType === 'HFrEF')
+  const hfPatients = patients.filter(p => p.registryId === 'hf' || p.registryIds?.includes('hf') || p.hfType === 'HFrEF')
   const hfrEFCount = patients.filter(p => (visitsMap.get(p.id)?.hfType || p.hfType) === 'HFrEF').length
   const hfrEFPct = total > 0 ? Math.round((hfrEFCount / total) * 100) : 0
-  const avgLvef = total > 0
-    ? Math.round(patients.reduce((acc, p) => acc + (visitsMap.get(p.id)?.lvef || p.lvef || 30), 0) / total)
-    : 0
+  const lvefValues = patients.map(p => visitsMap.get(p.id)?.lvef ?? p.lvef).filter((v): v is number => typeof v === 'number')
+  const avgLvef = lvefValues.length > 0 ? Math.round(lvefValues.reduce((a, b) => a + b, 0) / lvefValues.length) : null
 
   // GDMT Adherence among HFrEF
   const raasiCount = hfPatients.filter(p => visitsMap.get(p.id)?.raasi?.prescribed === 'Yes').length
@@ -679,15 +551,17 @@ export default function ReportsArchitecturePage() {
   const pciProcedures = procedures.filter(p => p.procedureType !== 'Diagnostic Coronary Angiography')
   const allTreatedLesions = pciProcedures.flatMap(p => (p.lesions || []).filter(l => l.treatmentStrategy !== 'Medical Therapy'))
   const successfulLesions = pciProcedures.flatMap(p => {
-    const hasMace = !!(p.complications?.inLabDeath || p.complications?.emergencyCabg || p.complications?.acuteStentThrombosis || p.complications?.periproceduralMi)
+    const hasMace = !!(complicationFlags(p).inLabDeath || complicationFlags(p).emergencyCabg || complicationFlags(p).acuteStentThrombosis || complicationFlags(p).periproceduralMi)
     if (hasMace) return []
     return (p.lesions || []).filter(l => calculateLesionSuccess(l))
   })
   const livePciSuccess = allTreatedLesions.length > 0 ? `${Math.round((successfulLesions.length / allTreatedLesions.length) * 100)}%` : '—'
   const radialCount = procedures.filter(p => p.accessSite && p.accessSite.includes('Radial')).length
   const liveRadialPct = procedures.length > 0 ? `${Math.round((radialCount / procedures.length) * 100)}%` : '—'
-  const meanFluoro = procedures.length > 0 ? (procedures.reduce((s, p) => s + (p.fluoroscopyTimeMinutes || 0), 0) / procedures.length).toFixed(1) : '—'
-  const meanContrast = procedures.length > 0 ? Math.round(procedures.reduce((s, p) => s + (p.contrastVolumeMl || 0), 0) / procedures.length) : '—'
+  const fluoroValues = procedures.map(p => p.fluoroscopyTimeMin ?? p.fluoroscopyTimeMinutes).filter((v): v is number => typeof v === 'number' && v > 0)
+  const contrastValues = procedures.map(p => p.contrastVolumeMl).filter((v): v is number => typeof v === 'number' && v > 0)
+  const meanFluoro = fluoroValues.length > 0 ? (fluoroValues.reduce((a, b) => a + b, 0) / fluoroValues.length).toFixed(1) : '—'
+  const meanContrast = contrastValues.length > 0 ? Math.round(contrastValues.reduce((a, b) => a + b, 0) / contrastValues.length) : '—'
 
   // Dynamic Reports Registry with real data covering ALL sections
   const dynamicReportsRegistry = useMemo(() => {
@@ -697,7 +571,7 @@ export default function ReportsArchitecturePage() {
           title: 'Demographic Distribution',
           category: 'Clinical Reports',
           description: 'Patient age, gender, and regional cohort metrics.',
-          metrics: [`Total Enrolled: ${total}`, `Avg Age: ${avgAge} yrs`, `Male: ${malePct}%`],
+          metrics: [`Total Enrolled: ${total}`, `Avg Age: ${avgAge ?? '—'} yrs (n=${ageValues.length})`, `Male: ${malePct}%`],
         },
         {
           title: 'Disease Category Distribution',
@@ -711,7 +585,7 @@ export default function ReportsArchitecturePage() {
           title: 'HF Population Cohorts',
           category: 'Clinical Reports',
           description: 'HFrEF, HFpEF, and HFmrEF distribution trends alongside mean LVEF trajectories.',
-          metrics: [`HFrEF: ${hfrEFPct}%`, `Cohort Size: ${total}`, `Mean LVEF: ${avgLvef}%`],
+          metrics: [`HFrEF: ${hfrEFPct}%`, `Cohort Size: ${total}`, `Mean LVEF: ${avgLvef ?? '—'}% (n=${lvefValues.length})`],
         },
         {
           title: 'Guideline-Directed Medical Therapy (GDMT)',
@@ -744,8 +618,8 @@ export default function ReportsArchitecturePage() {
           category: 'Outcomes Reports',
           description: 'In-hospital mortality and procedural adverse events in acute coronary presentations.',
           metrics: [
-            `Audited Complications: ${procedures.filter(p => p.complications?.hasComplication).length}`,
-            `In-Hospital Mortality: ${procedures.filter(p => p.complications?.inHospitalDeath).length}`
+            `Audited Complications: ${procedures.filter(p => complicationFlags(p).hasComplication).length}`,
+            `In-Hospital Mortality: ${procedures.filter(p => complicationFlags(p).inHospitalDeath).length}`
           ],
         }
       ],
@@ -803,7 +677,7 @@ export default function ReportsArchitecturePage() {
           description: 'Echocardiographic functional assessments and invasive catheterization logs.',
           metrics: [
             `Documented Echoes: ${Array.from(visitsMap.values()).filter(v => v.lvef != null).length}`,
-            `Mean LVEF: ${avgLvef}%`,
+            `Mean LVEF: ${avgLvef ?? '—'}% (n=${lvefValues.length})`,
             `Documented Caths: ${procedures.length}`
           ],
         }
@@ -821,7 +695,7 @@ export default function ReportsArchitecturePage() {
           title: 'Longitudinal Survival & Quality of Care',
           category: 'Outcomes Reports',
           description: 'Survival monitoring and hospitalization surveillance for enrolled cohort.',
-          metrics: [`Enrolled Cohort: ${total}`, `Major Complications: ${procedures.filter(p => p.complications?.hasComplication).length}`],
+          metrics: [`Enrolled Cohort: ${total}`, `Major Complications: ${procedures.filter(p => complicationFlags(p).hasComplication).length}`],
         },
       ],
       quality: [
@@ -833,7 +707,7 @@ export default function ReportsArchitecturePage() {
         },
       ],
     } as Record<string, any[]>
-  }, [total, avgAge, malePct, hfrEFPct, avgLvef, raasiPct, bbPct, mraPct, sglt2Pct, quadPct, patients, procedures, visitsMap, livePciSuccess, liveRadialPct, meanFluoro, meanContrast, allTreatedLesions])
+  }, [total, avgAge, ageValues.length, lvefValues.length, malePct, hfrEFPct, avgLvef, raasiPct, bbPct, mraPct, sglt2Pct, quadPct, patients, procedures, visitsMap, livePciSuccess, liveRadialPct, meanFluoro, meanContrast, allTreatedLesions])
 
   const activeReports = useMemo(() => {
     const list = dynamicReportsRegistry[activeSection] || REPORTS_REGISTRY[activeSection] || []
@@ -883,20 +757,26 @@ export default function ReportsArchitecturePage() {
 
       const rows = patients.map(p => {
         const vt = visitsMap.get(p.id)
-        const isQuad = vt?.raasi?.prescribed === 'Yes' && vt?.betaBlocker?.prescribed === 'Yes' && vt?.mra?.prescribed === 'Yes' && vt?.sglt2i?.prescribed === 'Yes' ? 'Yes' : 'No'
-        const ptComorb = (Array.isArray(p.comorbidities) ? p.comorbidities.join(' ') : (p.comorbidities ?? '')).toLowerCase()
+        const comorb = (Array.isArray(p.comorbidities) ? p.comorbidities.join(' ') : (p.comorbidities ?? '')).toLowerCase()
+        // Yes when flagged or listed, No only when explicitly recorded false, blank when unknown.
+        const yesNo = (flag: boolean | undefined, pattern: RegExp) =>
+          flag || pattern.test(comorb) ? 'Yes' : flag === false ? 'No' : ''
+        const med = (m?: { prescribed?: string }) => m?.prescribed ?? ''
+        const pillars = [vt?.raasi, vt?.betaBlocker, vt?.mra, vt?.sglt2i]
+        const isQuad = pillars.every(m => m?.prescribed === 'Yes') ? 'Yes'
+          : pillars.some(m => m?.prescribed === 'No') ? 'No' : ''
 
         return [
           p.srNo ?? '',
-          `"${p.mrn || '—'}"`,
-          `"${fullName(p)}"`,
-          p.age ?? '',
-          `"${p.sex || ''}"`,
-          `"${p.dob || ''}"`,
-          `"${(p as any).region || 'Maharashtra, India'}"`,
+          p.mrn || '',
+          fullName(p),
+          (p.dob ? getAge(p.dob) : null) ?? p.age ?? '',
+          p.sex || '',
+          p.dob || '',
+          (p as any).region || [p.addressDistrict, p.addressState].filter(Boolean).join(', '),
           vt?.lvef ?? p.lvef ?? '',
-          `"${vt?.hfType || p.hfType || 'HFrEF'}"`,
-          `"${vt?.nyha || p.nyha || ''}"`,
+          vt?.hfType || p.hfType || '',
+          vt?.nyha || p.nyha || '',
           vt?.heartRate ?? '',
           vt?.bpSystolic ?? '',
           vt?.sixMWT ?? '',
@@ -906,22 +786,24 @@ export default function ReportsArchitecturePage() {
           vt?.hb ?? '',
           vt?.potassium ?? '',
           vt?.qrsDuration ?? '',
-          `"${vt?.hospHistory || 'Yes'}"`,
-          `"${vt?.raasi?.prescribed || 'No'}"`,
-          `"${vt?.betaBlocker?.prescribed || 'No'}"`,
-          `"${vt?.mra?.prescribed || 'No'}"`,
-          `"${vt?.sglt2i?.prescribed || 'No'}"`,
-          `"${isQuad}"`,
-          `"${p.comorbidDiabetes || ptComorb.includes('dm') || ptComorb.includes('diabetes') ? 'Yes' : 'No'}"`,
-          `"${p.comorbidHypertension || ptComorb.includes('htn') || ptComorb.includes('hypertension') ? 'Yes' : 'No'}"`,
-          `"${p.comorbidCKD || ptComorb.includes('ckd') ? 'Yes' : 'No'}"`,
-          `"${p.comorbidAF || ptComorb.includes('af') ? 'Yes' : 'No'}"`
-        ].join(',')
+          vt?.hospHistory || '',
+          med(vt?.raasi),
+          med(vt?.betaBlocker),
+          med(vt?.mra),
+          med(vt?.sglt2i),
+          isQuad,
+          yesNo(p.comorbidDiabetes, /\b(dm|t2dm|diabet)/),
+          yesNo(p.comorbidHypertension, /\b(htn|hypertens)/),
+          yesNo(p.comorbidCKD, /\bckd\b/),
+          yesNo(p.comorbidAF, /\b(af|atrial fib)/),
+        ]
       })
 
-      const csvContent = [headers.join(','), ...rows].join('\n')
-      const filename = `CardioKonnect_Executive_Registry_Pack_AICTS_Pune_${new Date().toISOString().split('T')[0]}.csv`
+      const csvContent = toCsv([headers, ...rows])
+      const siteSlug = facilityName.replace(/[^a-zA-Z0-9]/g, '_')
+      const filename = `CardioKonnect_Executive_Registry_Pack_${siteSlug}_${new Date().toISOString().split('T')[0]}.csv`
       downloadCSV(filename, csvContent)
+      writeAudit('EXPORT', 'report', 'executive-pack', '', { rows: rows.length }).catch(() => {})
       toast.success(`Executive Pack (${patients.length} patients) exported successfully!`)
     } catch (err) {
       console.error(err)
@@ -939,32 +821,34 @@ export default function ReportsArchitecturePage() {
       const headers = ['Sr_No', 'Patient_Name', 'Age', 'Sex', 'LVEF', 'NYHA', 'Creatinine', 'eGFR', 'GDMT_4_Pillars']
       const rows = patients.map(p => {
         const vt = visitsMap.get(p.id)
-        const isQuad = vt?.raasi?.prescribed === 'Yes' && vt?.betaBlocker?.prescribed === 'Yes' && vt?.mra?.prescribed === 'Yes' && vt?.sglt2i?.prescribed === 'Yes' ? 'Active (4/4)' : 'Partial'
+        const pillars = [vt?.raasi, vt?.betaBlocker, vt?.mra, vt?.sglt2i]
+        const prescribed = pillars.filter(m => m?.prescribed === 'Yes').length
+        const recorded = pillars.filter(m => m?.prescribed === 'Yes' || m?.prescribed === 'No').length
         return [
           p.srNo ?? '',
-          `"${fullName(p)}"`,
-          p.age ?? '',
-          `"${p.sex || ''}"`,
+          fullName(p),
+          (p.dob ? getAge(p.dob) : null) ?? p.age ?? '',
+          p.sex || '',
           vt?.lvef ?? p.lvef ?? '',
-          `"${vt?.nyha || p.nyha || ''}"`,
+          vt?.nyha || p.nyha || '',
           vt?.creatinine ?? '',
           vt?.egfr ?? '',
-          `"${isQuad}"`
-        ].join(',')
+          recorded === 0 ? '' : `${prescribed}/4${recorded < 4 ? ` (${4 - recorded} not recorded)` : ''}`,
+        ]
       })
 
-      const csvContent = [
-        `# CardioKonnect Registry Report: ${title}`,
-        `# Facility: ${facilityName} | Investigator: ${doctorName}`,
-        `# Date: ${new Date().toLocaleDateString()}`,
-        '',
-        headers.join(','),
-        ...rows
-      ].join('\n')
+      const preamble = [
+        [`# CardioKonnect Registry Report: ${title}`],
+        [`# Facility: ${facilityName} | Investigator: ${doctorName}`],
+        [`# Date: ${new Date().toLocaleDateString()}`],
+        [],
+      ]
+      const csvContent = toCsv([...preamble, headers, ...rows])
 
       const siteSlug = facilityName.replace(/[^a-zA-Z0-9]/g, '_')
       const filename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${siteSlug}_${new Date().toISOString().split('T')[0]}.csv`
       downloadCSV(filename, csvContent)
+      writeAudit('EXPORT', 'report', title, '', { rows: rows.length }).catch(() => {})
       toast.success(`Exported ${filename} successfully!`)
     } catch (err) {
       console.error(err)
@@ -977,10 +861,19 @@ export default function ReportsArchitecturePage() {
   }
 
   // Retrieve current report visualization details
-  const visualConfig = useMemo(() => {
+  const visualConfig = useMemo<ReportVisualConfig>(() => {
     if (!selectedReport) return DEFAULT_VISUAL_CONFIG
-    return REPORT_VISUALS[selectedReport.title] || DEFAULT_VISUAL_CONFIG
-  }, [selectedReport])
+    const base = REPORT_VISUALS[selectedReport.title] || DEFAULT_VISUAL_CONFIG
+    const live = buildLiveReport(selectedReport.title, { patients, latestVisits: visitsMap, procedures })
+    if (!live) {
+      return {
+        ...base,
+        chartData: [],
+        summary: 'The registry does not yet capture the data this report needs, so no chart is shown.',
+      }
+    }
+    return { ...base, ...live }
+  }, [selectedReport, patients, visitsMap, procedures])
 
   // Filter/Scale chart data based on selected timeframe
   const activeChartData = useMemo(() => {
@@ -1063,7 +956,7 @@ export default function ReportsArchitecturePage() {
         <div className="text-xs">
           <span className="font-bold text-cyan-300">Live Registry Intelligence — {total} Patients Enrolled.</span>
           <span className="text-gray-300 ml-1.5">
-            Key indicators and exports are dynamically synced with the Firestore database at AICTS Pune ({hfrEFCount} HFrEF patients · Quadruple GDMT: {quadPct}% · Mean LVEF: {avgLvef}%).
+            Key indicators and exports are dynamically synced with the Firestore database at {facilityName} ({hfrEFCount} HFrEF patients · Quadruple GDMT: {quadPct}% · Mean LVEF: {avgLvef ?? '—'}%).
           </span>
         </div>
       </div>
@@ -1276,11 +1169,11 @@ export default function ReportsArchitecturePage() {
                 ))}
               </div>
 
-              {/* Synthetic Benchmark Watermark Notice */}
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              {/* Data provenance notice */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300">
+                <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 <span>
-                  <strong className="font-semibold uppercase tracking-wide">Synthetic Simulation &amp; Benchmark Model:</strong> Visual trends and threshold lines in this panel represent guideline-derived reference benchmarks for quality comparison.
+                  <strong className="font-semibold uppercase tracking-wide">Live registry data:</strong> The chart is computed from the patients, visits and procedures you can access. Threshold lines are guideline targets.
                 </span>
               </div>
 
@@ -1291,12 +1184,18 @@ export default function ReportsArchitecturePage() {
                     <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
                     Longitudinal Performance Visualisation ({timeframe})
                   </p>
-                  <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 rounded px-2 py-0.5 font-bold flex items-center gap-1">
-                    <AlertTriangle className="w-2.5 h-2.5" /> SYNTHETIC BENCHMARK
+                  <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 rounded px-2 py-0.5 font-bold flex items-center gap-1">
+                    <CheckCircle className="w-2.5 h-2.5" /> LIVE DATA
                   </span>
                 </div>
 
                 <div className="h-64 w-full">
+                  {activeChartData.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-gray-400">
+                      <AlertTriangle className="w-5 h-5 text-amber-400" />
+                      <p className="text-xs">No recorded data for this report yet.</p>
+                    </div>
+                  ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     {visualConfig.chartType === 'line' ? (
                       <LineChart data={activeChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -1397,6 +1296,7 @@ export default function ReportsArchitecturePage() {
                       </PieChart>
                     )}
                   </ResponsiveContainer>
+                  )}
                 </div>
               </div>
 

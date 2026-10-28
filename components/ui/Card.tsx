@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils'
 
 interface CardProps { children: React.ReactNode; className?: string; style?: React.CSSProperties }
 interface CardHeaderProps { children: React.ReactNode; className?: string }
-interface CardTitleProps { children: React.ReactNode }
+interface CardTitleProps { children: React.ReactNode; className?: string }
 interface CardBodyProps { children: React.ReactNode; className?: string }
 
 export function Card({ children, className, style }: CardProps) {
@@ -24,9 +24,9 @@ export function CardHeader({ children, className }: CardHeaderProps) {
   )
 }
 
-export function CardTitle({ children }: CardTitleProps) {
+export function CardTitle({ children, className }: CardTitleProps) {
   return (
-    <h3 className="text-sm font-semibold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+    <h3 className={cn('text-sm font-semibold text-white', className)} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
       {children}
     </h3>
   )

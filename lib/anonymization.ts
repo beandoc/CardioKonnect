@@ -44,23 +44,29 @@ export function anonymizeId(id: string | null | undefined): string {
   return `CP-ANON-${hex}`
 }
 
+/** Safe Harbor: ages over 89 are aggregated into a single 90+ category. */
+function safeHarborAge(age: number | null | undefined): number | string | null {
+  if (age == null) return null
+  return age > 89 ? '90+' : age
+}
+
 /**
  * De-identifies a Patient object, completely stripping names, contact, exact DOB, address, and national IDs.
  */
 export function sanitizePatientForEgress(patient: any): Record<string, any> {
-  if (!patient) return {}
+  if (!patient || typeof patient !== 'object') return {}
 
   const anonPatient: Record<string, any> = {
     anonymousSubjectId: anonymizeId(patient.id || patient.mrn),
-    age: (patient.dob ? getAge(patient.dob) : null) ?? patient.age,
+    age: safeHarborAge((patient.dob ? getAge(patient.dob) : null) ?? patient.age),
     sex: patient.sex || 'Unknown',
     registryId: patient.registryId,
     hfType: patient.hfType,
     lvef: patient.lvef,
     nyha: patient.nyha,
     comorbidities: Array.isArray(patient.comorbidities)
-      ? patient.comorbidities
-      : (patient.comorbidities ? [patient.comorbidities] : []),
+      ? patient.comorbidities.map((c: unknown) => sanitizeText(String(c)))
+      : [],
     comorbidCAD: patient.comorbidCAD,
     comorbidPriorPCI: patient.comorbidPriorPCI,
     comorbidPriorCABG: patient.comorbidPriorCABG,
@@ -76,44 +82,63 @@ export function sanitizePatientForEgress(patient: any): Record<string, any> {
   return anonPatient
 }
 
+/** Structured visit fields that may leave the system. Everything else — free text, dates, IDs — is dropped. */
+const VISIT_NUMERIC_FIELDS = [
+  'lvef', 'bpSystolic', 'bpDiastolic', 'heartRate', 'weight', 'height', 'bmi', 'o2Sat',
+  'creatinine', 'egfr', 'sodium', 'potassium', 'ntProBNP', 'bnp', 'hb', 'hba1c', 'ferritin',
+  'transferrinSat', 'platelets', 'tft', 'ldl', 'triglycerides', 'uricAcid', 'qrsDuration',
+  'sixMWT', 'phq9Score', 'rvsp', 'eEPrime', 'lvdd', 'lvsd',
+] as const
+
+const VISIT_ENUM_FIELDS = ['visitType', 'nyha', 'hfType', 'rhythm', 'bbb', 'ddGrade', 'oedema'] as const
+
+const VISIT_MED_FIELDS = [
+  'diuretic', 'raasi', 'betaBlocker', 'mra', 'sglt2i', 'ivabradine', 'digoxin', 'ivIron',
+  'aspirin', 'statin', 'noac', 'vki', 'fibrate', 'pcsk9',
+] as const
+
+const MAX_ENUM_LENGTH = 40
+
 /**
- * De-identifies a Visit object, scrubbing any free-form notes and removing dates of encounter.
+ * De-identifies a Visit by allowlist: only numeric measurements, short coded
+ * values and medication prescribed/type/dose are kept. Free-text fields
+ * (clinicalNotes, plan, reasons, history) never leave the system.
  */
 export function sanitizeVisitForEgress(visit: any): Record<string, any> {
-  if (!visit) return {}
+  if (!visit || typeof visit !== 'object') return {}
+  const out: Record<string, any> = {}
 
-  const anonVisit: Record<string, any> = { ...visit }
-
-  // Strip direct identifiers
-  delete anonVisit.id
-  delete anonVisit.patientId
-  delete anonVisit.mrn
-  delete anonVisit.doctorName
-  delete anonVisit.operatorName
-  delete anonVisit.hospitalName
-
-  // Generalize dates to relative or omit
-  if (anonVisit.visitDate) {
-    anonVisit.visitYear = new Date(anonVisit.visitDate).getFullYear()
-    delete anonVisit.visitDate
+  for (const k of VISIT_NUMERIC_FIELDS) {
+    const v = visit[k]
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v
   }
-  delete anonVisit.createdAt
-  delete anonVisit.updatedAt
-  delete anonVisit.echoDate
-  delete anonVisit.followupDate
+  for (const k of VISIT_ENUM_FIELDS) {
+    const v = visit[k]
+    if (typeof v === 'string' && v.length <= MAX_ENUM_LENGTH) out[k] = sanitizeText(v)
+  }
+  for (const k of ['etiology', 'device'] as const) {
+    if (Array.isArray(visit[k])) {
+      out[k] = visit[k].filter((x: unknown) => typeof x === 'string' && x.length <= MAX_ENUM_LENGTH).map(sanitizeText)
+    }
+  }
+  for (const k of VISIT_MED_FIELDS) {
+    const m = visit[k]
+    if (m && typeof m === 'object' && (m.prescribed === 'Yes' || m.prescribed === 'No')) {
+      out[k] = {
+        prescribed: m.prescribed,
+        ...(typeof m.type === 'string' && m.type.length <= MAX_ENUM_LENGTH ? { type: sanitizeText(m.type) } : {}),
+        ...(typeof m.dose === 'string' && m.dose.length <= MAX_ENUM_LENGTH ? { dose: sanitizeText(m.dose) } : {}),
+      }
+    }
+  }
+  const kccq = visit.kccq?.overallSummaryScore
+  if (typeof kccq === 'number') out.kccqOverall = kccq
 
-  // Sanitize notes
-  if (anonVisit.notes) {
-    anonVisit.notes = sanitizeText(anonVisit.notes)
+  if (visit.visitDate) {
+    const year = new Date(visit.visitDate).getFullYear()
+    if (!Number.isNaN(year)) out.visitYear = year
   }
-  if (anonVisit.plan) {
-    anonVisit.plan = sanitizeText(anonVisit.plan)
-  }
-  if (anonVisit.clinicalImpression) {
-    anonVisit.clinicalImpression = sanitizeText(anonVisit.clinicalImpression)
-  }
-
-  return anonVisit
+  return out
 }
 
 /**
@@ -135,9 +160,24 @@ export function sanitizeProcedureForEgress(procedure: any): Record<string, any> 
     delete anonProc.procedureDate
   }
 
-  if (anonProc.notes) {
-    anonProc.notes = sanitizeText(anonProc.notes)
-  }
+  delete anonProc.siteId
+  delete anonProc.enteredBy
+  delete anonProc.transferringFacility
+  return stripFreeText(anonProc)
+}
 
-  return anonProc
+const FREE_TEXT_KEY = /note|detail|comment|reason|finding|description|narrative|serial|lotnumber|name$|by$/i
+const DATE_KEY = /(date|time|onset|arrival|contact|activation|access|device)$/i
+
+/** Recursively removes free-text and timestamp fields from an export payload. */
+function stripFreeText(value: any): any {
+  if (Array.isArray(value)) return value.map(stripFreeText)
+  if (!value || typeof value !== 'object') return value
+  const out: Record<string, any> = {}
+  for (const [k, v] of Object.entries(value)) {
+    if (FREE_TEXT_KEY.test(k)) continue
+    if (typeof v === 'string' && DATE_KEY.test(k)) continue
+    out[k] = stripFreeText(v)
+  }
+  return out
 }

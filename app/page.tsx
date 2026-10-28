@@ -124,7 +124,7 @@ export default function DashboardPage() {
       setRows(withVisits)
     } catch (e) {
       console.error('Dashboard data load error:', e)
-      setDbError('Failed to load patient data from database. Please check your connection and refresh.')
+      setDbError(`Failed to load patient data from database: ${e instanceof Error ? e.message : 'unknown error'}`)
       setRows([])
     } finally {
       setLoading(false)

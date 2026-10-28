@@ -11,6 +11,7 @@ import { getPatients, getAllVisits } from '@/lib/firestore'
 import type { Patient, Visit } from '@/lib/types'
 import { useAppUser } from '@/context/AppUserContext'
 import { filterPatientsByAccess } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import {
   computeMLRiskProfile,
   evaluateGDMT,
@@ -24,7 +25,7 @@ interface TriagePatientRow {
   latestVisit: Visit | null
   allVisits: Visit[]
   riskScore: number
-  riskCategory: 'Low' | 'Intermediate' | 'High' | 'Very High'
+  riskCategory: 'Low' | 'Intermediate' | 'High' | 'Very High' | 'Not estimable'
   primaryDriver: string
   dataCompletenessPct: number
   dataGrade: 'A' | 'B' | 'C' | 'D'
@@ -51,7 +52,7 @@ export default function TriagePage() {
       setLoading(true)
       try {
         const [allPatients, allVisits] = await Promise.all([getPatients(), getAllVisits()])
-        const patients = currentUser ? filterPatientsByAccess(currentUser, allPatients) : allPatients
+        const patients = filterPatientsByAccess(currentUser, allPatients)
         const visitsByPatient = new Map<string, Visit[]>()
         for (const v of allVisits) {
           const list = visitsByPatient.get(v.patientId) || []
@@ -72,7 +73,7 @@ export default function TriagePage() {
                 latestVisit: null,
                 allVisits: [],
                 riskScore: 0.0,
-                riskCategory: 'Low' as const,
+                riskCategory: 'Not estimable' as const,
                 primaryDriver: 'No visits recorded',
                 dataCompletenessPct: 0,
                 dataGrade: 'D' as const,
@@ -135,8 +136,8 @@ export default function TriagePage() {
               patient,
               latestVisit,
               allVisits,
-              riskScore: risk.oneYearEventProbability,
-              riskCategory: risk.riskCategory,
+              riskScore: risk.insufficientData ? 0 : risk.oneYearEventProbability,
+              riskCategory: risk.insufficientData ? 'Not estimable' as const : risk.riskCategory,
               primaryDriver: risk.primaryDriver,
               dataCompletenessPct: completeness.overallPct,
               dataGrade: completeness.dataGrade,
@@ -149,7 +150,7 @@ export default function TriagePage() {
 
         setRows(processedRows)
       } catch (err) {
-        console.error('Failed to load cohort data for triage:', err)
+        notifyLoadError(err, 'Triage cohort')
       } finally {
         setLoading(false)
       }
@@ -385,6 +386,7 @@ export default function TriagePage() {
               <option value="High">High Risk (20–40%)</option>
               <option value="Intermediate">Intermediate Risk (8–20%)</option>
               <option value="Low">Low Risk (&lt;8%)</option>
+              <option value="Not estimable">Not estimable (missing age / LVEF / visit)</option>
             </select>
           </div>
 
@@ -518,7 +520,7 @@ export default function TriagePage() {
                         <div className="flex flex-col justify-center min-w-[120px]">
                           <div className="flex items-center justify-between text-xs mb-1">
                             <span className="font-bold font-mono" style={{ color: getRiskColor(row.riskScore) }}>
-                              {(row.riskScore * 100).toFixed(1)}%
+                              {row.riskCategory === 'Not estimable' ? '—' : `${(row.riskScore * 100).toFixed(1)}%`}
                             </span>
                             <span className="text-[9px] px-1.5 py-0.2 rounded font-medium border"
                               style={{

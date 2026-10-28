@@ -15,10 +15,12 @@ import { generateMRN, getAge, initials } from '@/lib/utils'
 import type { Patient, Visit, PatientInput, VisitInput, MedEntry } from '@/lib/types'
 import { toast } from 'sonner'
 import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 
 export default function DEOPortalPage() {
   const router = useRouter()
-  const { logout } = useAppUser()
+  const { logout, currentUser } = useAppUser()
   const [activeTab, setActiveTab] = useState<'worklist' | 'register' | 'encounter' | 'directory'>('worklist')
   const [loading, setLoading] = useState(true)
   const [patients, setPatients] = useState<Patient[]>([])
@@ -50,7 +52,7 @@ export default function DEOPortalPage() {
     etiology: 'Ischemic Cardiomyopathy (ICM)',
     nyha: 'II' as 'I' | 'II' | 'III' | 'IV',
     lvef: '',
-    registryId: 'heart-failure',
+    registryId: 'hf',
     comorbidHypertension: false,
     comorbidDiabetes: false,
     comorbidCAD: false,
@@ -89,24 +91,22 @@ export default function DEOPortalPage() {
     ntProBNP: undefined,
     ferritin: undefined,
     transferrinSat: undefined,
-    raasi: { prescribed: 'Yes', type: 'Sacubitril/Valsartan', dose: '100mg' },
-    betaBlocker: { prescribed: 'Yes', type: 'Bisoprolol', dose: '5mg' },
-    mra: { prescribed: 'Yes', type: 'Spironolactone', dose: '25mg' },
-    sglt2i: { prescribed: 'Yes', type: 'Dapagliflozin', dose: '10mg' },
-    diuretic: { prescribed: 'Yes', type: 'Torsemide', dose: '10mg' },
+    raasi: { prescribed: '' },
+    betaBlocker: { prescribed: '' },
+    mra: { prescribed: '' },
+    sglt2i: { prescribed: '' },
+    diuretic: { prescribed: '' },
   })
 
   // Load Registry Data
   const loadData = async () => {
     setLoading(true)
     try {
-      const pts = await getPatients()
-      const visitMap = await getAllLatestVisits()
-      setPatients(pts)
+      const [pts, visitMap] = await Promise.all([getPatients(), getAllLatestVisits()])
+      setPatients(filterPatientsByAccess(currentUser, pts))
       setLatestVisits(visitMap)
     } catch (err) {
-      console.error('Failed to load DEO portal data:', err)
-      toast.error('Failed to load registry records.')
+      notifyLoadError(err, 'Registry records')
     } finally {
       setLoading(false)
     }
@@ -206,11 +206,11 @@ export default function DEOPortalPage() {
         ntProBNP: visit.ntProBNP,
         ferritin: visit.ferritin,
         transferrinSat: visit.transferrinSat,
-        raasi: visit.raasi || { prescribed: 'Yes', type: 'Sacubitril/Valsartan' },
-        betaBlocker: visit.betaBlocker || { prescribed: 'Yes', type: 'Bisoprolol' },
-        mra: visit.mra || { prescribed: 'Yes', type: 'Spironolactone' },
-        sglt2i: visit.sglt2i || { prescribed: 'Yes', type: 'Dapagliflozin' },
-        diuretic: visit.diuretic || { prescribed: 'Yes', type: 'Torsemide' },
+        raasi: visit.raasi || { prescribed: '' },
+        betaBlocker: visit.betaBlocker || { prescribed: '' },
+        mra: visit.mra || { prescribed: '' },
+        sglt2i: visit.sglt2i || { prescribed: '' },
+        diuretic: visit.diuretic || { prescribed: '' },
       })
     } else {
       setEditFormData({
@@ -295,7 +295,10 @@ export default function DEOPortalPage() {
         sex: regForm.sex,
         contact: regForm.contact.trim(),
         address: regForm.address.trim() || `${regForm.city}, ${regForm.state}`,
-        registryId: regForm.registryId,
+        registryId: regForm.registryId === 'heart-failure' ? 'hf' : regForm.registryId,
+        registryIds: [regForm.registryId === 'heart-failure' ? 'hf' : regForm.registryId],
+        siteId: currentUser?.siteId || 'AICTS_PUNE',
+        hospitalName: currentUser?.siteId === 'KANPUR_APEX' ? 'Kanpur Cardiac Apex Hospital' : 'AICTS Pune',
         indexEtiology: [regForm.etiology],
         nyha: regForm.nyha,
         lvef: regForm.lvef ? Number(regForm.lvef) : undefined,
@@ -318,11 +321,11 @@ export default function DEOPortalPage() {
           oedema: 'None',
           rhythm: 'Sinus',
           bbb: '',
-          diuretic: { prescribed: 'Yes', type: 'Torsemide' },
-          raasi: { prescribed: 'Yes', type: 'Sacubitril/Valsartan' },
-          betaBlocker: { prescribed: 'Yes', type: 'Bisoprolol' },
-          mra: { prescribed: 'Yes', type: 'Spironolactone' },
-          sglt2i: { prescribed: 'Yes', type: 'Dapagliflozin' },
+          diuretic: { prescribed: '' },
+          raasi: { prescribed: '' },
+          betaBlocker: { prescribed: '' },
+          mra: { prescribed: '' },
+          sglt2i: { prescribed: '' },
         } as VisitInput)
       }
 
@@ -342,7 +345,7 @@ export default function DEOPortalPage() {
         etiology: 'Ischemic Cardiomyopathy (ICM)',
         nyha: 'II',
         lvef: '',
-        registryId: 'heart-failure',
+        registryId: 'hf',
         comorbidHypertension: false,
         comorbidDiabetes: false,
         comorbidCAD: false,
@@ -1201,7 +1204,7 @@ export default function DEOPortalPage() {
                       <div className="text-[11px] font-bold">{pillar.title}</div>
                       <div className="flex items-center gap-2">
                         <select
-                          value={(encounterForm as any)[pillar.key]?.prescribed || 'Yes'}
+                          value={(encounterForm as any)[pillar.key]?.prescribed ?? ''}
                           onChange={e => setEncounterForm({
                             ...encounterForm,
                             [pillar.key]: {
@@ -1212,6 +1215,7 @@ export default function DEOPortalPage() {
                           })}
                           className="form-select w-full px-2 py-1 text-xs"
                         >
+                          <option value="">Not recorded</option>
                           <option value="Yes">Prescribed (Yes)</option>
                           <option value="No">Not Prescribed (No)</option>
                           <option value="Contraindicated">Contraindicated</option>

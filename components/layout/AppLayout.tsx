@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { useAppUser } from '@/context/AppUserContext'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -14,7 +15,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const pathname = usePathname()
   const router = useRouter()
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const { user, authLoading } = useAppUser()
 
   const toggleSidebar = () => setSidebarOpen(prev => !prev)
   const closeSidebar = () => setSidebarOpen(false)
@@ -36,12 +37,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }, [pathname])
 
   useEffect(() => {
-    const auth = localStorage.getItem('cardiokonnect_auth') === 'true'
-    setIsAuthenticated(auth)
-    if (!auth && pathname !== '/login') {
+    if (authLoading) return
+    if (!user && pathname !== '/login') {
       router.replace('/login')
     }
-  }, [pathname, router])
+  }, [authLoading, user, pathname, router])
 
   // If viewing the login page, render it directly without sidebar/topbar layouts
   if (pathname === '/login') {
@@ -49,7 +49,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   // Prevent flash of guarded layout while auth status is being resolved
-  if (isAuthenticated === null) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-[#070e1b] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -60,7 +60,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     )
   }
 
-  if (!isAuthenticated) {
+  if (!user) {
     return null
   }
 

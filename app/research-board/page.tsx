@@ -10,6 +10,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getPatients, getAllLatestVisits } from '@/lib/firestore'
+import { useAppUser } from '@/context/AppUserContext'
+import { filterPatientsByAccess } from '@/lib/accessControl'
+import { notifyLoadError } from '@/lib/notify'
 import type { Patient, Visit } from '@/lib/types'
 import {
   mean, std, median, iqr, percentile,
@@ -87,13 +90,15 @@ export default function ResearchBoardPage() {
   const [loading, setLoading] = useState(true)
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
 
+  const { currentUser } = useAppUser()
+
   const load = useCallback(() => {
     setLoading(true)
     Promise.all([getPatients(), getAllLatestVisits()])
-      .then(([pts, vmap]) => { setPatients(pts); setVisitMap(vmap) })
-      .catch(console.error)
+      .then(([pts, vmap]) => { setPatients(filterPatientsByAccess(currentUser, pts)); setVisitMap(vmap) })
+      .catch(err => notifyLoadError(err, 'Research board'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [currentUser])
 
   useEffect(() => { load() }, [load])
 

@@ -1,5 +1,6 @@
 import type { CathProcedure, Patient } from '@/lib/types'
-import { calculateLesionSuccess } from '@/lib/interventionalMetrics'
+import { complicationFlags } from '@/lib/complications'
+import { calculateLesionSuccess, isStemiProcedure, procedureDtbMin } from '@/lib/interventionalMetrics'
 import type { RegistryData } from './types'
 import { getEnrollmentTrend } from './utils'
 
@@ -18,10 +19,10 @@ export function computeCathlabRegistry(procedures: CathProcedure[], patients?: P
     // Strict Angiographic Success: TIMI 3 flow + residual stenosis < 20% with NO in-lab MACE
     const successfulLesions = pciProcedures.flatMap(p => {
       const hasInLabMace = !!(
-        p.complications?.inLabDeath ||
-        p.complications?.emergencyCabg ||
-        p.complications?.acuteStentThrombosis ||
-        p.complications?.periproceduralMi
+        complicationFlags(p).inLabDeath ||
+        complicationFlags(p).emergencyCabg ||
+        complicationFlags(p).acuteStentThrombosis ||
+        complicationFlags(p).periproceduralMi
       )
       if (hasInLabMace) return []
       return (p.lesions || []).filter(l => calculateLesionSuccess(l))
@@ -33,11 +34,11 @@ export function computeCathlabRegistry(procedures: CathProcedure[], patients?: P
     const radialCount = procedures.filter(p => p.accessSite && p.accessSite.includes('Radial')).length
     const radialRate = procedures.length ? Math.round((radialCount / procedures.length) * 100) : null
 
-    const stemiCases = procedures.filter(p => p.clinicalIndication === 'STEMI' && p.stemiTimelines?.dtbMinutes != null)
-    const dtbMet = stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) <= 90).length
-    const dtbRate = stemiCases.length > 0 ? Math.round((dtbMet / stemiCases.length) * 100) : null
+    const stemiDtbs = procedures.filter(isStemiProcedure).map(procedureDtbMin).filter((d): d is number => d !== null)
+    const dtbMet = stemiDtbs.filter(d => d <= 90).length
+    const dtbRate = stemiDtbs.length > 0 ? Math.round((dtbMet / stemiDtbs.length) * 100) : null
 
-    const complicationCount = procedures.filter(p => p.complications?.hasComplication).length
+    const complicationCount = procedures.filter(p => complicationFlags(p).hasComplication).length
     const complicationRate = procedures.length ? ((complicationCount / procedures.length) * 100).toFixed(1) : null
 
     // 6 Category completeness
@@ -45,8 +46,8 @@ export function computeCathlabRegistry(procedures: CathProcedure[], patients?: P
       { name: 'Indication & Urgency', test: (p: CathProcedure) => !!(p.procedureType && p.clinicalIndication) },
       { name: 'Vascular Access', test: (p: CathProcedure) => !!(p.accessSite && p.sheathSize && p.closureDevice) },
       { name: 'Lesions & Anatomy', test: (p: CathProcedure) => Array.isArray(p.lesions) && p.lesions.length > 0 },
-      { name: 'Devices & Stents', test: (p: CathProcedure) => Array.isArray(p.lesions) && p.lesions.some(l => l.devices && l.devices.length > 0) },
-      { name: 'Hemodynamics & Rad', test: (p: CathProcedure) => (p.contrastVolumeMl || 0) > 0 || (p.fluoroscopyTimeMinutes || 0) > 0 },
+      { name: 'Devices & Stents', test: (p: CathProcedure) => (Array.isArray(p.devices) && p.devices.length > 0) || (Array.isArray(p.lesions) && p.lesions.some(l => (l.devices && l.devices.length > 0) || (l.deviceIds && l.deviceIds.length > 0))) },
+      { name: 'Hemodynamics & Rad', test: (p: CathProcedure) => (p.contrastVolumeMl || 0) > 0 || ((p.fluoroscopyTimeMin ?? p.fluoroscopyTimeMinutes ?? 0) > 0) },
       { name: 'Complications & Safety', test: (p: CathProcedure) => p.complications != null },
     ]
 
@@ -90,12 +91,14 @@ export function computeCathlabRegistry(procedures: CathProcedure[], patients?: P
         if (l.preStenosisPct != null) filled++
         if (l.postStenosisPct != null) filled++
         if (l.treatmentStrategy) filled++
-        if (l.devices && l.devices.length > 0) {
+        const hasDevs = (l.devices && l.devices.length > 0) || (p.devices && p.devices.length > 0)
+        if (hasDevs) {
           filled++
-          if (l.devices[0].deviceType) filled++
-          if (l.devices[0].diameterMm) filled++
-          if (l.devices[0].lengthMm) filled++
-          if (l.devices[0].serialOrBatchNumber) filled++
+          const dev = (l.devices && l.devices[0]) || (p.devices && p.devices[0])
+          if (dev && (dev.deviceType || (dev as any).type)) filled++
+          if (dev && dev.diameterMm) filled++
+          if (dev && dev.lengthMm) filled++
+          if (dev && (dev.serialOrBatchNumber || (dev as any).serialOrLotNumber)) filled++
         }
       }
       totalFilledCountSum += filled
@@ -134,10 +137,10 @@ export function computeCathlabRegistry(procedures: CathProcedure[], patients?: P
 
     // 4. STEMI Door-to-Balloon Distribution
     const dtbData = [
-      { name: '< 60 min', value: stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 999) < 60).length },
-      { name: '60–90 min', value: stemiCases.filter(p => { const m = p.stemiTimelines?.dtbMinutes ?? 999; return m >= 60 && m <= 90 }).length },
-      { name: '90–120 min', value: stemiCases.filter(p => { const m = p.stemiTimelines?.dtbMinutes ?? 999; return m > 90 && m <= 120 }).length },
-      { name: '> 120 min', value: stemiCases.filter(p => (p.stemiTimelines?.dtbMinutes ?? 0) > 120).length },
+      { name: '< 60 min', value: stemiDtbs.filter(m => m < 60).length },
+      { name: '60–90 min', value: stemiDtbs.filter(m => m >= 60 && m <= 90).length },
+      { name: '90–120 min', value: stemiDtbs.filter(m => m > 90 && m <= 120).length },
+      { name: '> 120 min', value: stemiDtbs.filter(m => m > 120).length },
     ]
 
     return {
@@ -156,7 +159,7 @@ export function computeCathlabRegistry(procedures: CathProcedure[], patients?: P
       kpis: [
         { label: 'PCI Success Rate', value: pciSuccessRate !== null ? `${pciSuccessRate}%` : '—', sub: allTreatedLesions.length ? `${successfulLesions.length}/${allTreatedLesions.length} treated lesions` : 'no treated lesions' },
         { label: 'Transradial Access', value: radialRate !== null ? `${radialRate}%` : '—', sub: procedures.length ? `${radialCount}/${procedures.length} radial first` : 'no procedures' },
-        { label: 'STEMI DTB ≤90m', value: dtbRate !== null ? `${dtbRate}%` : '—', sub: stemiCases.length ? `${dtbMet}/${stemiCases.length} primary PCIs` : 'no STEMI cases' },
+        { label: 'STEMI DTB ≤90m', value: dtbRate !== null ? `${dtbRate}%` : '—', sub: stemiDtbs.length ? `${dtbMet}/${stemiDtbs.length} primary PCIs` : 'no STEMI cases' },
         { label: 'Major Complications', value: complicationRate !== null ? `${complicationRate}%` : '—', sub: procedures.length ? `${complicationCount} audited events` : 'no procedures' },
       ],
       completionByCategory,

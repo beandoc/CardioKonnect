@@ -1,35 +1,31 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import Link from 'next/link'
-import { Database, Trash2, CheckCircle, RefreshCw, ArrowRight } from 'lucide-react'
+import { Database, CheckCircle, RefreshCw, ArrowRight, Lock } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { parseExcelRows } from '@/lib/excelParser'
-import { seedFirestore, clearFirestorePatients } from '@/lib/firestoreSeed'
+import { validateImport, importPatients } from '@/lib/firestoreSeed'
+import { useAppUser } from '@/context/AppUserContext'
+
+const IMPORT_ROLES = ['SuperAdmin', 'RegistryOwner']
 
 export default function SeederPage() {
-  const router = useRouter()
+  const { currentUser } = useAppUser()
   const [loading, setLoading] = useState(false)
-  const [clearing, setClearing] = useState(false)
   const [seeded, setSeeded] = useState(false)
   const [seedMsg, setSeedMsg] = useState('')
   const [progress, setProgress] = useState<string[]>([])
 
-  // Auth guard: redirect to login if not authenticated
-  useEffect(() => {
-    const auth = typeof window !== 'undefined' ? localStorage.getItem('cardiokonnect_auth') : null
-    if (auth !== 'true') {
-      router.replace('/login')
-    }
-  }, [router])
+  const canImport = !!currentUser && IMPORT_ROLES.includes(currentUser.role) && currentUser.registryAccess.includes('hf')
 
   const addProgress = (msg: string) => setProgress(prev => [...prev, msg])
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    e.target.value = ''
+    if (!file || !currentUser || !canImport) return
 
     setLoading(true)
     setSeeded(false)
@@ -44,42 +40,45 @@ export default function SeederPage() {
 
       if (rows.length === 0) throw new Error('No rows found in the uploaded Excel file.')
 
-      addProgress(`Parsed ${rows.length} rows. Converting to patient records…`)
-      const { patients, visits, patientsCount } = parseExcelRows(rows)
+      addProgress(`Parsed ${rows.length} rows. Validating…`)
+      const { patients, visits } = parseExcelRows(rows)
+      const { errors, duplicates, toImport } = await validateImport(patients, visits)
 
-      addProgress('Clearing existing Firestore data…')
-      await clearFirestorePatients(addProgress)
+      if (errors.length > 0) {
+        errors.slice(0, 20).forEach(err => addProgress(`✗ ${err}`))
+        throw new Error(`Validation failed with ${errors.length} error(s). Nothing was written.`)
+      }
+      if (duplicates.length > 0) {
+        addProgress(`Skipping ${duplicates.length} patient(s) already in the registry (matched by MRN, or name + DOB).`)
+      }
+      if (toImport.length === 0) {
+        addProgress('No new patients to import.')
+        return
+      }
 
-      addProgress('Writing to Firestore…')
-      const { patientsWritten, visitsWritten } = await seedFirestore(patients, visits, addProgress)
+      if (!confirm(`Add ${toImport.length} new patient(s) to the ${currentUser.siteId} HF registry? Existing records are not modified.`)) {
+        addProgress('Import cancelled.')
+        return
+      }
 
-      const msg = `Seeded ${patientsWritten} patients and ${visitsWritten} visits from ${file.name}`
+      const importIds = new Set(toImport.map(p => p.id))
+      const { patientsWritten, visitsWritten } = await importPatients(
+        toImport,
+        visits.filter(v => importIds.has(v.patientId)),
+        { siteId: currentUser.siteId, registryId: 'hf' },
+        addProgress
+      )
+
+      const msg = `Added ${patientsWritten} patients and ${visitsWritten} visits from ${file.name}`
       setSeeded(true)
       setSeedMsg(msg)
-      toast.success(`Imported ${patientsCount} patients successfully!`)
+      toast.success(msg)
     } catch (err: any) {
       console.error(err)
-      toast.error(err.message || 'Error seeding from Excel file.')
+      toast.error(err.message || 'Error importing Excel file.')
       addProgress(`Error: ${err.message}`)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleClear = async () => {
-    if (!confirm('Clear ALL patient data from Firestore? This cannot be undone.')) return
-    setClearing(true)
-    setProgress([])
-    try {
-      await clearFirestorePatients(addProgress)
-      toast.success('All patient data cleared from Firestore.')
-      setSeeded(false)
-    } catch (e: any) {
-      console.error(e)
-      toast.error(e.message || 'Failed to clear Firestore data.')
-      addProgress(`Error: ${e.message}`)
-    } finally {
-      setClearing(false)
     }
   }
 
@@ -106,47 +105,41 @@ export default function SeederPage() {
           <div className="glass-card p-5 space-y-4">
             <h3 className="text-sm font-semibold text-white pb-3 border-b border-blue-500/10">Seeder Actions</h3>
 
-            <div className="space-y-3">
-              <p className="text-xs text-gray-400">
-                Upload <strong>HF.xlsx</strong> to import patient records into Firestore.
-                Data becomes available to every device immediately — no localStorage involved.
-              </p>
+            {canImport ? (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400">
+                  Upload <strong>HF.xlsx</strong> to add patient records to your site&apos;s HF registry.
+                  Every row is validated first; patients already in the registry are skipped and existing records are never modified.
+                </p>
 
-              <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-blue-500/25 hover:border-blue-500/50 rounded-xl cursor-pointer hover:bg-blue-500/[0.02] transition duration-200">
-                <div className="flex flex-col items-center justify-center text-center px-3">
-                  <Database className="w-5 h-5 text-blue-400 mb-1" />
-                  <p className="text-[10px] text-gray-300 font-semibold">Click to browse or drag HF.xlsx</p>
-                  <p className="text-[9px] text-gray-500 mt-0.5">Clears existing Firestore data, then writes new records</p>
-                </div>
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileUpload}
-                  disabled={loading || clearing}
-                />
-              </label>
+                <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-blue-500/25 hover:border-blue-500/50 rounded-xl cursor-pointer hover:bg-blue-500/[0.02] transition duration-200">
+                  <div className="flex flex-col items-center justify-center text-center px-3">
+                    <Database className="w-5 h-5 text-blue-400 mb-1" />
+                    <p className="text-[10px] text-gray-300 font-semibold">Click to browse or drag HF.xlsx</p>
+                    <p className="text-[9px] text-gray-500 mt-0.5">Append-only import — nothing is deleted</p>
+                  </div>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".xlsx,.xls"
+                    onChange={handleFileUpload}
+                    disabled={loading}
+                  />
+                </label>
 
-              {loading && (
-                <div className="flex items-center gap-2 text-xs text-blue-400">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Seeding to Firestore…
-                </div>
-              )}
-
-              <Button
-                onClick={handleClear}
-                disabled={loading || clearing}
-                variant="outline"
-                className="w-full justify-center gap-2 border-red-500/20 text-red-400 hover:bg-red-500/10 hover:border-red-500/30 text-xs py-1.5"
-              >
-                {clearing ? (
-                  <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Clearing…</>
-                ) : (
-                  <><Trash2 className="w-3.5 h-3.5" /> Clear Firestore Data</>
+                {loading && (
+                  <div className="flex items-center gap-2 text-xs text-blue-400">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Importing to Firestore…
+                  </div>
                 )}
-              </Button>
-            </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 text-xs text-gray-400">
+                <Lock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                Bulk import is restricted to HF registry owners.
+              </div>
+            )}
           </div>
 
           {/* Progress log */}

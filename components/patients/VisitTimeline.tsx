@@ -1,5 +1,6 @@
 'use client'
 
+import { complicationFlags, complicationLabels } from '@/lib/complications'
 import React, { useState } from 'react'
 import Link from 'next/link'
 import type { Visit, CathProcedure } from '@/lib/types'
@@ -193,10 +194,8 @@ function ProcedureCard({
 
   const lesions = proc.lesions || []
   const devices = proc.devices || []
-  const complications = Array.isArray(proc.complications)
-    ? proc.complications
-    : (proc.complications && (proc.complications as any).hasComplication ? [{ type: 'Complication Recorded' }] : [])
-  const hasComplication = complications.some((c: any) => c.type !== 'None')
+  const complications = complicationLabels(complicationFlags(proc))
+  const hasComplication = complications.length > 0
 
   // Derive door-to-balloon if STEMI
   const dtb = proc.doorToBalloonMin ?? (
@@ -421,13 +420,12 @@ function ProcedureCard({
                 <ShieldAlert className="w-4 h-4" /> Complications Recorded
               </p>
               <div className="space-y-1 mt-1 text-rose-200/90">
-                {complications.filter((c: any) => c && c.type !== 'None').map((c: any, i: number) => (
-                  <p key={i}>
-                    • <strong>{c.type}</strong>
-                    {c.severity ? ` (${c.severity})` : ''}
-                    {c.notes || c.details ? `: ${c.notes || c.details}` : ''}
-                  </p>
+                {complications.map((label, i) => (
+                  <p key={i}>• <strong>{label}</strong></p>
                 ))}
+                {Array.isArray(proc.complications) && proc.complications
+                  .filter((c: any) => c?.details)
+                  .map((c: any, i: number) => <p key={`d-${i}`} className="text-rose-200/70">{c.type}: {c.details}</p>)}
               </div>
             </div>
           )}

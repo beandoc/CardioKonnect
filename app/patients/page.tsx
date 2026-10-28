@@ -49,10 +49,22 @@ function PatientList() {
   }, [currentUser, patients])
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
     return accessiblePatients.filter(p => {
       const name = fullName(p).toLowerCase()
       const email = (p.email || '').toLowerCase()
-      const matchSearch = name.includes(search.toLowerCase()) || email.includes(search.toLowerCase())
+      const mrn = (p.mrn || '').toLowerCase()
+      const hosp = (p.hospitalName || '').toLowerCase()
+      const site = (p.siteId || '').toLowerCase()
+      const regCode = (p.registrySerialId || '').toLowerCase()
+
+      const matchSearch = !q ||
+        name.includes(q) ||
+        email.includes(q) ||
+        mrn.includes(q) ||
+        hosp.includes(q) ||
+        site.includes(q) ||
+        regCode.includes(q)
       const matchStatus = statusFilter === 'All' || (p.status || 'Active') === statusFilter
       return matchSearch && matchStatus
     })

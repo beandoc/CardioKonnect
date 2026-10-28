@@ -21,6 +21,7 @@ function getOrInitDb() {
     return initializeFirestore(app, {
       experimentalForceLongPolling: true,
       localCache: memoryLocalCache(),
+      ignoreUndefinedProperties: true,
     })
   } catch {
     return getFirestore(app)

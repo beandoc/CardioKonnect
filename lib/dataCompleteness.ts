@@ -70,34 +70,6 @@ export function assessPatientCompleteness(patient: Patient, latestVisit: Visit |
   })
   const isCathLab = patient.registryId === 'cathlab' || patient.registryIds?.includes('cathlab')
 
-  // 1. Demographics & Indian Hierarchy
-  fields.push({
-    key: 'name',
-    label: 'Full Name',
-    category: 'Demographics',
-    tier: 1,
-    isComplete: Boolean(patient.firstName?.trim() && patient.firstName !== 'Unknown'),
-    value: `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
-    importance: 'Critical',
-  })
-  fields.push({
-    key: 'age_dob',
-    label: 'Date of Birth / Age',
-    category: 'Demographics',
-    tier: 1,
-    isComplete: Boolean(patient.dob || patient.age),
-    value: patient.dob || (patient.age ? `${patient.age} yrs` : null),
-    importance: 'Critical',
-  })
-  fields.push({
-    key: 'sex',
-    label: 'Sex / Gender',
-    category: 'Demographics',
-    tier: 1,
-    isComplete: Boolean(patient.sex),
-    value: patient.sex,
-    importance: 'Critical',
-  })
   fields.push({
     key: 'cohortType',
     label: isCathLab ? 'Cath Lab Admission Track' : 'Cohort Track (ADHF vs OPD)',
@@ -489,12 +461,12 @@ export function calculateCathProcedureCompleteness(proc: CathProcedure): CathPro
   const missingQuality: string[] = []
 
   // 1. Tier 1 Critical Mandatory (60% weight)
-  if (!proc.procedureDate) missingCritical.push('Procedure Date & Timestamp')
-  if (!proc.procedureType) missingCritical.push('Procedure Type')
-  if (!proc.clinicalIndication) missingCritical.push('Clinical Indication')
+  if (!proc.procedureDate && !proc.procedureDateTime) missingCritical.push('Procedure Date & Timestamp')
+  if (!proc.procedureType && !proc.admissionType) missingCritical.push('Procedure Type')
+  if (!proc.clinicalIndication && !proc.presentation) missingCritical.push('Clinical Indication')
   if (!proc.accessSite) missingCritical.push('Vascular Access Site')
   if (!proc.sheathSize) missingCritical.push('Sheath Size')
-  if (!proc.operatorName) missingCritical.push('Primary Operator Name')
+  if (!proc.operatorName && !proc.operatorId) missingCritical.push('Primary Operator Name')
   if (!proc.lesions || proc.lesions.length === 0) missingCritical.push('Target Lesion & Anatomy')
   if (!proc.complications) missingCritical.push('In-Hospital Complication Audit')
 
@@ -505,7 +477,8 @@ export function calculateCathProcedureCompleteness(proc: CathProcedure): CathPro
       if (l.postTimiFlow === undefined) missingCritical.push(`Lesion #${idx + 1} Post-TIMI Flow`)
       if (l.preStenosisPct === undefined) missingCritical.push(`Lesion #${idx + 1} Pre-Stenosis %`)
       if (l.postStenosisPct === undefined) missingCritical.push(`Lesion #${idx + 1} Residual Stenosis %`)
-      if (l.treatmentStrategy === 'DES' && (!l.devices || l.devices.length === 0)) {
+      const hasDevices = (l.devices && l.devices.length > 0) || (l.deviceIds && l.deviceIds.length > 0) || (proc.devices && proc.devices.length > 0)
+      if (l.treatmentStrategy === 'DES' && !hasDevices) {
         missingCritical.push(`Lesion #${idx + 1} Deployed Stent Specifications`)
       }
     })
@@ -515,13 +488,16 @@ export function calculateCathProcedureCompleteness(proc: CathProcedure): CathPro
   if (proc.contrastVolumeMl === undefined || proc.contrastVolumeMl <= 0) {
     missingQuality.push('Contrast Volume (mL)')
   }
-  if (proc.fluoroscopyTimeMinutes === undefined || proc.fluoroscopyTimeMinutes <= 0) {
+  const fluoroTime = proc.fluoroscopyTimeMin ?? proc.fluoroscopyTimeMinutes
+  if (fluoroTime === undefined || fluoroTime <= 0) {
     missingQuality.push('Fluoroscopy Time (minutes)')
   }
   if (!proc.closureDevice) {
     missingQuality.push('Vascular Hemostasis / Closure Device')
   }
-  if (proc.clinicalIndication === 'STEMI' && (!proc.stemiTimelines || !proc.stemiTimelines.dtbMinutes)) {
+  const isStemi = proc.clinicalIndication === 'STEMI' || proc.presentation === 'STEMI'
+  const hasDtb = !!(proc.stemiTimelines?.dtbMinutes ?? proc.doorToBalloonMin ?? (proc.hospitalArrival && proc.firstDevice))
+  if (isStemi && !hasDtb) {
     missingQuality.push('STEMI Door-to-Balloon Time & Timelines')
   }
 

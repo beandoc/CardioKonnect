@@ -1,5 +1,6 @@
 'use client'
 
+import { complicationFlags } from '@/lib/complications'
 import React, { useMemo, useState } from 'react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -33,8 +34,8 @@ export default function CathStatisticalBenchmarking({ procedures }: Props) {
       const op = p.operatorName || 'Unknown Operator'
       const curr = map.get(op) || { name: op, volume: 0, complications: 0, deaths: 0 }
       curr.volume += 1
-      if (p.complications?.hasComplication) curr.complications += 1
-      if (p.complications?.inLabDeath || p.complications?.inHospitalDeath) curr.deaths += 1
+      if (complicationFlags(p).hasComplication) curr.complications += 1
+      if (complicationFlags(p).inLabDeath || complicationFlags(p).inHospitalDeath) curr.deaths += 1
       map.set(op, curr)
     })
 
@@ -55,29 +56,41 @@ export default function CathStatisticalBenchmarking({ procedures }: Props) {
     return generateFunnelCurves(benchmarkMortalityTarget, maxVol)
   }, [benchmarkMortalityTarget, operatorStats])
 
-  // Kaplan-Meier Survival dataset derived from logged procedures
+  // Kaplan-Meier dataset. The registry records in-hospital events only (no event
+  // timestamps, no post-discharge follow-up), so time runs from procedure to
+  // discharge: intra-procedural events at day 0, other events at discharge, and
+  // event-free patients censored at discharge. Procedures with no discharge date
+  // contribute only if they had an intra-procedural event.
   const survivalData = useMemo<SurvivalDataPoint[]>(() => {
-    if (procedures.length === 0) return []
+    const DAY_MS = 1000 * 60 * 60 * 24
+    const points: SurvivalDataPoint[] = []
+    for (const p of procedures) {
+      const items: any[] = Array.isArray(p.complications) ? p.complications : []
+      const intraProcedural = items.some(c => c?.timing === 'Intra-procedural') || complicationFlags(p).inLabDeath
+      const event = Boolean(complicationFlags(p).hasComplication || p.dischargeStatus === 'In-Hospital Mortality')
+      const group = p.accessSite?.includes('Radial') ? 'Transradial' : 'Transfemoral'
 
-    return procedures.map(p => {
-      const procTime = p.procedureDate ? new Date(p.procedureDate).getTime() : Date.now()
-      const daysSince = Math.max(1, Math.min(365, Math.floor((Date.now() - procTime) / (1000 * 60 * 60 * 24))))
-      const hadAdverseEvent = Boolean(
-        p.complications?.hasComplication ||
-        p.dischargeStatus === 'In-Hospital Mortality'
-      )
-      return {
-        timeDays: daysSince,
-        event: hadAdverseEvent,
-        group: p.accessSite.includes('Radial') ? 'Transradial' : 'Transfemoral'
+      if (event && intraProcedural) {
+        points.push({ timeDays: 0, event: true, group })
+        continue
       }
-    })
+      const procDate = p.procedureDate || p.procedureDateTime
+      const start = procDate ? new Date(procDate).getTime() : NaN
+      const end = p.dischargeDate ? new Date(p.dischargeDate).getTime() : NaN
+      if (isNaN(start) || isNaN(end) || end < start) continue
+      points.push({ timeDays: Math.floor((end - start) / DAY_MS), event, group })
+    }
+    return points
   }, [procedures])
+
+  const maxFollowUpDays = useMemo(() => Math.max(0, ...survivalData.map(d => d.timeDays)), [survivalData])
+  const milestone = (days: number, value: number) =>
+    maxFollowUpDays >= days ? `${(value * 100).toFixed(1)}%` : '—'
 
   const kmAll = useMemo(() => calculateKaplanMeier(survivalData), [survivalData])
 
   // Observed-to-Expected Calculation
-  const totalObserved = procedures.filter(p => p.complications?.hasComplication).length
+  const totalObserved = procedures.filter(p => complicationFlags(p).hasComplication).length
   // Predicted baseline expectation from risk indicators (e.g. STEMI, cardiogenic shock, age >75)
   const totalExpected = useMemo(() => {
     if (procedures.length === 0) return 0
@@ -312,25 +325,25 @@ export default function CathStatisticalBenchmarking({ procedures }: Props) {
             <div className="glass-card p-4 border border-white/10 space-y-1">
               <p className="text-[10px] text-gray-400 uppercase font-bold">Total Cohort</p>
               <p className="text-2xl font-bold text-white">{kmAll.totalPatients}</p>
-              <p className="text-[10px] text-gray-400">Tracked interventional episodes</p>
+              <p className="text-[10px] text-gray-400">Episodes with discharge date or in-lab event</p>
             </div>
 
             <div className="glass-card p-4 border border-white/10 space-y-1">
               <p className="text-[10px] text-gray-400 uppercase font-bold">30-Day Event-Free</p>
-              <p className="text-2xl font-bold text-emerald-400">{(kmAll.oneMonthSurvival * 100).toFixed(1)}%</p>
-              <p className="text-[10px] text-gray-400">Post-PCI milestone</p>
+              <p className="text-2xl font-bold text-emerald-400">{milestone(30, kmAll.oneMonthSurvival)}</p>
+              <p className="text-[10px] text-gray-400">{maxFollowUpDays >= 30 ? 'Post-PCI milestone' : 'Follow-up too short'}</p>
             </div>
 
             <div className="glass-card p-4 border border-white/10 space-y-1">
               <p className="text-[10px] text-gray-400 uppercase font-bold">6-Month Event-Free</p>
-              <p className="text-2xl font-bold text-cyan-400">{(kmAll.sixMonthSurvival * 100).toFixed(1)}%</p>
-              <p className="text-[10px] text-gray-400">Subacute surveillance</p>
+              <p className="text-2xl font-bold text-cyan-400">{milestone(182, kmAll.sixMonthSurvival)}</p>
+              <p className="text-[10px] text-gray-400">{maxFollowUpDays >= 182 ? 'Subacute surveillance' : 'No post-discharge follow-up'}</p>
             </div>
 
             <div className="glass-card p-4 border border-white/10 space-y-1">
               <p className="text-[10px] text-gray-400 uppercase font-bold">1-Year Event-Free</p>
-              <p className="text-2xl font-bold text-violet-400">{(kmAll.oneYearSurvival * 100).toFixed(1)}%</p>
-              <p className="text-[10px] text-gray-400">Long-term registry endpoint</p>
+              <p className="text-2xl font-bold text-violet-400">{milestone(365, kmAll.oneYearSurvival)}</p>
+              <p className="text-[10px] text-gray-400">{maxFollowUpDays >= 365 ? 'Long-term registry endpoint' : 'No post-discharge follow-up'}</p>
             </div>
           </div>
 
@@ -339,7 +352,7 @@ export default function CathStatisticalBenchmarking({ procedures }: Props) {
               <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                 Kaplan-Meier Product-Limit Survival Curve with Greenwood 95% Confidence Band
               </h4>
-              <span className="text-[10px] text-gray-400">Time-to-Event in Days</span>
+              <span className="text-[10px] text-gray-400">In-hospital: procedure → discharge (days)</span>
             </div>
 
             <div className="h-64 w-full">

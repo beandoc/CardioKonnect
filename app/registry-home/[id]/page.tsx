@@ -1,4 +1,5 @@
 'use client'
+import { complicationFlags } from '@/lib/complications'
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useEffect, useMemo } from 'react'
 import {
@@ -9,6 +10,7 @@ import {
 import Link from 'next/link'
 import { ArrowLeft, Users, CheckCircle, TrendingUp, Clock, Activity, PlusCircle, FlaskConical, Microscope, Layers, Info, TrendingDown, ArrowRight, AlertTriangle, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { subscribePatients, subscribeVisits, subscribeCathProcedures } from '@/lib/firestore'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import CathProcedureModal from '@/components/procedures/CathProcedureModal'
@@ -729,20 +731,24 @@ export default function RegistryDetailPage() {
     let unsubVisits: (() => void) | null = null
     let unsubProcedures: (() => void) | null = null
 
+    const onError = (err: Error) => {
+      toast.error('Registry data unavailable', { description: err.message })
+      setLoading(false)
+    }
+
     try {
       unsubPatients = subscribePatients((pts) => {
         setPatients(pts)
         setLoading(false)
-      })
+      }, onError)
       unsubVisits = subscribeVisits((vts) => {
         setVisits(vts)
-      })
+      }, onError)
       unsubProcedures = subscribeCathProcedures((procs) => {
         setProcedures(procs)
-      })
+      }, onError)
     } catch (err) {
-      console.error('Failed to load dynamic registry data:', err)
-      setLoading(false)
+      onError(err as Error)
     }
 
     return () => {
@@ -1089,7 +1095,7 @@ export default function RegistryDetailPage() {
                   {procedures.map((proc) => {
                     const procPatient = patients.find(p => p.id === proc.patientId)
                     const lesions = proc.lesions || []
-                    const hasComp = proc.complications?.hasComplication
+                    const hasComp = complicationFlags(proc).hasComplication
                     return (
                       <tr key={proc.id} className="hover:bg-white/[0.02] transition-colors">
                         <td className="py-3 px-3 whitespace-nowrap text-gray-300 font-mono text-[11px]">

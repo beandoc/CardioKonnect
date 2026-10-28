@@ -11,3 +11,6 @@ scratch/
 .vercel-config/
 .npm_cache/
 .vercel/
+
+# Patient-data backups written by scripts/*_cleanup scripts
+.cleanup-backups/

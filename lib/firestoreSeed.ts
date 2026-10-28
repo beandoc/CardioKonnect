@@ -1,122 +1,122 @@
 /**
- * Bulk-seed parsed Excel data into Firestore using batched writes.
- * Firestore batches are capped at 500 ops; this function chunks automatically.
+ * Append-only bulk import of parsed Excel data into Firestore.
  *
- * Flow:
- *  1. Delete every existing patient doc (+ visits subcollection) in batches.
- *  2. Pre-allocate Firestore doc refs for all new patients (no round-trip).
- *  3. Write patients + visits together in 400-op chunks.
+ * Never deletes or overwrites existing records. Each patient is written in the
+ * same batch as its visits, so a failure part-way through leaves only whole
+ * patients behind and a re-run skips them via duplicate detection.
  */
-import {
-  collection, doc, writeBatch, getDocs, serverTimestamp,
-} from 'firebase/firestore'
+import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
+import { SITES } from './appConfig'
+import { getPatients, writeAudit } from './firestore'
 import type { Patient, Visit } from './types'
 
-const BATCH_SIZE = 400
+// Firestore caps a batch at 500 writes.
+const MAX_BATCH_OPS = 450
 
-async function commitInChunks(ops: Array<(batch: ReturnType<typeof writeBatch>) => void>) {
-  for (let i = 0; i < ops.length; i += BATCH_SIZE) {
-    const batch = writeBatch(db)
-    ops.slice(i, i + BATCH_SIZE).forEach(op => op(batch))
-    await batch.commit()
-  }
+export interface ImportValidation {
+  errors: string[]
+  duplicates: Patient[]
+  toImport: Patient[]
 }
 
-/** Delete all documents in a collection snapshot in batches. */
-async function deleteCollection(collectionPath: string) {
-  const snap = await getDocs(collection(db, collectionPath))
-  if (snap.empty) return
-  const ops = snap.docs.map(d => (batch: ReturnType<typeof writeBatch>) => batch.delete(d.ref))
-  await commitInChunks(ops)
-}
-
-/** Clear all patients and their visits subcollections from Firestore. */
-export async function clearFirestorePatients(
-  onProgress?: (msg: string) => void
-): Promise<void> {
-  onProgress?.('Reading existing patients…')
-  const patientsSnap = await getDocs(collection(db, 'patients'))
-
-  if (patientsSnap.empty) {
-    onProgress?.('Firestore is already empty.')
-    return
-  }
-
-  onProgress?.(`Deleting ${patientsSnap.size} existing patient(s) and their visits…`)
-
-  // Collect delete ops: visits subcollection first, then the patient doc itself
-  const ops: Array<(batch: ReturnType<typeof writeBatch>) => void> = []
-
-  for (const patientDoc of patientsSnap.docs) {
-    const visitsSnap = await getDocs(collection(db, 'patients', patientDoc.id, 'visits'))
-    visitsSnap.docs.forEach(vd => ops.push(b => b.delete(vd.ref)))
-    ops.push(b => b.delete(patientDoc.ref))
-  }
-
-  await commitInChunks(ops)
-  onProgress?.('Existing data cleared.')
+function dedupKey(p: Pick<Patient, 'mrn' | 'firstName' | 'lastName' | 'dob'>): string {
+  const mrn = (p.mrn || '').trim()
+  if (mrn && mrn !== '—') return `mrn:${mrn.toLowerCase()}`
+  return `name:${`${p.firstName} ${p.lastName}`.trim().toLowerCase()}|${p.dob || ''}`
 }
 
 /**
- * Seed patients and visits into Firestore.
- * The Excel parser assigns temporary IDs (e.g. "p-abc-1"); we replace them
- * with Firestore auto-generated IDs so the data is fully consistent.
+ * Checks every parsed row before anything is written: required fields,
+ * visits that reference unknown patients, and patients already in the registry.
  */
-export async function seedFirestore(
+export async function validateImport(patients: Patient[], visits: Visit[]): Promise<ImportValidation> {
+  const errors: string[] = []
+  const ids = new Set(patients.map(p => p.id))
+
+  patients.forEach((p, i) => {
+    if (!p.firstName && !p.lastName) errors.push(`Patient row ${i + 1}: missing name`)
+    if (!p.sex) errors.push(`Patient row ${i + 1} (${p.firstName} ${p.lastName}): missing sex`)
+  })
+  const orphanVisits = visits.filter(v => !ids.has(v.patientId)).length
+  if (orphanVisits > 0) errors.push(`${orphanVisits} visit(s) reference a patient not present in the file`)
+
+  const existingKeys = new Set((await getPatients()).map(dedupKey))
+  const duplicates = patients.filter(p => existingKeys.has(dedupKey(p)))
+  const toImport = patients.filter(p => !existingKeys.has(dedupKey(p)))
+
+  return { errors, duplicates, toImport }
+}
+
+/**
+ * Writes new patients (with their visits) for the given site and registry.
+ * The Excel parser assigns temporary IDs; they are replaced with Firestore IDs.
+ */
+export async function importPatients(
   patients: Patient[],
   visits: Visit[],
+  target: { siteId: string; registryId: string },
   onProgress?: (msg: string) => void
 ): Promise<{ patientsWritten: number; visitsWritten: number }> {
-  onProgress?.(`Preparing ${patients.length} patients and ${visits.length} visits…`)
+  const visitsByPatient = new Map<string, Visit[]>()
+  for (const v of visits) {
+    const list = visitsByPatient.get(v.patientId) || []
+    list.push(v)
+    visitsByPatient.set(v.patientId, list)
+  }
 
-  // Pre-allocate Firestore doc refs — this is synchronous, no network call.
-  const idMap = new Map<string, string>() // old Excel ID → new Firestore ID
-  const patientRefs = patients.map(p => {
+  let batch = writeBatch(db)
+  let ops = 0
+  let patientsWritten = 0
+  let visitsWritten = 0
+
+  for (const patient of patients) {
+    const patientVisits = visitsByPatient.get(patient.id) || []
+    const groupSize = 1 + patientVisits.length
+    if (ops > 0 && ops + groupSize > MAX_BATCH_OPS) {
+      await batch.commit()
+      onProgress?.(`Committed ${patientsWritten} patients so far…`)
+      batch = writeBatch(db)
+      ops = 0
+    }
+
     const ref = doc(collection(db, 'patients'))
-    idMap.set(p.id, ref.id)
-    return { ref, patient: p }
-  })
-
-  const now = new Date().toISOString()
-
-  // Build write ops for patients
-  const ops: Array<(batch: ReturnType<typeof writeBatch>) => void> = []
-
-  for (const { ref, patient } of patientRefs) {
     const { id: _id, ...fields } = patient
-    ops.push(b => b.set(ref, {
-      ...fields,
-      createdAt: patient.createdAt || now,
-      updatedAt: patient.updatedAt || now,
-    }))
+    const registryIds = Array.from(new Set([...(patient.registryIds || []), target.registryId]))
+    batch.set(ref, {
+      ...stripUndefined(fields),
+      siteId: target.siteId,
+      hospitalName: SITES[target.siteId]?.name ?? fields.hospitalName,
+      registryId: target.registryId,
+      registryIds,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    ops++
+
+    for (const visit of patientVisits) {
+      const { id: _vid, patientId: _pid, ...visitFields } = visit
+      batch.set(doc(collection(db, 'patients', ref.id, 'visits')), {
+        ...stripUndefined(visitFields),
+        patientId: ref.id,
+        siteId: target.siteId,
+        createdAt: serverTimestamp(),
+      })
+      ops++
+    }
+
+    patientsWritten++
+    visitsWritten += patientVisits.length
   }
 
-  // Build write ops for visits, remapping patientId
-  let skipped = 0
-  for (const visit of visits) {
-    const firestorePatientId = idMap.get(visit.patientId)
-    if (!firestorePatientId) { skipped++; continue }
+  if (ops > 0) await batch.commit()
 
-    const visitRef = doc(collection(db, 'patients', firestorePatientId, 'visits'))
-    const { id: _id, patientId: _pid, ...visitFields } = visit
-    ops.push(b => b.set(visitRef, {
-      ...visitFields,
-      patientId: firestorePatientId,
-      createdAt: visit.createdAt || now,
-    }))
-  }
-
-  if (skipped > 0) {
-    onProgress?.(`Warning: ${skipped} visit(s) skipped — patient ID not found in this seed batch.`)
-  }
-
-  onProgress?.(`Writing ${ops.length} documents in chunks of ${BATCH_SIZE}…`)
-  await commitInChunks(ops)
-
-  const patientsWritten = patientRefs.length
-  const visitsWritten = ops.length - patientsWritten
-
-  onProgress?.(`Done — ${patientsWritten} patients and ${visitsWritten} visits written to Firestore.`)
+  await writeAudit('IMPORT', 'registry', target.registryId, '', { patientsWritten, visitsWritten })
+  onProgress?.(`Done — ${patientsWritten} patients and ${visitsWritten} visits added.`)
   return { patientsWritten, visitsWritten }
+}
+
+/** Firestore rejects undefined at any depth; a JSON round-trip drops them. */
+function stripUndefined<T extends object>(obj: T): Partial<T> {
+  return JSON.parse(JSON.stringify(obj))
 }

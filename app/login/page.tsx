@@ -3,82 +3,62 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ShieldCheck, Lock, User, AlertCircle, HeartPulse, RefreshCw, ArrowRight, Shield } from 'lucide-react'
 import { toast } from 'sonner'
-import { authenticateUser, APP_USERS } from '@/lib/appConfig'
+import { APP_USERS } from '@/lib/appConfig'
+import { writeAudit } from '@/lib/firestore'
 import { useAppUser } from '@/context/AppUserContext'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { setUser } = useAppUser()
+  const { user, authLoading, login } = useAppUser()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // If already logged in, redirect based on stored user
+  // If already signed in, route to the user's landing page
   useEffect(() => {
-    const auth = localStorage.getItem('cardiokonnect_auth')
-    const storedUserId = localStorage.getItem('cardio_active_user_id')
+    if (authLoading || !user) return
     const role = localStorage.getItem('cardiokonnect_role')
-    if (auth === 'true') {
-      if (role === 'deo') {
-        router.replace('/deo')
-      } else if (storedUserId === 'DR_RAJEEV_CHAUHAN') {
-        router.replace('/registry-home')
-      } else {
-        router.replace('/')
-      }
+    if (role === 'deo') {
+      router.replace('/deo')
+    } else if (user.siteId === 'KANPUR_APEX') {
+      router.replace('/registry-home')
+    } else {
+      router.replace('/')
     }
-  }, [router])
+  }, [authLoading, user, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    // Simulate clinical authorization validation
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    const trimmedUser = username.trim()
-    const trimmedPass = password.trim()
-
-    // 1. Check DEO special case
-    const isDeoDirect = (trimmedUser.toLowerCase() === 'dataentry' || trimmedUser.toLowerCase() === 'deo') && trimmedPass === 'deo1234'
-    if (isDeoDirect) {
-      setUser(APP_USERS['DR_ARSHDEEP'])
-      localStorage.setItem('cardiokonnect_role', 'deo')
-      toast.success('Access Granted — Data Entry Operator Portal', {
-        style: {
-          background: 'rgba(6, 182, 212, 0.95)',
-          border: '1px solid rgba(6, 182, 212, 0.3)',
-          color: '#ffffff'
-        }
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
       })
-      router.replace('/deo')
-      return
-    }
+      if (!res.ok) throw new Error('invalid-credentials')
+      const { userId, portal } = await res.json()
+      const appUser = APP_USERS[userId]
+      if (!appUser) throw new Error('unknown-user')
 
-    // 2. Validate against AppUser directory
-    const authenticated = authenticateUser(trimmedUser, trimmedPass)
+      // Set before login so the redirect effect opens the right portal.
+      localStorage.setItem('cardiokonnect_role', portal === 'deo' ? 'deo' : 'doctor')
+      login(appUser)
+      writeAudit('LOGIN', 'session', appUser.id, '').catch(() => {})
 
-    if (authenticated) {
-      setUser(authenticated)
-      localStorage.setItem('cardiokonnect_role', authenticated.role === 'DEO' ? 'deo' : 'doctor')
-
-      toast.success(`Access Granted — Welcome, ${authenticated.name}`, {
-        description: `${authenticated.role}`,
+      toast.success(portal === 'deo' ? 'Access Granted — Data Entry Operator Portal' : `Access Granted — Welcome, ${appUser.name}`, {
+        description: portal === 'deo' ? undefined : `${appUser.role}`,
         style: {
           background: 'rgba(16, 185, 129, 0.95)',
           border: '1px solid rgba(16, 185, 129, 0.3)',
           color: '#ffffff'
         }
       })
-
-      if (authenticated.id === 'DR_RAJEEV_CHAUHAN') {
-        router.replace('/registry-home')
-      } else {
-        router.replace('/')
-      }
-    } else {
+      // Redirect happens in the effect above once the user is set.
+    } catch {
       setError('Invalid clinical user ID or password. Please verify your credentials.')
       toast.error('Authentication Failed', {
         description: 'Please verify your registered credentials and password.',
