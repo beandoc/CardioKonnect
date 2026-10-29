@@ -52,7 +52,9 @@ export function getAge(dob: string): number | null {
   try {
     const parsed = parseDateString(dob)
     if (isNaN(parsed.getTime())) return null
-    return differenceInYears(new Date(), parsed)
+    const age = differenceInYears(new Date(), parsed)
+    if (age <= 0 || age > 130) return null
+    return age
   }
   catch { return null }
 }
