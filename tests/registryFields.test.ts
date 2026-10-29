@@ -60,3 +60,4 @@ describe('Registry Fields Utilities', () => {
     expect(formatFieldLabel('amyloidosis_subtype')).toBe('Amyloidosis Subtype')
   })
 })
+
