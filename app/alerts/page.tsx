@@ -1,8 +1,9 @@
 'use client'
 import { complicationFlags } from '@/lib/complications'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Bell, ShieldAlert, Sparkles, Filter, CheckCircle, Activity } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import PaginationControls from '@/components/ui/PaginationControls'
 import { getPatients, getAllVisits, getAllCathProcedures, getResolvedAlertIds, resolveAlert as saveAlertResolution } from '@/lib/firestore'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { fullName } from '@/lib/utils'
@@ -232,6 +233,19 @@ export default function ClinicalAlertsPage() {
     return a.severity === filter
   })
 
+  // Alerts Pagination State
+  const [alertPage, setAlertPage] = useState(1)
+  const [alertPageSize, setAlertPageSize] = useState(10)
+
+  useEffect(() => {
+    setAlertPage(1)
+  }, [filter, alertPageSize])
+
+  const paginatedAlerts = useMemo(() => {
+    const start = (alertPage - 1) * alertPageSize
+    return filtered.slice(start, start + alertPageSize)
+  }, [filtered, alertPage, alertPageSize])
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <Activity className="w-6 h-6 text-blue-400 animate-pulse" />
@@ -277,35 +291,46 @@ export default function ClinicalAlertsPage() {
             No clinical alerts found in this category.
           </div>
         ) : (
-          filtered.map(alert => (
-            <div
-              key={alert.id}
-              className={`alert-strip ${
-                alert.status === 'Resolved' ? 'ok' :
-                alert.severity === 'Critical' ? 'danger' :
-                alert.severity === 'Warning' ? 'warn' : 'info'
-              }`}
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-white text-xs">{alert.patient}</span>
-                  <span className="text-[10px] text-gray-500 font-mono">({alert.mrn})</span>
-                  <span className="text-[10px] text-gray-500">&bull; {alert.timestamp}</span>
+          <>
+            {paginatedAlerts.map(alert => (
+              <div
+                key={alert.id}
+                className={`alert-strip ${
+                  alert.status === 'Resolved' ? 'ok' :
+                  alert.severity === 'Critical' ? 'danger' :
+                  alert.severity === 'Warning' ? 'warn' : 'info'
+                }`}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-white text-xs">{alert.patient}</span>
+                    <span className="text-[10px] text-gray-500 font-mono">({alert.mrn})</span>
+                    <span className="text-[10px] text-gray-500">&bull; {alert.timestamp}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-white mt-1">{alert.trigger}</p>
+                  <p className="text-[11px] text-gray-400 font-mono mt-0.5">{alert.value}</p>
                 </div>
-                <p className="text-xs font-semibold text-white mt-1">{alert.trigger}</p>
-                <p className="text-[11px] text-gray-400 font-mono mt-0.5">{alert.value}</p>
+                <div className="flex gap-2">
+                  {alert.status === 'Open' ? (
+                    <Button variant="outline" size="sm" className="btn-sm text-emerald-400" onClick={() => resolveAlert(alert)}>
+                      <CheckCircle className="w-3.5 h-3.5" /> Resolve flag
+                    </Button>
+                  ) : (
+                    <span className="badge badge-green text-[10px] font-bold">Resolved</span>
+                  )}
+                </div>
               </div>
-              <div className="flex gap-2">
-                {alert.status === 'Open' ? (
-                  <Button variant="outline" size="sm" className="btn-sm text-emerald-400" onClick={() => resolveAlert(alert)}>
-                    <CheckCircle className="w-3.5 h-3.5" /> Resolve flag
-                  </Button>
-                ) : (
-                  <span className="badge badge-green text-[10px] font-bold">Resolved</span>
-                )}
-              </div>
-            </div>
-          ))
+            ))}
+
+            <PaginationControls
+              currentPage={alertPage}
+              totalItems={filtered.length}
+              pageSize={alertPageSize}
+              onPageChange={setAlertPage}
+              onPageSizeChange={setAlertPageSize}
+              itemName="alerts"
+            />
+          </>
         )}
       </div>
     </div>

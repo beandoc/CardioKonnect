@@ -15,6 +15,7 @@ import { notifyLoadError } from '@/lib/notify'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { cn, formatDate } from '@/lib/utils'
 import Button from '@/components/ui/Button'
+import PaginationControls from '@/components/ui/PaginationControls'
 
 type AuditTab = 'complications' | 'hf_admissions' | 'renal_safety'
 
@@ -108,6 +109,42 @@ export default function ComplicationAuditPage() {
       return v?.nyha === 'III' || v?.nyha === 'IV' || p.nyha === 'III' || p.nyha === 'IV'
     }).length
   }, [patients, visitsMap])
+
+  // Tab 1: Complications Log Pagination
+  const [compPage, setCompPage] = useState(1)
+  const [compPageSize, setCompPageSize] = useState(10)
+  const paginatedComplicationProcedures = useMemo(() => {
+    const start = (compPage - 1) * compPageSize
+    return complicationProcedures.slice(start, start + compPageSize)
+  }, [complicationProcedures, compPage, compPageSize])
+
+  // Tab 2: Prior Hospitalization Patients
+  const hospPatients = useMemo(() => {
+    return patients.filter(p => {
+      const v = visitsMap.get(p.id)
+      return v?.hospHistory === 'Yes' || p.comorbidPriorMI || p.comorbidCAD
+    })
+  }, [patients, visitsMap])
+  const [hospPage, setHospPage] = useState(1)
+  const [hospPageSize, setHospPageSize] = useState(12)
+  const paginatedHospPatients = useMemo(() => {
+    const start = (hospPage - 1) * hospPageSize
+    return hospPatients.slice(start, start + hospPageSize)
+  }, [hospPatients, hospPage, hospPageSize])
+
+  // Tab 3: Renal & Potassium Surveillance Patients
+  const [renalPage, setRenalPage] = useState(1)
+  const [renalPageSize, setRenalPageSize] = useState(12)
+  const paginatedRenalPatients = useMemo(() => {
+    const start = (renalPage - 1) * renalPageSize
+    return patients.slice(start, start + renalPageSize)
+  }, [patients, renalPage, renalPageSize])
+
+  useEffect(() => {
+    setCompPage(1)
+    setHospPage(1)
+    setRenalPage(1)
+  }, [activeTab])
 
   return (
     <div className="space-y-6 animate-fade-in text-gray-300">
@@ -317,7 +354,7 @@ export default function ComplicationAuditPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.05]">
-                          {complicationProcedures.map((proc) => {
+                          {paginatedComplicationProcedures.map((proc) => {
                             const p = patients.find(pt => pt.id === proc.patientId)
                             const comp = complicationFlags(proc)
                             const events = complicationLabels(comp)
@@ -356,6 +393,15 @@ export default function ComplicationAuditPage() {
                         </tbody>
                       </table>
                     </div>
+
+                    <PaginationControls
+                      currentPage={compPage}
+                      totalItems={complicationProcedures.length}
+                      pageSize={compPageSize}
+                      onPageChange={setCompPage}
+                      onPageSizeChange={setCompPageSize}
+                      itemName="adverse events"
+                    />
                   </div>
                 )}
               </>
@@ -367,27 +413,31 @@ export default function ComplicationAuditPage() {
           <div className="space-y-4">
             <p className="text-sm font-semibold text-white">Patients with Prior Hospitalization History ({hospHistoryCount})</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {patients
-                .filter(p => {
-                  const v = visitsMap.get(p.id)
-                  return v?.hospHistory === 'Yes' || p.comorbidPriorMI || p.comorbidCAD
-                })
-                .map(p => {
-                  const v = visitsMap.get(p.id)
-                  return (
-                    <div key={p.id} className="p-3 rounded-xl bg-slate-900/70 border border-blue-500/15 space-y-1 text-xs">
-                      <div className="flex justify-between items-start">
-                        <Link href={`/patients/${p.id}`} className="font-bold text-white hover:text-blue-300">
-                          {p.firstName} {p.lastName}
-                        </Link>
-                        <span className="badge badge-amber text-[9px]">NYHA {v?.nyha || p.nyha || 'II'}</span>
-                      </div>
-                      <p className="text-gray-400 text-[11px]">LVEF: <strong className="text-rose-400">{v?.lvef ?? p.lvef ?? '—'}%</strong> · {p.mrn}</p>
-                      <p className="text-[10px] text-gray-500 truncate">Comorbidities: {(p.comorbidities || []).join(', ') || 'CAD / Prior admission'}</p>
+              {paginatedHospPatients.map(p => {
+                const v = visitsMap.get(p.id)
+                return (
+                  <div key={p.id} className="p-3 rounded-xl bg-slate-900/70 border border-blue-500/15 space-y-1 text-xs">
+                    <div className="flex justify-between items-start">
+                      <Link href={`/patients/${p.id}`} className="font-bold text-white hover:text-blue-300">
+                        {p.firstName} {p.lastName}
+                      </Link>
+                      <span className="badge badge-amber text-[9px]">NYHA {v?.nyha || p.nyha || 'II'}</span>
                     </div>
-                  )
-                })}
+                    <p className="text-gray-400 text-[11px]">LVEF: <strong className="text-rose-400">{v?.lvef ?? p.lvef ?? '—'}%</strong> · {p.mrn}</p>
+                    <p className="text-[10px] text-gray-500 truncate">Comorbidities: {(p.comorbidities || []).join(', ') || 'CAD / Prior admission'}</p>
+                  </div>
+                )
+              })}
             </div>
+
+            <PaginationControls
+              currentPage={hospPage}
+              totalItems={hospPatients.length}
+              pageSize={hospPageSize}
+              onPageChange={setHospPage}
+              onPageSizeChange={setHospPageSize}
+              itemName="patients"
+            />
           </div>
         )}
 
@@ -398,7 +448,7 @@ export default function ComplicationAuditPage() {
               Patients on 4-pillar GDMT require routine monitoring of serum potassium and eGFR computed via CKD-EPI equation.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
-              {patients.map(p => {
+              {paginatedRenalPatients.map(p => {
                 const v = visitsMap.get(p.id)
                 return (
                   <div key={p.id} className="p-3 rounded-xl bg-slate-900/70 border border-blue-500/15 space-y-1 text-xs">
@@ -416,6 +466,15 @@ export default function ComplicationAuditPage() {
                 )
               })}
             </div>
+
+            <PaginationControls
+              currentPage={renalPage}
+              totalItems={patients.length}
+              pageSize={renalPageSize}
+              onPageChange={setRenalPage}
+              onPageSizeChange={setRenalPageSize}
+              itemName="patients"
+            />
           </div>
         )}
       </div>

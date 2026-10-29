@@ -15,6 +15,7 @@ import { notifyLoadError } from '@/lib/notify'
 import type { Patient, Visit, CathProcedure } from '@/lib/types'
 import { cn, formatDate, initials, getAge, fullName } from '@/lib/utils'
 import Button from '@/components/ui/Button'
+import PaginationControls from '@/components/ui/PaginationControls'
 import CathProcedureModal from '@/components/procedures/CathProcedureModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -128,7 +129,7 @@ export default function ProceduralAuditPage() {
     })
 
     return records
-  }, [cathProcedures, patients, visitsMap, activeTab])
+  }, [cathProcedures, patients, visitsMap])
 
   const filteredRecords = useMemo(() => {
     return unifiedRecords.filter(r => {
@@ -142,6 +143,19 @@ export default function ProceduralAuditPage() {
       return matchesTab && matchesSearch
     })
   }, [unifiedRecords, activeTab, searchQuery])
+
+  // Procedures Pagination State
+  const [procPage, setProcPage] = useState(1)
+  const [procPageSize, setProcPageSize] = useState(10)
+
+  useEffect(() => {
+    setProcPage(1)
+  }, [activeTab, searchQuery, procPageSize])
+
+  const paginatedRecords = useMemo(() => {
+    const start = (procPage - 1) * procPageSize
+    return filteredRecords.slice(start, start + procPageSize)
+  }, [filteredRecords, procPage, procPageSize])
 
   // Real KPIs
   const totalEnrolled = patients.length
@@ -281,7 +295,8 @@ export default function ProceduralAuditPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-blue-500/10 text-[10px] text-gray-400 uppercase tracking-wider">
@@ -295,7 +310,7 @@ export default function ProceduralAuditPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-500/5">
-                {filteredRecords.map(r => (
+                {paginatedRecords.map(r => (
                   <tr key={r.id} className="hover:bg-blue-500/5 transition-colors">
                     <td className="px-4 py-3 font-mono text-[11px] text-gray-400 whitespace-nowrap">
                       {r.date}
@@ -361,6 +376,16 @@ export default function ProceduralAuditPage() {
               </tbody>
             </table>
           </div>
+
+            <PaginationControls
+              currentPage={procPage}
+              totalItems={filteredRecords.length}
+              pageSize={procPageSize}
+              onPageChange={setProcPage}
+              onPageSizeChange={setProcPageSize}
+              itemName="procedures"
+            />
+          </>
         )}
       </div>
 

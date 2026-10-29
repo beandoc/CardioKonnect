@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Users, Search, PlusCircle, UserX, Activity, Database } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import PaginationControls from '@/components/ui/PaginationControls'
 import { cn, formatDate, initials, nyhaBadgeColor, hfTypeBadgeColor, lvefColor, fullName } from '@/lib/utils'
 import { getPatients, updatePatient } from '@/lib/firestore'
 import type { Patient } from '@/lib/types'
@@ -69,6 +70,19 @@ function PatientList() {
       return matchSearch && matchStatus
     })
   }, [accessiblePatients, search, statusFilter])
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, statusFilter, pageSize])
+
+  const paginatedPatients = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filtered.slice(start, start + pageSize)
+  }, [filtered, currentPage, pageSize])
 
   const toggleStatus = async (id: string, currentStatus?: 'Active' | 'Inactive' | 'Pending') => {
     const nextStatus = currentStatus === 'Inactive' ? 'Active' : 'Inactive'
@@ -174,12 +188,12 @@ function PatientList() {
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((p, i) => {
+                    paginatedPatients.map((p, i) => {
                       const status = p.status || 'Active'
                       const isCathLab = p.registryId === 'cathlab' || p.siteId === 'KANPUR_APEX' || p.mrn?.startsWith('7AFH')
                       return (
                         <tr key={p.id} className={cn(status === 'Inactive' && 'opacity-50')}>
-                          <td className="font-mono text-xs text-gray-500">{i + 1}</td>
+                          <td className="font-mono text-xs text-gray-500">{(currentPage - 1) * pageSize + i + 1}</td>
                           <td>
                             <div className="flex items-center gap-3">
                               <div
@@ -266,6 +280,16 @@ function PatientList() {
                 </tbody>
               </table>
             </div>
+
+            {/* Patients Pagination */}
+            <PaginationControls
+              currentPage={currentPage}
+              totalItems={filtered.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              itemName="patients"
+            />
           </div>
         </>
       )}

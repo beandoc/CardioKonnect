@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   Database, Search, Plus, Trash2, Edit2, Filter,
   ChevronDown, CheckCircle, XCircle, Eye, EyeOff, ArrowUpDown, Activity
@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import type { FieldType, RegistryField } from '@/lib/types'
 import { BUILT_IN_FIELDS } from '@/lib/types'
 import { getRegistryFields, setRegistryFields } from '@/lib/firestore'
+import PaginationControls from '@/components/ui/PaginationControls'
 
 const DATA_TYPES: FieldType[] = ['Text','Number','Date','Dropdown','Boolean','Multi-Select','Textarea','Score']
 const CATEGORIES = ['All','Visit','Clinical','Echo','Labs','Biomarkers','Vascular','Wearables','Imaging','Medications','QoL']
@@ -72,6 +73,19 @@ export default function RegistryPage() {
     const matchL = levelFilter === 'All' || f.level === levelFilter
     return matchQ && matchT && matchC && matchM && matchL
   })
+
+  // Registry Fields Pagination State
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(15)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, typeFilter, catFilter, mandFilter, levelFilter, pageSize])
+
+  const paginatedFields = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filtered.slice(start, start + pageSize)
+  }, [filtered, currentPage, pageSize])
 
   const handleAdd = () => {
     if (!newField.fieldName || !newField.displayLabel) return
@@ -342,7 +356,7 @@ export default function RegistryPage() {
                     </p>
                   </td>
                 </tr>
-              ) : filtered.map(f => (
+              ) : paginatedFields.map(f => (
                 <tr key={f.id} className={!f.active ? 'opacity-40' : ''}>
                   <td className="font-mono text-xs" style={{ color: 'rgba(148,163,184,0.4)' }}>{f.srNo}</td>
                   <td>
@@ -396,6 +410,16 @@ export default function RegistryPage() {
             </tbody>
           </table>
         </div>
+
+        <PaginationControls
+          currentPage={currentPage}
+          totalItems={filtered.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          itemName="fields"
+        />
+
         {/* Footer */}
         <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid rgba(59,130,246,0.08)' }}>
           <p className="text-xs" style={{ color: 'rgba(148,163,184,0.4)' }}>

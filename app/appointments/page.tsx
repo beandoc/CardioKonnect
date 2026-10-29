@@ -9,6 +9,7 @@ import {
   Activity, ArrowUpRight
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import PaginationControls from '@/components/ui/PaginationControls'
 import { cn } from '@/lib/utils'
 import { useAppUser } from '@/context/AppUserContext'
 import { filterPatientsByAccess } from '@/lib/accessControl'
@@ -238,6 +239,19 @@ function AppointmentsAndConsentsContent() {
     })
   }, [mergedAppointments, search, activeTab])
 
+  // Appointments Pagination State
+  const [aptPage, setAptPage] = useState(1)
+  const [aptPageSize, setAptPageSize] = useState(10)
+
+  useEffect(() => {
+    setAptPage(1)
+  }, [search, activeTab, aptPageSize])
+
+  const paginatedAppointments = useMemo(() => {
+    const start = (aptPage - 1) * aptPageSize
+    return filteredAppointments.slice(start, start + aptPageSize)
+  }, [filteredAppointments, aptPage, aptPageSize])
+
   // Dynamic Statistics
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10)
@@ -300,6 +314,19 @@ function AppointmentsAndConsentsContent() {
       return matchSearch && matchStatus
     })
   }, [consents, consentSearch, statusFilter])
+
+  // Consents Pagination State
+  const [consentPage, setConsentPage] = useState(1)
+  const [consentPageSize, setConsentPageSize] = useState(10)
+
+  useEffect(() => {
+    setConsentPage(1)
+  }, [consentSearch, statusFilter, categoryFilter, consentPageSize])
+
+  const paginatedConsents = useMemo(() => {
+    const start = (consentPage - 1) * consentPageSize
+    return filteredConsents.slice(start, start + consentPageSize)
+  }, [filteredConsents, consentPage, consentPageSize])
 
   // Handle Schedule Appointment Submission
   const handleScheduleAppointment = async (e: React.FormEvent) => {
@@ -587,9 +614,9 @@ function AppointmentsAndConsentsContent() {
                         </td>
                       </tr>
                     ) : (
-                      filteredAppointments.map((apt, index) => (
+                      paginatedAppointments.map((apt, index) => (
                         <tr key={apt.id} className="transition-colors border-b border-gray-800/40 hover:bg-white/[0.02]">
-                          <td className="font-mono text-xs text-gray-500 py-3.5 px-4">{index + 1}</td>
+                          <td className="font-mono text-xs text-gray-500 py-3.5 px-4">{(aptPage - 1) * aptPageSize + index + 1}</td>
                           <td className="font-mono text-xs text-blue-400 font-semibold py-3.5 px-4">
                             {apt.appointmentId}
                           </td>
@@ -629,6 +656,16 @@ function AppointmentsAndConsentsContent() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Appointments Pagination */}
+              <PaginationControls
+                currentPage={aptPage}
+                totalItems={filteredAppointments.length}
+                pageSize={aptPageSize}
+                onPageChange={setAptPage}
+                onPageSizeChange={setAptPageSize}
+                itemName="appointments"
+              />
             </div>
 
           </div>
@@ -731,7 +768,7 @@ function AppointmentsAndConsentsContent() {
                       </td>
                     </tr>
                   ) : (
-                    filteredConsents.map(c => (
+                    paginatedConsents.map(c => (
                       <tr key={c.id} className="border-b border-gray-800/40 hover:bg-white/[0.02] transition-colors">
                         <td className="font-mono text-xs text-blue-400 py-3.5 px-4">{c.id}</td>
                         <td className="font-semibold text-white py-3.5 px-4">
@@ -772,6 +809,16 @@ function AppointmentsAndConsentsContent() {
                 </tbody>
               </table>
             </div>
+
+            {/* Consents Pagination */}
+            <PaginationControls
+              currentPage={consentPage}
+              totalItems={filteredConsents.length}
+              pageSize={consentPageSize}
+              onPageChange={setConsentPage}
+              onPageSizeChange={setConsentPageSize}
+              itemName="consents"
+            />
           </div>
         </>
       )}

@@ -16,6 +16,7 @@ import {
 } from '@/lib/clinicalIntelligence'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
+import PaginationControls from '@/components/ui/PaginationControls'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -102,6 +103,34 @@ export default function InsightsPage() {
       .sort((a, b) => a.completeness.overallPct - b.completeness.overallPct),
     [data]
   )
+
+  // Insights Tabs Pagination States
+  const [highRiskPage, setHighRiskPage] = useState(1)
+  const [highRiskPageSize, setHighRiskPageSize] = useState(10)
+  const paginatedHighRisk = useMemo(() => {
+    const start = (highRiskPage - 1) * highRiskPageSize
+    return highRiskPatients.slice(start, start + highRiskPageSize)
+  }, [highRiskPatients, highRiskPage, highRiskPageSize])
+
+  const [gdmtPage, setGdmtPage] = useState(1)
+  const [gdmtPageSize, setGdmtPageSize] = useState(10)
+  const paginatedGdmtGaps = useMemo(() => {
+    const start = (gdmtPage - 1) * gdmtPageSize
+    return gdmtGaps.slice(start, start + gdmtPageSize)
+  }, [gdmtGaps, gdmtPage, gdmtPageSize])
+
+  const [dqPage, setDqPage] = useState(1)
+  const [dqPageSize, setDqPageSize] = useState(10)
+  const paginatedDataQuality = useMemo(() => {
+    const start = (dqPage - 1) * dqPageSize
+    return dataQuality.slice(start, start + dqPageSize)
+  }, [dataQuality, dqPage, dqPageSize])
+
+  useEffect(() => {
+    setHighRiskPage(1)
+    setGdmtPage(1)
+    setDqPage(1)
+  }, [activeTab])
 
   // ─── KPI Cards ─────────────────────────────────────────────────────────────
 
@@ -333,7 +362,7 @@ export default function InsightsPage() {
                   <p className="text-sm">No high-risk patients identified in current cohort.</p>
                 </div>
               )}
-              {highRiskPatients.map(({ patient, latestVisit, allVisits, risk, alerts }) => {
+              {paginatedHighRisk.map(({ patient, latestVisit, allVisits, risk, alerts }) => {
                 const criticalCount = alerts.filter(a => a.severity === 'critical').length
                 const pct = Math.round(risk.oneYearEventProbability * 100)
                 return (
@@ -405,6 +434,15 @@ export default function InsightsPage() {
                   </Link>
                 )
               })}
+
+              <PaginationControls
+                currentPage={highRiskPage}
+                totalItems={highRiskPatients.length}
+                pageSize={highRiskPageSize}
+                onPageChange={setHighRiskPage}
+                onPageSizeChange={setHighRiskPageSize}
+                itemName="high-risk patients"
+              />
             </div>
           )}
 
@@ -417,7 +455,7 @@ export default function InsightsPage() {
                   <p className="text-sm">All patients on complete GDMT — excellent registry quality.</p>
                 </div>
               )}
-              {gdmtGaps.map(({ patient, latestVisit, gdmt }) => {
+              {paginatedGdmtGaps.map(({ patient, latestVisit, gdmt }) => {
                 const missingDrugs = gdmt.pillars.filter(p => p.status === 'missing')
                 return (
                   <Link
@@ -467,6 +505,15 @@ export default function InsightsPage() {
                   </Link>
                 )
               })}
+
+              <PaginationControls
+                currentPage={gdmtPage}
+                totalItems={gdmtGaps.length}
+                pageSize={gdmtPageSize}
+                onPageChange={setGdmtPage}
+                onPageSizeChange={setGdmtPageSize}
+                itemName="patients with gaps"
+              />
             </div>
           )}
 
@@ -496,7 +543,7 @@ export default function InsightsPage() {
 
               {/* Patient list */}
               <div className="space-y-2">
-                {dataQuality.map(({ patient, latestVisit, completeness }) => (
+                {paginatedDataQuality.map(({ patient, latestVisit, completeness }) => (
                   <Link
                     key={patient.id}
                     href={`/patients/${patient.id}?tab=overview`}
@@ -542,6 +589,15 @@ export default function InsightsPage() {
                     )}
                   </Link>
                 ))}
+
+                <PaginationControls
+                  currentPage={dqPage}
+                  totalItems={dataQuality.length}
+                  pageSize={dqPageSize}
+                  onPageChange={setDqPage}
+                  onPageSizeChange={setDqPageSize}
+                  itemName="audited patients"
+                />
               </div>
             </div>
           )}
