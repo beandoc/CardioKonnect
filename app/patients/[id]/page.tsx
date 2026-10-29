@@ -70,6 +70,7 @@ export default function PatientDetailPage() {
   const [savingEvent, setSavingEvent] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'trends' | 'outcomes' | 'gdmt' | 'procedures'>('overview')
   const [showQuickModal, setShowQuickModal] = useState(false)
+  const [quickModalFocusField, setQuickModalFocusField] = useState<string | undefined>(undefined)
   const [patientProcedures, setPatientProcedures] = useState<CathProcedure[]>([])
   const [isCathModalOpen, setIsCathModalOpen] = useState(false)
   const [editingProcedure, setEditingProcedure] = useState<CathProcedure | null>(null)
@@ -825,16 +826,19 @@ export default function PatientDetailPage() {
         return (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             {[
-              { label: 'NT-proBNP', value: latestBnp, unit: 'pg/mL', warn: (v: number) => v > 2000 },
-              { label: 'eGFR', value: latestEgfr, unit: 'mL/min/1.73m²', warn: (v: number) => v < 45 },
-              { label: 'Blood Pressure', value: latestBp, unit: 'mmHg', warn: (_v: any) => false },
-              { label: 'Heart Rate', value: latestHr, unit: 'bpm', warn: (v: number) => v > 100 || v < 55 },
-              { label: '6-Min Walk (6MWT)', value: latest6mwt, unit: 'metres', warn: (_v: any) => false },
-              { label: 'Potassium (K+)', value: latestK, unit: 'mmol/L', warn: (v: number) => v > 5.5 || v < 3.5 },
+              { label: 'NT-proBNP', field: 'ntProBNP', value: latestBnp, unit: 'pg/mL', warn: (v: number) => v > 2000 },
+              { label: 'eGFR', field: 'creatinine', value: latestEgfr, unit: 'mL/min/1.73m²', warn: (v: number) => v < 45 },
+              { label: 'Blood Pressure', field: 'bpSystolic', value: latestBp, unit: 'mmHg', warn: (_v: any) => false },
+              { label: 'Heart Rate', field: 'heartRate', value: latestHr, unit: 'bpm', warn: (v: number) => v > 100 || v < 55 },
+              { label: '6-Min Walk (6MWT)', field: 'sixMWT', value: latest6mwt, unit: 'metres', warn: (_v: any) => false },
+              { label: 'Potassium (K+)', field: 'potassium', value: latestK, unit: 'mmol/L', warn: (v: number) => v > 5.5 || v < 3.5 },
             ].map(m => (
               <div
                 key={m.label}
-                onClick={() => setShowQuickModal(true)}
+                onClick={() => {
+                  setQuickModalFocusField(m.field)
+                  setShowQuickModal(true)
+                }}
                 className="rounded-2xl p-3.5 sm:p-4 text-center bg-slate-900/80 border border-blue-500/15 hover:border-blue-400/50 hover:bg-slate-900 transition-all cursor-pointer group shadow-lg flex flex-col justify-between"
                 title="Click to view or edit clinical data"
               >
@@ -2334,10 +2338,14 @@ export default function PatientDetailPage() {
       {/* Quick Data Entry Modal */}
       <QuickDataEntryModal
         isOpen={showQuickModal}
-        onClose={() => setShowQuickModal(false)}
+        onClose={() => {
+          setShowQuickModal(false)
+          setQuickModalFocusField(undefined)
+        }}
         patient={patient}
         latestVisit={latest}
         onSaved={load}
+        defaultFocusField={quickModalFocusField}
       />
 
       {/* Cath Lab & Interventional Procedure Modal */}

@@ -119,6 +119,58 @@ export default function QuickDataEntryModal({
   const [af, setAf] = useState<boolean>(Boolean(patient.comorbidAF ?? (rawUpper.some(s => s.includes('AF') || s.includes('ATRIAL FIBRILLATION')))))
   const [copd, setCopd] = useState<boolean>(Boolean(patient.comorbidCOPD ?? (rawUpper.some(s => s.includes('COPD') || s.includes('ASTHMA')))))
 
+  // Re-hydrate all form fields whenever modal opens or when latestVisit/patient updates
+  useEffect(() => {
+    if (isOpen) {
+      setCreatinine(latestVisit?.creatinine != null ? String(latestVisit.creatinine) : '')
+      setAutoCalculatedEgfr(latestVisit?.egfr ?? null)
+      setLvef(latestVisit?.lvef != null ? String(latestVisit.lvef) : (patient.lvef != null ? String(patient.lvef) : ''))
+      setHfType(latestVisit?.hfType || patient.hfType || 'HFrEF')
+      setNyha(latestVisit?.nyha || patient.nyha || 'II')
+      setBpSystolic(latestVisit?.bpSystolic != null ? String(latestVisit.bpSystolic) : '')
+      setBpDiastolic(latestVisit?.bpDiastolic != null ? String(latestVisit.bpDiastolic) : '')
+      setHeartRate(latestVisit?.heartRate != null ? String(latestVisit.heartRate) : '')
+      setWeight(latestVisit?.weight != null ? String(latestVisit.weight) : '')
+      setHeight(latestVisit?.height != null ? String(latestVisit.height) : '')
+      setPotassium(latestVisit?.potassium != null ? String(latestVisit.potassium) : '')
+      setSodium(latestVisit?.sodium != null ? String(latestVisit.sodium) : '')
+      setNtProBNP(latestVisit?.ntProBNP != null ? String(latestVisit.ntProBNP) : '')
+      setHb(latestVisit?.hb != null ? String(latestVisit.hb) : '')
+      setFerritin(latestVisit?.ferritin != null ? String(latestVisit.ferritin) : '')
+      setTransferrinSat(latestVisit?.transferrinSat != null ? String(latestVisit.transferrinSat) : '')
+      setRhythm(latestVisit?.rhythm || 'Sinus Rhythm')
+      setEtiology(
+        (latestVisit?.etiology && latestVisit.etiology.length > 0)
+          ? latestVisit.etiology.join(', ')
+          : (patient.indexEtiology?.join(', ') || 'Ischemic')
+      )
+      setTft(latestVisit?.tft != null ? String(latestVisit.tft) : '')
+      setHba1c(latestVisit?.hba1c != null ? String(latestVisit.hba1c) : '')
+      setFollowupDate(latestVisit?.followupDate || '')
+      setSixMWT(latestVisit?.sixMWT != null ? String(latestVisit.sixMWT) : '')
+
+      const raw = Array.isArray(patient.comorbidities) ? patient.comorbidities : []
+      const rawUp = raw.map(s => String(s).toUpperCase())
+      setDm(Boolean(patient.comorbidDiabetes ?? (rawUp.some(s => s.includes('DM') || s.includes('DIABETES')))))
+      setCad(Boolean(patient.comorbidCAD ?? (rawUp.some(s => s.includes('CAD') || s.includes('CORONARY') || s.includes('ISCHEMIC')))))
+      setPriorMI(Boolean(patient.comorbidPriorMI ?? (rawUp.some(s => s.includes('MI') || s.includes('INFARCT')))))
+      setPriorPCI(Boolean(patient.comorbidPriorPCI ?? (rawUp.some(s => s.includes('PCI') || s.includes('STENT')))))
+      setPriorCABG(Boolean(patient.comorbidPriorCABG ?? (rawUp.some(s => s.includes('CABG') || s.includes('BYPASS')))))
+      setHtn(Boolean(patient.comorbidHypertension ?? (rawUp.some(s => s.includes('HTN') || s.includes('HYPERTENSION')))))
+      setDyslipidemia(Boolean(patient.comorbidDyslipidemia ?? (rawUp.some(s => s.includes('LIPID') || s.includes('DYSLIPIDEMIA')))))
+      setCkd(Boolean(patient.comorbidCKD ?? (rawUp.some(s => s.includes('CKD') || s.includes('KIDNEY') || s.includes('RENAL')))))
+      setAf(Boolean(patient.comorbidAF ?? (rawUp.some(s => s.includes('AF') || s.includes('ATRIAL FIBRILLATION')))))
+      setCopd(Boolean(patient.comorbidCOPD ?? (rawUp.some(s => s.includes('COPD') || s.includes('ASTHMA')))))
+
+      if (defaultFocusField) {
+        setTimeout(() => {
+          const el = document.getElementById(defaultFocusField)
+          if (el) el.focus()
+        }, 100)
+      }
+    }
+  }, [isOpen, latestVisit, patient, defaultFocusField])
+
   const [saving, setSaving] = useState(false)
 
   // Real-time eGFR CKD-EPI 2021 calculation whenever creatinine or unit changes
@@ -364,6 +416,7 @@ export default function QuickDataEntryModal({
                   Serum Creatinine ({crUnit})
                 </label>
                 <input
+                  id="creatinine"
                   type="number"
                   step="0.01"
                   min="0.1"
@@ -416,6 +469,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs font-semibold text-gray-300 mb-1 block">LVEF (%)</label>
                 <input
+                  id="lvef"
                   type="number"
                   min="5"
                   max="85"
@@ -499,6 +553,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">BP Systolic</label>
                 <input
+                  id="bpSystolic"
                   type="number"
                   placeholder="120"
                   value={bpSystolic}
@@ -509,6 +564,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">BP Diastolic</label>
                 <input
+                  id="bpDiastolic"
                   type="number"
                   placeholder="80"
                   value={bpDiastolic}
@@ -519,6 +575,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">Heart Rate (bpm)</label>
                 <input
+                  id="heartRate"
                   type="number"
                   placeholder="72"
                   value={heartRate}
@@ -529,6 +586,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">6MWT (meters)</label>
                 <input
+                  id="sixMWT"
                   type="number"
                   placeholder="350"
                   value={sixMWT}
@@ -586,6 +644,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">Potassium (mmol/L)</label>
                 <input
+                  id="potassium"
                   type="number"
                   step="0.1"
                   placeholder="4.2"
@@ -597,6 +656,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">Sodium (mmol/L)</label>
                 <input
+                  id="sodium"
                   type="number"
                   step="1"
                   placeholder="138"
@@ -608,6 +668,7 @@ export default function QuickDataEntryModal({
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">NT-proBNP (pg/mL)</label>
                 <input
+                  id="ntProBNP"
                   type="number"
                   placeholder="514"
                   value={ntProBNP}
