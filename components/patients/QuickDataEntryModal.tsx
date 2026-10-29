@@ -2,11 +2,12 @@
 import { useState, useEffect } from 'react'
 import {
   X, Check, AlertCircle, Save, Sparkles, Activity, Calculator,
-  Heart, Droplet, User, ShieldCheck
+  Heart, Droplet, User, ShieldCheck, Database
 } from 'lucide-react'
 import { calculateCKDEPI_eGFR, calculateBMI, calculateHemodynamics } from '@/lib/clinicalCalculations'
-import { updateVisit, updatePatient, addVisit } from '@/lib/firestore'
-import type { Patient, Visit, VisitInput } from '@/lib/types'
+import { updateVisit, updatePatient, addVisit, getRegistryFields } from '@/lib/firestore'
+import type { Patient, Visit, VisitInput, RegistryField } from '@/lib/types'
+import { BUILT_IN_FIELD_NAMES } from '@/lib/registryFields'
 import { getAge } from '@/lib/utils'
 import { toast } from 'sonner'
 import Button from '@/components/ui/Button'
@@ -119,9 +120,32 @@ export default function QuickDataEntryModal({
   const [af, setAf] = useState<boolean>(Boolean(patient.comorbidAF ?? (rawUpper.some(s => s.includes('AF') || s.includes('ATRIAL FIBRILLATION')))))
   const [copd, setCopd] = useState<boolean>(Boolean(patient.comorbidCOPD ?? (rawUpper.some(s => s.includes('COPD') || s.includes('ASTHMA')))))
 
+  const [activeCustomFields, setActiveCustomFields] = useState<RegistryField[]>([])
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({})
+
+  useEffect(() => {
+    async function loadConfig() {
+      try {
+        const cfg = await getRegistryFields()
+        const custom = cfg.filter(f => f.active && !BUILT_IN_FIELD_NAMES.has(f.fieldName))
+        setActiveCustomFields(custom)
+      } catch (e) {
+        console.warn('Failed to load registry fields in QuickDataEntryModal:', e)
+      }
+    }
+    loadConfig()
+  }, [])
+
   // Re-hydrate all form fields whenever modal opens or when latestVisit/patient updates
   useEffect(() => {
     if (isOpen) {
+      const initialCustom: Record<string, any> = {}
+      activeCustomFields.forEach(f => {
+        const val = latestVisit?.customFields?.[f.fieldName] ?? (latestVisit as any)?.[f.fieldName] ?? ''
+        initialCustom[f.fieldName] = val
+      })
+      setCustomFieldValues(initialCustom)
+
       setCreatinine(latestVisit?.creatinine != null ? String(latestVisit.creatinine) : '')
       setAutoCalculatedEgfr(latestVisit?.egfr ?? null)
       setLvef(latestVisit?.lvef != null ? String(latestVisit.lvef) : (patient.lvef != null ? String(patient.lvef) : ''))
@@ -169,7 +193,7 @@ export default function QuickDataEntryModal({
         }, 100)
       }
     }
-  }, [isOpen, latestVisit, patient, defaultFocusField])
+  }, [isOpen, latestVisit, patient, defaultFocusField, activeCustomFields])
 
   const [saving, setSaving] = useState(false)
 
@@ -240,6 +264,14 @@ export default function QuickDataEntryModal({
       const numHba1c = hba1c ? parseFloat(hba1c) : undefined
       const etiologyArr = etiology ? etiology.split(',').map(s => s.trim()).filter(Boolean) : []
 
+      // Collect custom fields
+      const finalCustomFields: Record<string, any> = { ...(latestVisit?.customFields || {}) }
+      Object.entries(customFieldValues).forEach(([k, v]) => {
+        if (v !== '' && v !== undefined && v !== null) {
+          finalCustomFields[k] = v
+        }
+      })
+
       // 1. If visit exists, update it
       if (latestVisit?.id) {
         await updateVisit(patient.id, latestVisit.id, {
@@ -266,6 +298,8 @@ export default function QuickDataEntryModal({
           creatinine: numCr,
           egfr: computedEgfr,
           followupDate: followupDate || undefined,
+          customFields: Object.keys(finalCustomFields).length > 0 ? finalCustomFields : undefined,
+          ...finalCustomFields,
         })
       } else {
         // Create baseline visit if none exists
@@ -301,6 +335,8 @@ export default function QuickDataEntryModal({
           betaBlocker: { prescribed: '' },
           mra: { prescribed: '' },
           sglt2i: { prescribed: '' },
+          customFields: Object.keys(finalCustomFields).length > 0 ? finalCustomFields : undefined,
+          ...finalCustomFields,
         } as unknown as VisitInput)
       }
 
@@ -785,6 +821,79 @@ export default function QuickDataEntryModal({
               ))}
             </div>
           </div>
+
+          {/* SECTION 6: Configured Custom Registry Parameters */}
+          {activeCustomFields.length > 0 && (
+            <div className="p-4 rounded-xl bg-slate-900/40 border border-blue-500/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                    Configured Registry Parameters
+                  </span>
+                </div>
+                <span className="badge badge-blue text-[10px] font-mono">
+                  {activeCustomFields.length} active custom {activeCustomFields.length === 1 ? 'field' : 'fields'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {activeCustomFields.map(f => (
+                  <div key={f.id} className="space-y-1">
+                    <label className="text-[11px] font-medium text-gray-300 block truncate">
+                      {f.displayLabel} {f.mandatory && <span className="text-red-400">*</span>}
+                    </label>
+                    {f.dataType === 'Number' || f.dataType === 'Score' ? (
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={`Enter ${f.displayLabel}`}
+                        value={customFieldValues[f.fieldName] ?? ''}
+                        onChange={e => setCustomFieldValues(p => ({ ...p, [f.fieldName]: e.target.value === '' ? '' : Number(e.target.value) }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
+                      />
+                    ) : f.dataType === 'Date' ? (
+                      <input
+                        type="date"
+                        value={customFieldValues[f.fieldName] ?? ''}
+                        onChange={e => setCustomFieldValues(p => ({ ...p, [f.fieldName]: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white font-mono"
+                      />
+                    ) : f.dataType === 'Boolean' ? (
+                      <label className="p-2 rounded-lg border border-blue-500/20 text-xs flex items-center gap-2 cursor-pointer bg-slate-900 text-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(customFieldValues[f.fieldName])}
+                          onChange={e => setCustomFieldValues(p => ({ ...p, [f.fieldName]: e.target.checked }))}
+                          className="w-3.5 h-3.5 rounded text-blue-600 bg-gray-900 border-gray-700"
+                        />
+                        <span>{customFieldValues[f.fieldName] ? 'Yes / Present' : 'No / Absent'}</span>
+                      </label>
+                    ) : f.dataType === 'Dropdown' ? (
+                      <select
+                        value={customFieldValues[f.fieldName] ?? ''}
+                        onChange={e => setCustomFieldValues(p => ({ ...p, [f.fieldName]: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white"
+                      >
+                        <option value="">Select option</option>
+                        {(f.options && f.options.length > 0 ? f.options : ['Positive', 'Negative', 'Present', 'Absent', 'Normal', 'Abnormal', 'Mild', 'Moderate', 'Severe', 'Other']).map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder={`Enter ${f.displayLabel}`}
+                        value={customFieldValues[f.fieldName] ?? ''}
+                        onChange={e => setCustomFieldValues(p => ({ ...p, [f.fieldName]: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-slate-900 border border-blue-500/20 text-white"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Footer actions */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-blue-500/15">

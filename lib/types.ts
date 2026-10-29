@@ -911,6 +911,9 @@ export interface Visit {
     updatedAt: string
     updatedFields: string[]
   }>
+  // Custom configured fields from Registry Fields Setup
+  customFields?: Record<string, any>
+  [key: string]: any
 }
 
 // ─── Outcome Events ──────────────────────────────────────────────────────────
@@ -1040,6 +1043,8 @@ export interface RegistryField {
   active: boolean
   category: string
   level: 'Level 1' | 'Level 2'
+  options?: string[]
+  unit?: string
 }
 
 export const BUILT_IN_FIELDS: RegistryField[] = [

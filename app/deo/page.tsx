@@ -308,6 +308,9 @@ export default function DEOPortalPage() {
       }
 
       if (existingVisit) {
+        if (existingVisit.customFields) {
+          finalFormData.customFields = { ...existingVisit.customFields, ...(finalFormData.customFields || {}) }
+        }
         await updateVisit(patientId, existingVisit.id, finalFormData)
       } else {
         await addVisit(patientId, {

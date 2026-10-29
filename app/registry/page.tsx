@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import type { FieldType, RegistryField } from '@/lib/types'
 import { BUILT_IN_FIELDS } from '@/lib/types'
 import { getRegistryFields, setRegistryFields } from '@/lib/firestore'
+import { sanitizeFieldName } from '@/lib/registryFields'
 import PaginationControls from '@/components/ui/PaginationControls'
 
 const DATA_TYPES: FieldType[] = ['Text','Number','Date','Dropdown','Boolean','Multi-Select','Textarea','Score']
@@ -88,9 +89,21 @@ export default function RegistryPage() {
   }, [filtered, currentPage, pageSize])
 
   const handleAdd = () => {
-    if (!newField.fieldName || !newField.displayLabel) return
+    if (!newField.fieldName.trim() || !newField.displayLabel.trim()) {
+      toast.error('Field code and display label are required')
+      return
+    }
+    const cleanCode = sanitizeFieldName(newField.fieldName)
+    if (!cleanCode) {
+      toast.error('Field code must contain valid alphanumeric characters')
+      return
+    }
+    if (fields.some(f => f.fieldName.toLowerCase() === cleanCode.toLowerCase())) {
+      toast.error(`Field "${cleanCode}" already exists in registry configuration`)
+      return
+    }
     const id = Date.now().toString()
-    const updated = [...fields, { ...newField, id, srNo: fields.length + 1, active: true }]
+    const updated = [...fields, { ...newField, fieldName: cleanCode, displayLabel: newField.displayLabel.trim(), id, srNo: fields.length + 1, active: true }]
     saveFields(updated)
     setNewField({ fieldName: '', displayLabel: '', dataType: 'Text', mandatory: false, pii: false, category: 'Clinical', level: 'Level 1' })
     setShowAdd(false)
@@ -119,8 +132,17 @@ export default function RegistryPage() {
   }
 
   const handleSaveEdit = () => {
-    if (!editingField || !editingField.fieldName || !editingField.displayLabel) return
-    const updated = fields.map(f => f.id === editId ? editingField : f)
+    if (!editingField || !editingField.fieldName.trim() || !editingField.displayLabel.trim()) return
+    const cleanCode = sanitizeFieldName(editingField.fieldName)
+    if (!cleanCode) {
+      toast.error('Field code must contain valid alphanumeric characters')
+      return
+    }
+    if (fields.some(f => f.id !== editId && f.fieldName.toLowerCase() === cleanCode.toLowerCase())) {
+      toast.error(`Field "${cleanCode}" already exists`)
+      return
+    }
+    const updated = fields.map(f => f.id === editId ? { ...editingField, fieldName: cleanCode, displayLabel: editingField.displayLabel.trim() } : f)
     saveFields(updated)
     setEditId(null)
     setEditingField(null)

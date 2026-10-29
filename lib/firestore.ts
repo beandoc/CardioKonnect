@@ -768,9 +768,15 @@ export async function getPatientTrends(patientId: string): Promise<PatientTrends
 // ─── Settings / Configuration ────────────────────────────────────────────────
 
 export async function getRegistryFields(): Promise<RegistryField[]> {
-  let fields: RegistryField[] = BUILT_IN_FIELDS;
-
-  return fields;
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'registryConfig'))
+    if (snap.exists() && Array.isArray(snap.data()?.fields) && snap.data().fields.length > 0) {
+      return snap.data().fields as RegistryField[]
+    }
+  } catch (err) {
+    console.warn('Failed to fetch registryConfig from Firestore, falling back to BUILT_IN_FIELDS:', err)
+  }
+  return BUILT_IN_FIELDS
 }
 
 export async function setRegistryFields(fields: RegistryField[]): Promise<void> {

@@ -22,8 +22,10 @@ import {
   Edit2,
   Trash2,
   Zap,
-  Check
+  Check,
+  Database
 } from 'lucide-react'
+import { formatFieldLabel } from '@/lib/registryFields'
 import {
   calculateDoorToBalloonMin,
   calculateAngiographicSuccess,
@@ -162,6 +164,42 @@ function VisitCard({ visit, onDelete }: { visit: Visit; onDelete?: (id: string) 
               <p className="text-xs text-gray-300 whitespace-pre-wrap font-sans">{visit.clinicalNotes}</p>
             </div>
           )}
+
+          {/* Configured / Custom Registry Parameters */}
+          {(() => {
+            const customEntries = Object.entries(visit.customFields || {}).filter(
+              ([_, val]) => val !== undefined && val !== null && val !== ''
+            )
+            if (customEntries.length === 0) return null
+            return (
+              <div className="mt-3 pt-3 border-t border-white/5">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <Database className="w-3.5 h-3.5 text-blue-400" />
+                  <p className="text-xs font-semibold text-blue-400">
+                    Configured Custom Registry Parameters ({customEntries.length})
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {customEntries.map(([key, val]) => {
+                    const displayVal = typeof val === 'boolean' ? (val ? 'Yes / Present' : 'No / Absent') : String(val)
+                    return (
+                      <div
+                        key={key}
+                        className="p-2.5 rounded-xl bg-slate-950/60 border border-blue-500/20 shadow-xs flex flex-col justify-between"
+                      >
+                        <p className="text-[10px] text-blue-300/80 font-medium truncate">
+                          {formatFieldLabel(key)}
+                        </p>
+                        <p className="text-xs font-bold text-white mt-1 break-words">
+                          {displayVal}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
 
           <div className="mt-4 pt-3 border-t border-white/5 flex justify-end gap-2">
             {onDelete && (

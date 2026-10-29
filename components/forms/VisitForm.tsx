@@ -7,13 +7,14 @@ import { FieldWrap, Input, Select, Textarea } from '@/components/ui/FormField'
 import { RadioChipGroup, CheckChipGroup } from '@/components/ui/ChipGroup'
 import Button from '@/components/ui/Button'
 import { cn, getAge } from '@/lib/utils'
-import { getPatient } from '@/lib/firestore'
-import type { VisitInput, Patient } from '@/lib/types'
+import { getPatient, getRegistryFields } from '@/lib/firestore'
+import type { VisitInput, Patient, RegistryField } from '@/lib/types'
 import { calculateCHADSVASc, calculateHASBLED } from '@/lib/riskScores'
 import { calculateCKDEPI_eGFR, calculateBMI } from '@/lib/clinicalCalculations'
-import { ChevronRight, ChevronLeft, ShieldAlert, Award, Save } from 'lucide-react'
+import { ChevronRight, ChevronLeft, ShieldAlert, Award, Save, Database, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { MedicationsSection, LabsSection, EchocardiographySection } from './VisitFormSections'
+import { BUILT_IN_FIELD_NAMES } from '@/lib/registryFields'
 
 // ─── Zod schema ─────────────────────────────────────────────────────────────
 const medEntry = z.object({
@@ -440,7 +441,9 @@ const schema = z.object({
 
   // Index admission type
   indexAdmissionType: z.string().optional(),
-}).superRefine((data, ctx) => {
+  // Dynamic custom registry fields
+  customFields: z.record(z.any()).optional(),
+}).passthrough().superRefine((data, ctx) => {
   if (data.lvef !== undefined && data.lvef !== '') {
     const lvef = Number(data.lvef)
     if (data.hfType === 'HFrEF' && lvef >= 40) {
@@ -569,6 +572,24 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
     }
     loadPatient()
   }, [patientId])
+
+  const [registryFields, setRegistryFieldsList] = useState<RegistryField[]>([])
+
+  useEffect(() => {
+    async function loadFields() {
+      try {
+        const fields = await getRegistryFields()
+        setRegistryFieldsList(fields)
+      } catch (e) {
+        console.warn('Failed to load registry fields in VisitForm:', e)
+      }
+    }
+    loadFields()
+  }, [])
+
+  const activeCustomFields = useMemo(() => {
+    return registryFields.filter(f => f.active && !BUILT_IN_FIELD_NAMES.has(f.fieldName))
+  }, [registryFields])
 
   const { register, control, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -734,6 +755,18 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
     }
   }, [watchedWeight, watchedHeight, setValue])
 
+  // Pre-populate custom fields from defaultValues
+  useEffect(() => {
+    if (activeCustomFields.length > 0 && defaultValues) {
+      activeCustomFields.forEach(f => {
+        const val = defaultValues.customFields?.[f.fieldName] ?? (defaultValues as any)?.[f.fieldName]
+        if (val !== undefined && val !== null && val !== '') {
+          setValue(f.fieldName as any, val)
+        }
+      })
+    }
+  }, [activeCustomFields, defaultValues, setValue])
+
   // Generate dynamic tabs based on condition
   const TABS = [
     { id: 'visit', label: 'Vitals & Clinical' }
@@ -753,6 +786,10 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
     { id: 'advanced', label: 'Advanced Studies' },
     { id: 'qol', label: 'QoL & SDOH' }
   )
+
+  if (activeCustomFields.length > 0) {
+    TABS.push({ id: 'custom', label: `Configured Fields (${activeCustomFields.length})` })
+  }
 
   // Auto-save draft functionality
   const allValues = watch()
@@ -775,7 +812,7 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
         try {
           const parsed = JSON.parse(draft)
           Object.keys(parsed).forEach(key => {
-            setValue(key as keyof FormValues, parsed[key])
+            setValue(key as any, parsed[key])
           })
           toast.success('Restored draft from local auto-save')
         } catch (e) {
@@ -895,6 +932,20 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
       finalData.chadsvascScore = acDecisionSupport.chadsScore
       finalData.hasbledScore = acDecisionSupport.hasbledScore
     }
+
+    // Collect custom configured fields
+    const customMap: Record<string, any> = { ...(finalData.customFields || {}) }
+    for (const f of activeCustomFields) {
+      const val = (data as any)[f.fieldName] ?? (data as any)?.customFields?.[f.fieldName]
+      if (val !== undefined && val !== '') {
+        customMap[f.fieldName] = val
+        finalData[f.fieldName] = val
+      }
+    }
+    if (Object.keys(customMap).length > 0) {
+      finalData.customFields = customMap
+    }
+
     await onSubmit(finalData as unknown as VisitInput)
   }
 
@@ -2203,6 +2254,101 @@ export default function VisitForm({ defaultValues, onSubmit, loading, patientId 
                 <FieldWrap label="Clinical Assessment Notes" className="md:col-span-2">
                   <Textarea {...register('clinicalNotes')} rows={5} placeholder="Clinical assessment, differential diagnoses, management plan, response to treatment…" />
                 </FieldWrap>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Configured Registry Fields (custom) ────────── */}
+        {activeTabId === 'custom' && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="p-5 rounded-2xl bg-slate-900/60 border border-blue-500/20 shadow-md">
+              <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                      Configured Registry Fields
+                    </h3>
+                    <p className="text-xs text-gray-400">
+                      Dynamically synchronized from Registry Fields Setup · Auto-saved to patient encounter in Firestore
+                    </p>
+                  </div>
+                </div>
+                <span className="badge badge-blue text-xs font-mono">
+                  {activeCustomFields.length} active custom {activeCustomFields.length === 1 ? 'parameter' : 'parameters'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeCustomFields.map(field => {
+                  const errorMsg = (errors as any)?.[field.fieldName]?.message
+                  return (
+                    <FieldWrap
+                      key={field.id}
+                      label={field.displayLabel}
+                      hint={field.category ? `Category: ${field.category}` : undefined}
+                      required={field.mandatory}
+                      error={errorMsg}
+                    >
+                      {field.dataType === 'Number' || field.dataType === 'Score' ? (
+                        <Input
+                          type="number"
+                          step="any"
+                          {...register(field.fieldName as any)}
+                          placeholder={`Enter ${field.displayLabel}`}
+                        />
+                      ) : field.dataType === 'Date' ? (
+                        <Input
+                          type="date"
+                          {...register(field.fieldName as any)}
+                        />
+                      ) : field.dataType === 'Boolean' ? (
+                        <Controller
+                          name={field.fieldName as any}
+                          control={control}
+                          render={({ field: ctrlField }) => (
+                            <div className="flex items-center gap-3 pt-2">
+                              <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(ctrlField.value)}
+                                  onChange={e => ctrlField.onChange(e.target.checked)}
+                                  className="w-4 h-4 rounded border-gray-700 bg-slate-800 text-blue-500 focus:ring-blue-500/20"
+                                />
+                                <span>{ctrlField.value ? 'Yes / Present' : 'No / Absent'}</span>
+                              </label>
+                            </div>
+                          )}
+                        />
+                      ) : field.dataType === 'Dropdown' ? (
+                        <Select {...register(field.fieldName as any)}>
+                          <option value="">Select option</option>
+                          {(field.options && field.options.length > 0
+                            ? field.options
+                            : ['Positive', 'Negative', 'Present', 'Absent', 'Normal', 'Abnormal', 'Mild', 'Moderate', 'Severe', 'Unknown', 'Other']
+                          ).map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </Select>
+                      ) : field.dataType === 'Textarea' ? (
+                        <Textarea
+                          {...register(field.fieldName as any)}
+                          rows={3}
+                          placeholder={`Enter ${field.displayLabel}...`}
+                        />
+                      ) : (
+                        <Input
+                          type="text"
+                          {...register(field.fieldName as any)}
+                          placeholder={`Enter ${field.displayLabel}`}
+                        />
+                      )}
+                    </FieldWrap>
+                  )
+                })}
               </div>
             </div>
           </div>
