@@ -1,7 +1,8 @@
 'use client'
+import { useState } from 'react'
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import type { PopulationStats } from '@/lib/types'
 
@@ -11,11 +12,17 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function DarkTip({ active, payload }: any) {
   if (!active || !payload?.length) return null
+  const p = payload[0]
+  const isRate = p.payload.rate !== undefined
   return (
-    <div className="bg-navy-900 border border-blue-500/20 rounded-xl px-3 py-2 text-xs backdrop-blur-md"
+    <div className="bg-navy-900 border border-blue-500/20 rounded-xl px-3 py-2 text-xs backdrop-blur-md shadow-xl"
       style={{ background: 'rgba(10, 17, 40, 0.95)', color: '#e2e8f0' }}>
-      <p className="font-semibold">{payload[0].name || payload[0].payload.name}</p>
-      <p className="text-blue-400 font-bold mt-0.5">{payload[0].value} patients</p>
+      <p className="font-semibold">{p.name || p.payload.name}</p>
+      {isRate ? (
+        <p className="text-blue-400 font-bold mt-0.5">{p.payload.rate}% ({p.payload.count} patients)</p>
+      ) : (
+        <p className="text-blue-400 font-bold mt-0.5">{p.value} patients</p>
+      )}
     </div>
   )
 }
@@ -117,6 +124,8 @@ function LvefHistogram({ bins }: { bins: Record<string, number> }) {
 }
 
 export default function PopulationCharts({ stats }: { stats: PopulationStats }) {
+  const [showRhythmDetails, setShowRhythmDetails] = useState(false)
+
   const hfData = Object.entries(stats.hfTypeBreakdown) as [string, number][]
   const nyhaData: [string, number][] = [
     ['Class I', stats.nyhaCounts.I ?? 0],
@@ -127,7 +136,25 @@ export default function PopulationCharts({ stats }: { stats: PopulationStats }) 
   const etiologyData = Object.entries(stats.etiologyCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 8) as [string, number][]
-  const rhythmData = Object.entries(stats.rhythmCounts) as [string, number][]
+
+  // Group raw telemetry rhythms into clinical canonical rhythm patterns for the Pie Chart
+  const canonicalRhythms: Record<string, number> = {}
+  Object.entries(stats.rhythmCounts).forEach(([rhythm, count]) => {
+    const norm = rhythm.toUpperCase()
+    let category = 'Sinus Rhythm'
+    if (norm.includes('ATRIAL FIB') || norm.includes('AFIB')) {
+      category = 'Atrial Fibrillation'
+    } else if (norm.includes('FLUTTER')) {
+      category = 'Atrial Flutter'
+    } else if (norm.includes('VT') || norm.includes('VENTRICULAR TACH')) {
+      category = 'Ventricular Arrhythmia'
+    } else if (norm.includes('PACED') || norm.includes('PACING')) {
+      category = 'Paced Rhythm'
+    }
+    canonicalRhythms[category] = (canonicalRhythms[category] || 0) + count
+  })
+  const rhythmPieData = Object.entries(canonicalRhythms).filter(([, v]) => v > 0) as [string, number][]
+
   const deviceData = Object.entries(stats.deviceCounts).filter(([, v]) => v > 0) as [string, number][]
 
   return (
@@ -136,14 +163,68 @@ export default function PopulationCharts({ stats }: { stats: PopulationStats }) 
         <MiniPie data={hfData} title="HF Type Distribution" />
         <MiniPie data={nyhaData} title="NYHA Class Distribution" />
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <MiniBar data={etiologyData} title="Etiology Breakdown" color="#8b5cf6" />
-        <MiniPie data={rhythmData} title="Rhythm Pattern" />
+        
+        {/* Rhythm Pattern with Clean Pie & Granular Conduction Morphology Inspection */}
+        <div className="glass-card p-5 border border-blue-500/10 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-sm font-semibold text-white">Cardiac Rhythm Pattern</p>
+                <p className="text-[11px] text-gray-400">Telemetry classification and conduction status</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRhythmDetails(!showRhythmDetails)}
+                className="text-xs text-blue-400 hover:text-blue-300 underline cursor-pointer"
+              >
+                {showRhythmDetails ? 'Hide ECG Details' : 'Inspect ECG Details'}
+              </button>
+            </div>
+
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={rhythmPieData.map(([name, value]) => ({ name, value }))}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={75}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                  stroke="rgba(10, 17, 40, 0.8)"
+                  strokeWidth={2}
+                >
+                  {rhythmPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip content={<DarkTip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {showRhythmDetails && (
+            <div className="mt-3 pt-3 border-t border-blue-500/10 max-h-48 overflow-y-auto space-y-1">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+                Documented ECG Morphology & Conduction Findings ({Object.keys(stats.rhythmCounts).length})
+              </p>
+              {Object.entries(stats.rhythmCounts).map(([r, cnt]) => (
+                <div key={r} className="flex justify-between items-center text-xs py-1 border-b border-white/5">
+                  <span className="text-gray-300 font-mono text-[11px]">{r}</span>
+                  <span className="badge badge-blue text-[10px] font-bold">{cnt} pt{cnt > 1 ? 's' : ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <LvefHistogram bins={stats.lvefBins} />
         <MiniBar data={deviceData} title="Device Therapy Distribution" color="#06b6d4" />
       </div>
+
       <MedBar stats={stats} />
     </div>
   )

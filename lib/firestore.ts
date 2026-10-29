@@ -573,6 +573,30 @@ function subscribeChildRecordsForScopedPatients<T>(
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
+export function normalizeEtiology(e: string): string {
+  if (!e) return ''
+  const norm = e.trim().toUpperCase()
+  if (norm.includes('ISCHEM') || norm.includes('ISCHAEM') || norm.includes('CAD') || norm.includes('CORONARY')) {
+    return 'Ischaemic CAD'
+  }
+  if (norm.includes('DIABET')) {
+    return 'Diabetic Cardiomyopathy'
+  }
+  if (norm.includes('HYPERTENS')) {
+    return 'Hypertensive Heart Disease'
+  }
+  if (norm.includes('CHEMO')) {
+    return 'Chemotherapy-Induced'
+  }
+  if (norm.includes('IDIOPATHIC') || norm.includes('DILATED') || norm.includes('DCM')) {
+    return 'Idiopathic / DCM'
+  }
+  if (norm.includes('VALV')) {
+    return 'Valvular Heart Disease'
+  }
+  return e.trim()
+}
+
 /**
  * Compute population-level statistics from latest patient visits.
  * OPTIMIZATION: Uses getAllLatestVisits() instead of getAllVisits() because stats
@@ -638,7 +662,10 @@ export async function getPopulationStats(accessiblePatients?: Patient[]): Promis
     if (latest.rhythm) rhythmCounts[latest.rhythm] = (rhythmCounts[latest.rhythm] || 0) + 1
 
     // Etiology
-    ;(latest.etiology || []).forEach(e => { etiologyCounts[e] = (etiologyCounts[e] || 0) + 1 })
+    ;(latest.etiology || []).forEach(e => {
+      const normE = normalizeEtiology(e)
+      if (normE) etiologyCounts[normE] = (etiologyCounts[normE] || 0) + 1
+    })
 
     // LVEF
     if (latest.lvef) {
