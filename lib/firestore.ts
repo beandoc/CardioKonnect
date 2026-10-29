@@ -868,7 +868,14 @@ export async function writeAudit(
 /** IDs of alerts already resolved at the user's site. */
 export async function getResolvedAlertIds(): Promise<Set<string>> {
   const docs = await getAllDocs(scoped(collection(db, 'alertAcks')))
-  return new Set(docs.map(d => d.id))
+  return new Set(
+    docs
+      .filter(d => {
+        const data = d.data()
+        return data.status !== 'Open' && data.unresolved !== true
+      })
+      .map(d => d.id)
+  )
 }
 
 export async function resolveAlert(alertId: string, patientId: string): Promise<void> {
@@ -880,6 +887,24 @@ export async function resolveAlert(alertId: string, patientId: string): Promise<
     siteId: scope.siteId,
     resolvedBy: scope.userId,
     resolvedAt: serverTimestamp(),
+    status: 'Resolved',
+    unresolved: false,
+  })
+  stageAudit(batch, 'UPDATE', 'alert', alertId, patientId)
+  await batch.commit()
+}
+
+export async function unresolveAlert(alertId: string, patientId: string): Promise<void> {
+  const scope = requireScope()
+  const batch = writeBatch(db)
+  batch.set(doc(db, 'alertAcks', alertId), {
+    alertId,
+    patientId,
+    siteId: scope.siteId,
+    resolvedBy: scope.userId,
+    resolvedAt: serverTimestamp(),
+    status: 'Open',
+    unresolved: true,
   })
   stageAudit(batch, 'UPDATE', 'alert', alertId, patientId)
   await batch.commit()
