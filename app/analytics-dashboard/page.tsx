@@ -1,10 +1,12 @@
 'use client'
 import { complicationFlags } from '@/lib/complications'
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import {
   Activity, Users, Heart, BarChart3, TrendingUp, AlertTriangle, Zap,
   CheckCircle, Smartphone, Info, Database, Award, RefreshCw, Layers,
-  ShieldCheck, ShieldAlert, Clock, Stethoscope, Microscope, Gauge, Radio
+  ShieldCheck, ShieldAlert, Clock, Stethoscope, Microscope, Gauge, Radio,
+  ArrowRight, Sparkles
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
@@ -32,7 +34,30 @@ function fmt(val: number | null, suffix = '%'): string {
 }
 
 function isPrescribed(me: unknown): boolean {
-  return (me as { prescribed?: string })?.prescribed === 'Yes'
+  if (!me) return false
+  if (typeof me === 'boolean') return me
+  const obj = me as { prescribed?: string | boolean }
+  return obj.prescribed === 'Yes' || obj.prescribed === true
+}
+
+function hasComorbidity(p: Patient, key: 'htn' | 'dm' | 'ckd' | 'af' | 'iron' | 'dys'): boolean {
+  const arr = (p.comorbidities || []).map(s => String(s).toUpperCase())
+  switch (key) {
+    case 'htn':
+      return Boolean(p.comorbidHypertension || arr.some(s => s.includes('HTN') || s.includes('HYPERTENSION')))
+    case 'dm':
+      return Boolean(p.comorbidDiabetes || arr.some(s => s.includes('DM') || s.includes('DIABETES')))
+    case 'ckd':
+      return Boolean(p.comorbidCKD || arr.some(s => s.includes('CKD') || s.includes('KIDNEY') || s.includes('RENAL')))
+    case 'af':
+      return Boolean(p.comorbidAF || arr.some(s => s.includes('AF') || s.includes('ATRIAL FIB')))
+    case 'iron':
+      return Boolean(p.comorbidIronDeficiency || arr.some(s => s.includes('IRON') || s.includes('FERRITIN')))
+    case 'dys':
+      return Boolean(p.comorbidDyslipidemia || arr.some(s => s.includes('LIPID') || s.includes('DYSLIPIDEMIA')))
+    default:
+      return false
+  }
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -277,13 +302,26 @@ export default function AnalyticsDashboardPage() {
     const deceased = patients.filter(p => p.vitalStatus === 'Dead').length
     const mortalityRate = pct(deceased, total)
 
-    // Visit type distribution
-    const opdV = withVisit.filter(r => r.visit.visitType === 'OPD').length
-    const inpV = withVisit.filter(r => r.visit.visitType === 'Inpatient').length
-    const telV = withVisit.filter(r => r.visit.visitType === 'Telemedicine').length
+    // Visit type distribution (handles case variations and legacy string formats)
+    const isOpd = (vt?: string) => {
+      const v = (vt || '').toUpperCase()
+      return v === 'OPD' || v === 'OUTPATIENT' || v === 'FOLLOW-UP'
+    }
+    const isInpatient = (vt?: string) => {
+      const v = (vt || '').toUpperCase()
+      return v === 'INPATIENT' || v === 'WARD' || v === 'ACUTE ADMISSION' || v === 'EMERGENCY'
+    }
+    const isTele = (vt?: string) => {
+      const v = (vt || '').toUpperCase()
+      return v === 'TELEMEDICINE' || v.includes('TELE')
+    }
+
+    const opdV = withVisit.filter(r => isOpd(r.visit.visitType)).length
+    const inpV = withVisit.filter(r => isInpatient(r.visit.visitType)).length
+    const telV = withVisit.filter(r => isTele(r.visit.visitType)).length
 
     // GDMT (HFrEF only)
-    const hfRows = withVisit.filter(r => r.visit.hfType === 'HFrEF')
+    const hfRows = withVisit.filter(r => (r.visit.hfType || '').toUpperCase() === 'HFREF')
     const hfN = hfRows.length
     const raasiN = hfRows.filter(r => isPrescribed(r.visit.raasi)).length
     const betaN  = hfRows.filter(r => isPrescribed(r.visit.betaBlocker)).length
@@ -299,16 +337,16 @@ export default function AnalyticsDashboardPage() {
       : null
 
     // Hospitalization
-    const hospN = withVisit.filter(r => r.visit.hospHistory === 'Yes').length
+    const hospN = withVisit.filter(r => r.visit.hospHistory === 'Yes' || (r.visit.hospHistory as any) === true).length
     const hospRate = pct(hospN, wN)
 
-    // Comorbidities
-    const htnN  = patients.filter(p => p.comorbidHypertension).length
-    const dmN   = patients.filter(p => p.comorbidDiabetes).length
-    const ckdN  = patients.filter(p => p.comorbidCKD).length
-    const afN   = patients.filter(p => p.comorbidAF).length
-    const ironN = patients.filter(p => p.comorbidIronDeficiency).length
-    const dysN  = patients.filter(p => p.comorbidDyslipidemia).length
+    // Comorbidities (unified: checks both discrete boolean flags and comorbidities array)
+    const htnN  = patients.filter(p => hasComorbidity(p, 'htn')).length
+    const dmN   = patients.filter(p => hasComorbidity(p, 'dm')).length
+    const ckdN  = patients.filter(p => hasComorbidity(p, 'ckd')).length
+    const afN   = patients.filter(p => hasComorbidity(p, 'af')).length
+    const ironN = patients.filter(p => hasComorbidity(p, 'iron')).length
+    const dysN  = patients.filter(p => hasComorbidity(p, 'dys')).length
 
     // Biomarkers
     const bnpArr  = withVisit.filter(r => r.visit.ntProBNP != null).map(r => r.visit.ntProBNP!)
@@ -1012,6 +1050,21 @@ export default function AnalyticsDashboardPage() {
                   <StatRow label="With LVEF Recorded"     value={dash(s.lvefN)} />
                   <StatRow label="HFrEF Patients"         value={dash(s.hfrEF)} />
                   <StatRow label="Deceased"               value={dash(s.deceased)} color={s.deceased > 0 ? 'text-rose-400' : 'text-white'} />
+                </div>
+
+                <div className="pt-3 border-t border-blue-500/10 space-y-2">
+                  <Link href="/patients" className="block">
+                    <Button variant="outline" size="sm" className="w-full text-xs flex items-center justify-between">
+                      <span>View All Patients ({dash(s.total)})</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
+                    </Button>
+                  </Link>
+                  <Link href="/deo" className="block">
+                    <Button variant="ghost" size="sm" className="w-full text-xs text-blue-300 hover:text-white flex items-center justify-between border border-blue-500/20 bg-blue-950/30 hover:bg-blue-900/40">
+                      <span>DEO Workstation &amp; Missing Data</span>
+                      <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                    </Button>
+                  </Link>
                 </div>
               </div>
 
